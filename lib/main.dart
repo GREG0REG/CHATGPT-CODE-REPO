@@ -1,4 +1,7 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'screens/home_screen.dart';
@@ -58,16 +61,29 @@ class EventCountdownApp extends StatefulWidget {
 
 class EventCountdownAppState extends State<EventCountdownApp> {
   AppThemeOption _theme = AppThemeOption.defaultBlue;
+  ThemeMode _themeMode = ThemeMode.system;
+  Color? _customColor;
+  bool _highContrast = false;
 
   @override
   void initState() {
     super.initState();
-    _loadTheme();
+    _loadAllSettings();
   }
 
-  Future<void> _loadTheme() async {
+  Future<void> _loadAllSettings() async {
     final theme = await SettingsService.instance.getSelectedTheme();
-    if (mounted) setState(() => _theme = theme);
+    final mode = await SettingsService.instance.getThemeMode();
+    final custom = await SettingsService.instance.getCustomColor();
+    final hc = await SettingsService.instance.getHighContrast();
+    if (mounted) {
+      setState(() {
+        _theme = theme;
+        _themeMode = mode;
+        _customColor = custom;
+        _highContrast = hc;
+      });
+    }
   }
 
   /// Called by the Settings screen after the user changes the theme so the
@@ -79,13 +95,43 @@ class EventCountdownAppState extends State<EventCountdownApp> {
     setState(() => _theme = theme);
   }
 
+  void updateThemeMode(ThemeMode mode) {
+    setState(() => _themeMode = mode);
+  }
+
+  void updateCustomColor(Color? color) {
+    setState(() => _customColor = color);
+  }
+
+  void updateHighContrast(bool value) {
+    setState(() => _highContrast = value);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Event Countdown',
-      debugShowCheckedModeBanner: false,
-      theme: AppThemes.buildTheme(_theme),
-      home: const HomeScreen(),
+    return DynamicColorBuilder(
+      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+        return MaterialApp(
+          title: 'Event Countdown',
+          debugShowCheckedModeBanner: false,
+          themeMode: _themeMode,
+          theme: AppThemes.buildTheme(
+            _theme,
+            brightness: Brightness.light,
+            customColor: _customColor,
+            dynamicScheme: _theme == AppThemeOption.materialYou ? lightDynamic : null,
+            highContrast: _highContrast,
+          ),
+          darkTheme: AppThemes.buildTheme(
+            _theme,
+            brightness: Brightness.dark,
+            customColor: _customColor,
+            dynamicScheme: _theme == AppThemeOption.materialYou ? darkDynamic : null,
+            highContrast: _highContrast,
+          ),
+          home: const HomeScreen(),
+        );
+      },
     );
   }
 }
