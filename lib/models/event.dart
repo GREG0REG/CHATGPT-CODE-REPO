@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 /// A single countdown event.
 ///
 /// Only ONE of [startTimeMillis] / [deadlineMillis] is required to be set;
@@ -35,6 +37,53 @@ class Event {
     if (deadlineMillis != null) return deadlineMillis!;
     if (startTimeMillis != null) return startTimeMillis!;
     return dateMillis;
+  }
+
+  // ============================================
+  // SESSION 2: URGENCY COLOR
+  // ============================================
+  /// Returns a color based on how many days until the event's deadline
+  /// (or start time if no deadline):
+  ///   Green  > 7 days
+  ///   Yellow 3-7 days
+  ///   Red    < 3 days
+  ///   Grey   if completed
+  Color getUrgencyColor(DateTime now) {
+    final nowMillis = now.millisecondsSinceEpoch;
+    final target = deadlineMillis ?? startTimeMillis ?? dateMillis;
+    final diff = Duration(milliseconds: target - nowMillis);
+
+    if (diff.isNegative || diff.inDays < 0) {
+      return Colors.grey; // Completed / passed
+    } else if (diff.inDays > 7) {
+      return Colors.green;
+    } else if (diff.inDays >= 3) {
+      return Colors.orange;
+    } else {
+      return Colors.red;
+    }
+  }
+
+  /// Convenience: returns the countdown text string for this event at [now].
+  String getCountdownText(DateTime now, {required bool smartFormatEnabled}) {
+    // This is a thin wrapper around CountdownService that callers can use
+    // directly on an Event instance.
+    final diff = Duration(
+      milliseconds: (deadlineMillis ?? startTimeMillis ?? dateMillis) - now.millisecondsSinceEpoch,
+    );
+
+    if (diff.isNegative) return 'Completed';
+
+    if (diff.inHours >= 24) {
+      final days = diff.inDays;
+      return '$days day${days == 1 ? '' : 's'} left';
+    } else if (diff.inMinutes >= 60) {
+      final hours = diff.inHours;
+      return '$hours hour${hours == 1 ? '' : 's'} left';
+    } else {
+      final minutes = diff.inMinutes < 1 ? 1 : diff.inMinutes;
+      return '$minutes minute${minutes == 1 ? '' : 's'} left';
+    }
   }
 
   Event copyWith({
