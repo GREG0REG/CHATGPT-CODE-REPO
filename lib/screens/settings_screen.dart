@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
@@ -21,11 +22,18 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  // Session 1 settings
   bool _smartFormat = false;
   bool _use24Hour = true;
   AppThemeOption _theme = AppThemeOption.defaultBlue;
   WidgetBackgroundType _bgType = WidgetBackgroundType.themeColor;
   String? _imagePath;
+
+  // Session 2 settings
+  ThemeMode _themeMode = ThemeMode.system;
+  Color _customColor = Colors.blue;
+  bool _highContrast = false;
+
   bool _loading = true;
   bool _busy = false;
 
@@ -42,6 +50,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final theme = await s.getSelectedTheme();
     final bgType = await s.getWidgetBackgroundType();
     final imagePath = await s.getWidgetImagePath();
+
+    // Session 2
+    final mode = await s.getThemeMode();
+    final custom = await s.getCustomColor();
+    final hc = await s.getHighContrast();
+
     if (!mounted) return;
     setState(() {
       _smartFormat = smart;
@@ -49,10 +63,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _theme = theme;
       _bgType = bgType;
       _imagePath = imagePath;
+      _themeMode = mode;
+      _customColor = custom ?? Colors.blue;
+      _highContrast = hc;
       _loading = false;
     });
   }
 
+  // --- Session 1 callbacks (preserved) ---
   Future<void> _setSmartFormat(bool value) async {
     await SettingsService.instance.setSmartFormatEnabled(value);
     setState(() => _smartFormat = value);
@@ -68,7 +86,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await SettingsService.instance.setSelectedTheme(option);
     setState(() => _theme = option);
     await WidgetService.refreshWidget();
-    // Rebuild the whole app immediately with the new theme colors.
     if (mounted) {
       EventCountdownAppState.of(context)?.updateTheme(option);
     }
@@ -76,9 +93,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _setBgType(WidgetBackgroundType type) async {
     if (type == WidgetBackgroundType.customImage && _imagePath == null) {
-      // Prompt to pick an image right away since one is required for this mode.
       final picked = await _pickImage();
-      if (!picked) return; // user cancelled - stay on theme color
+      if (!picked) return;
     }
     await SettingsService.instance.setWidgetBackgroundType(type);
     setState(() => _bgType = type);
@@ -95,6 +111,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return true;
   }
 
+  // --- Session 2: Theme Mode ---
+  Future<void> _setThemeMode(ThemeMode mode) async {
+    await SettingsService.instance.setThemeMode(mode);
+    setState(() => _themeMode = mode);
+    if (mounted) {
+      EventCountdownAppState.of(context)?.updateThemeMode(mode);
+    }
+  }
+
+  // --- Session 2: Custom Color ---
+  Future<void> _showColorPicker() async {
+    final Color picked = await showColorPickerDialog(
+      context,
+      _customColor,
+      title: const Text('Pick Custom Color'),
+      showColorName: true,
+      showColorValue: true,
+      pickersEnabled: const {
+        ColorPickerType.wheel: true,
+        ColorPickerType.accent: true,
+        ColorPickerType.primary: true,
+      },
+      actionButtons: const ColorPickerActionButtons(
+        dialogOkButtonLabel: 'Save',
+        dialogCancelButtonLabel: 'Cancel',
+      ),
+    );
+    if (!mounted) return;
+    await SettingsService.instance.setCustomColor(picked);
+    setState(() => _customColor = picked);
+    if (_theme == AppThemeOption.customHex) {
+      await WidgetService.refreshWidget();
+      if (mounted) {
+        EventCountdownAppState.of(context)?.updateCustomColor(picked);
+      }
+    }
+  }
+
+  // --- Session 2: High Contrast ---
+  Future<void> _setHighContrast(bool value) async {
+    await SettingsService.instance.setHighContrast(value);
+    setState(() => _highContrast = value);
+    if (mounted) {
+      EventCountdownAppState.of(context)?.updateHighContrast(value);
+    }
+  }
+
+  // --- Export / Import (preserved) ---
   Future<void> _exportEvents() async {
     setState(() => _busy = true);
     try {
@@ -164,6 +228,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: AbsorbPointer(
@@ -172,6 +238,110 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             ListView(
               children: [
+                // ============================================
+                // SESSION 2: THEME MODE
+                // ============================================
+                const _SectionHeader('Appearance'),
+                ListTile(
+                  leading: const Icon(Icons.brightness_auto),
+                  title: const Text('Theme Mode'),
+                  subtitle: Text(_themeModeLabel(_themeMode)),
+                  trailing: SegmentedButton<ThemeMode>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ThemeMode.light,
+                        label: Text('Light'),
+                        icon: Icon(Icons.light_mode),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.system,
+                        label: Text('Auto'),
+                        icon: Icon(Icons.brightness_auto),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.dark,
+                        label: Text('Dark'),
+                        icon: Icon(Icons.dark_mode),
+                      ),
+                    ],
+                    selected: {_themeMode},
+                    onSelectionChanged: (selected) {
+                      if (selected.isNotEmpty) _setThemeMode(selected.first);
+                    },
+                  ),
+                ),
+                const Divider(),
+
+                // ============================================
+                // SESSION 2: APP THEME
+                // ============================================
+                const _SectionHeader('App Theme'),
+                ...AppThemes.all.map((info) {
+                  final isSelected = _theme == info.option;
+                  final isCustom = info.option == AppThemeOption.customHex;
+                  final isMaterialYou = info.option == AppThemeOption.materialYou;
+
+                  return RadioListTile<AppThemeOption>(
+                    title: Row(
+                      children: [
+                        Icon(info.icon, color: info.color, size: 20),
+                        const SizedBox(width: 8),
+                        Text(info.label),
+                      ],
+                    ),
+                    secondary: isSelected
+                        ? const Icon(Icons.check_circle, color: Colors.green)
+                        : null,
+                    value: info.option,
+                    groupValue: _theme,
+                    onChanged: (v) {
+                      if (v != null) _setTheme(v);
+                      // Show color picker immediately if custom selected
+                      if (v == AppThemeOption.customHex) {
+                        _showColorPicker();
+                      }
+                    },
+                  );
+                }),
+
+                // Show custom color preview + picker button
+                if (_theme == AppThemeOption.customHex) ...[
+                  ListTile(
+                    leading: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: _customColor,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.grey),
+                      ),
+                    ),
+                    title: const Text('Custom Color'),
+                    subtitle: Text('#${_customColor.value.toRadixString(16).substring(2).toUpperCase()}'),
+                    trailing: TextButton(
+                      onPressed: _showColorPicker,
+                      child: const Text('Change'),
+                    ),
+                  ),
+                ],
+
+                const Divider(),
+
+                // ============================================
+                // SESSION 2: HIGH CONTRAST
+                // ============================================
+                SwitchListTile(
+                  secondary: const Icon(Icons.contrast),
+                  title: const Text('High Contrast'),
+                  subtitle: const Text('Increase contrast for better accessibility'),
+                  value: _highContrast,
+                  onChanged: _setHighContrast,
+                ),
+                const Divider(),
+
+                // ============================================
+                // SESSION 1: COUNTDOWN DISPLAY (preserved)
+                // ============================================
                 const _SectionHeader('Countdown Display'),
                 SwitchListTile(
                   title: const Text('Smart countdown format'),
@@ -190,17 +360,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: _setUse24Hour,
                 ),
                 const Divider(),
-                const _SectionHeader('Theme'),
-                ...AppThemes.all.map(
-                  (info) => RadioListTile<AppThemeOption>(
-                    title: Text(info.label),
-                    secondary: CircleAvatar(backgroundColor: info.color, radius: 14),
-                    value: info.option,
-                    groupValue: _theme,
-                    onChanged: (v) => v != null ? _setTheme(v) : null,
-                  ),
-                ),
-                const Divider(),
+
+                // ============================================
+                // SESSION 1: WIDGET BACKGROUND (preserved)
+                // ============================================
                 const _SectionHeader('Home Screen Widget Background'),
                 RadioListTile<WidgetBackgroundType>(
                   title: const Text('App theme color'),
@@ -240,6 +403,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
                 const Divider(),
+
+                // ============================================
+                // SESSION 1: BACKUP (preserved)
+                // ============================================
                 const _SectionHeader('Backup'),
                 ListTile(
                   leading: const Icon(Icons.upload_file),
@@ -259,6 +426,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  String _themeModeLabel(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return 'Always light';
+      case ThemeMode.dark:
+        return 'Always dark';
+      case ThemeMode.system:
+        return 'Follow system';
+    }
   }
 }
 
