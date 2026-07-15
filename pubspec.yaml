@@ -39,6 +39,15 @@ dependencies:
   # Used to let the user share/save the exported JSON file easily
   share_plus: ^10.0.2
 
+  # ============================================
+  # SESSION 2: NEW DEPENDENCIES
+  # ============================================
+  # Material You dynamic colors (Android 12+)
+  dynamic_color: ^1.7.0
+
+  # Custom hex color picker with palette, wheel, sliders
+  flex_color_picker: ^3.6.0
+
   # Icons
   cupertino_icons: ^1.0.8
 
