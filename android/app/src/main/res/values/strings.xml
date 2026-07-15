@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Event Countdown</string>
+    <string name="widget_description">Shows the title and countdown for your next event.</string>
+</resources>

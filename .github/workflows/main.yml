@@ -1,0 +1,46 @@
+name: Build Flutter APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      
+      - run: flutter pub get
+      
+      - name: Generate signing keystore
+        run: |
+          mkdir -p android/app
+          keytool -genkey -v -keystore android/app/release-key.jks -storepass releasepass -alias release -keypass releasepass -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Event Countdown,O=Personal,C=US"
+          echo "storePassword=releasepass" > android/key.properties
+          echo "keyPassword=releasepass" >> android/key.properties
+          echo "keyAlias=release" >> android/key.properties
+          echo "storeFile=release-key.jks" >> android/key.properties
+      
+      - name: Configure release signing
+        run: |
+          sed -i 's/signingConfig signingConfigs.debug/signingConfig signingConfigs.release/' android/app/build.gradle
+      
+      - run: flutter build apk --release
+      
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
