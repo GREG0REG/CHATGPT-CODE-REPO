@@ -32,7 +32,6 @@ class EventCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Fresh time on every rebuild from parent
     final now = DateTime.now();
     final result = CountdownService.buildCountdownText(
       event,
@@ -48,13 +47,41 @@ class EventCard extends StatelessWidget {
       subtitleParts.add('Deadline: ${_formatDateTime(event.deadlineMillis!)}');
     }
 
+    // SESSION 2: Urgency color badge
+    final urgencyColor = event.getUrgencyColor(now);
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: ListTile(
         onTap: onTap,
-        title: Text(
-          event.title,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        // SESSION 2: Hero animation tag
+        leading: Hero(
+          tag: 'event_avatar_${event.id}',
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: urgencyColor.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Center(
+              child: Icon(
+                Icons.event,
+                color: urgencyColor,
+                size: 20,
+              ),
+            ),
+          ),
+        ),
+        title: Hero(
+          tag: 'event_title_${event.id}',
+          child: Material(
+            color: Colors.transparent,
+            child: Text(
+              event.title,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -74,6 +101,13 @@ class EventCard extends StatelessWidget {
         trailing: IconButton(
           icon: const Icon(Icons.delete_outline),
           onPressed: onDelete,
+          // SESSION 2: Minimum 48dp touch target
+          iconSize: 24,
+          padding: const EdgeInsets.all(12),
+          constraints: const BoxConstraints(
+            minWidth: 48,
+            minHeight: 48,
+          ),
         ),
       ),
     );
