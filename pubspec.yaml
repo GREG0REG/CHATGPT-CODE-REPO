@@ -43,7 +43,8 @@ dependencies:
   # SESSION 2: NEW DEPENDENCIES
   # ============================================
   # Material You dynamic colors (Android 12+)
-  dynamic_color: ^1.7.0
+  # PINNED to 1.7.0 — Flutter 3.24.0 does not have Color.toARGB32()
+  dynamic_color: 1.7.0
 
   # Custom hex color picker with palette, wheel, sliders
   flex_color_picker: ^3.6.0
