@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../db/database_helper.dart';
 import '../models/event.dart';
@@ -85,6 +86,10 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     if (confirm != true) return;
+
+    // SESSION 2: Medium haptic feedback on delete
+    HapticFeedback.mediumImpact();
+
     if (event.id != null) {
       await DatabaseHelper.instance.deleteEvent(event.id!);
       await NotificationService.instance.cancelForEvent(event.id!);
@@ -112,13 +117,38 @@ class _HomeScreenState extends State<HomeScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _events.isEmpty
-              ? const Center(
+              // SESSION 2: Empty state with icon + updated text
+              ? Center(
                   child: Padding(
-                    padding: EdgeInsets.all(24.0),
-                    child: Text(
-                      'No events yet.\nTap + to add your first countdown.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    padding: const EdgeInsets.all(32.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.calendar_today_outlined,
+                          size: 64,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No exams yet!',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Tap + to add your first exam.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 )
