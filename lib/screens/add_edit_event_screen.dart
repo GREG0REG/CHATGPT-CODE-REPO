@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // FOR HAPTIC FEEDBACK
+import 'package:flutter/services.dart';
 
 import '../db/database_helper.dart';
 import '../models/event.dart';
@@ -26,10 +26,6 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
   TimeOfDay? _deadlineTime;
   DateTime? _deadlineDate;
   bool _use24Hour = true;
-
-  // ============================================
-  // FIX: Prevent duplicate saves
-  // ============================================
   bool _isSaving = false;
 
   bool get _isEditing => widget.existing != null;
@@ -82,8 +78,7 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
       context: context,
       initialTime: _startTime ?? TimeOfDay.now(),
       builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context)
-            .copyWith(alwaysUse24HourFormat: _use24Hour),
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: _use24Hour),
         child: child!,
       ),
     );
@@ -105,8 +100,7 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
       context: context,
       initialTime: _deadlineTime ?? TimeOfDay.now(),
       builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context)
-            .copyWith(alwaysUse24HourFormat: _use24Hour),
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: _use24Hour),
         child: child!,
       ),
     );
@@ -129,13 +123,10 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
   }
 
   Future<void> _save() async {
-    // PREVENT DUPLICATE SAVES
     if (_isSaving) return;
     if (!_formKey.currentState!.validate()) return;
 
-    // SHOW SPINNER
     setState(() => _isSaving = true);
-    // Let UI render before heavy work
     await Future.delayed(const Duration(milliseconds: 100));
 
     try {
@@ -166,21 +157,17 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
       }
 
       final savedEvent = event.copyWith(id: id);
-      
-      // Don't crash if notification fails
+
       try {
         await NotificationService.instance.scheduleForEvent(savedEvent);
       } catch (e) {
         debugPrint('Notification error: $e');
       }
-      
-      await WidgetService.refreshWidget();
 
-      // HAPTIC FEEDBACK ON SUCCESS
+      await WidgetService.refreshWidget();
       HapticFeedback.lightImpact();
 
       if (mounted) {
-        // SUCCESS MESSAGE
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Event saved!'),
@@ -194,10 +181,7 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
       if (mounted) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -207,11 +191,17 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Edit Event' : 'Add Event'),
+        // SESSION 2: Hero animation on title
+        title: Hero(
+          tag: widget.existing != null
+              ? 'event_title_${widget.existing!.id}'
+              : 'event_title_new',
+          child: Material(
+            color: Colors.transparent,
+            child: Text(_isEditing ? 'Edit Event' : 'Add Event'),
+          ),
+        ),
         actions: [
-          // ============================================
-          // FIX: Show spinner instead of check icon when saving
-          // ============================================
           _isSaving
               ? const Padding(
                   padding: EdgeInsets.all(16.0),
@@ -235,14 +225,24 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            TextFormField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: 'Title',
-                border: OutlineInputBorder(),
+            // SESSION 2: Hero animation on title field
+            Hero(
+              tag: widget.existing != null
+                  ? 'event_avatar_${widget.existing!.id}'
+                  : 'event_avatar_new',
+              child: Material(
+                color: Colors.transparent,
+                child: TextFormField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Title',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.event),
+                  ),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Title is required' : null,
+                ),
               ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Title is required' : null,
             ),
             const SizedBox(height: 16),
             ListTile(
@@ -312,9 +312,6 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            // ============================================
-            // FIX: Show spinner in button when saving
-            // ============================================
             FilledButton(
               onPressed: _isSaving ? null : _save,
               child: _isSaving
