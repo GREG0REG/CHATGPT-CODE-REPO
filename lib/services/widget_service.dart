@@ -52,14 +52,27 @@ class WidgetService {
         smartFormatEnabled: smart,
       ).text;
 
-      // SESSION 3: Calculate progress percentage
-      if (progressBarEnabled && active.startTimeMillis != null && active.deadlineMillis != null) {
-        final start = active.startTimeMillis!;
-        final deadline = active.deadlineMillis!;
-        final total = deadline - start;
-        final elapsed = now.millisecondsSinceEpoch - start;
-        if (total > 0) {
+      // ============================================
+      // FIX: Calculate progress for ALL event types
+      // For date-only events: progress from midnight of event date to now
+      // For start+deadline: progress from start to deadline
+      // ============================================
+      if (progressBarEnabled) {
+        final start = active.startTimeMillis ?? active.dateMillis;
+        final deadline = active.deadlineMillis ?? active.startTimeMillis ?? active.dateMillis;
+        
+        if (deadline > start) {
+          final total = deadline - start;
+          final elapsed = now.millisecondsSinceEpoch - start;
           progressPercent = ((elapsed / total) * 100).clamp(0, 100).toInt();
+        } else if (active.dateMillis > 0) {
+          // Fallback: show progress toward the date
+          final total = active.dateMillis - now.millisecondsSinceEpoch;
+          if (total > 0) {
+            progressPercent = 0; // Event hasn't started yet
+          } else {
+            progressPercent = 100; // Event passed
+          }
         }
       }
 
@@ -94,7 +107,7 @@ class WidgetService {
 
     // SESSION 3: Save progress and pulse data
     await HomeWidget.saveWidgetData<int>(_kProgressPercent, progressPercent);
-    await HomeWidget.saveWidgetData<bool>(_kPulseEnabled, pulseEnabled && isUrgent);
+    await HomeWidget.saveWidgetData<bool>(_kPulseEnabled, pulseEnabled);
     await HomeWidget.saveWidgetData<bool>(_kIsUrgent, isUrgent);
 
     await HomeWidget.updateWidget(
@@ -106,4 +119,5 @@ class WidgetService {
   static Future<void> registerInteractivityCallback() async {
     // No-op: tap-to-open is handled natively. Kept for clarity.
   }
-}
+}import 'package:flutter/material.dart';
+import 'package:home_widget/home_widget.dart';
