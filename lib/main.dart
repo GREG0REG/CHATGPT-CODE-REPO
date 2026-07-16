@@ -5,6 +5,7 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'screens/home_screen.dart';
+import 'screens/widget_settings_screen.dart';
 import 'services/notification_service.dart';
 import 'services/settings_service.dart';
 import 'services/widget_service.dart';
@@ -130,6 +131,12 @@ class EventCountdownAppState extends State<EventCountdownApp> {
             highContrast: _highContrast,
           ),
           home: const HomeScreen(),
+          // ============================================
+          // SESSION 3: Handle widget settings deep link
+          // ============================================
+          routes: {
+            '/widget_settings': (context) => const WidgetSettingsScreen(),
+          },
         );
       },
     );
