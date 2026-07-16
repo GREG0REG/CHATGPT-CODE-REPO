@@ -25,13 +25,18 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _use24Hour = true;
   bool _loading = true;
   Timer? _refreshTimer;
+  String? _lastCountdownHash; // Prevent unnecessary rebuilds
 
   @override
   void initState() {
     super.initState();
     _loadAll();
+    // ============================================
+    // PERFORMANCE FIX: 60 seconds instead of 30
+    // Reduces CPU/battery usage significantly
+    // ============================================
     _refreshTimer = Timer.periodic(
-      const Duration(seconds: 30),
+      const Duration(seconds: 60),
       (_) => _loadAll(),
     );
   }
@@ -46,6 +51,18 @@ class _HomeScreenState extends State<HomeScreen> {
     final events = await DatabaseHelper.instance.getAllEventsSorted();
     final smart = await SettingsService.instance.getSmartFormatEnabled();
     final use24 = await SettingsService.instance.getUse24HourFormat();
+
+    // ============================================
+    // PERFORMANCE FIX: Only rebuild if data actually changed
+    // ============================================
+    final newHash = events.map((e) => '${e.id}:${e.title}').join('|');
+    if (newHash == _lastCountdownHash && !_loading) {
+      // Data hasn't changed, just refresh widget silently
+      await WidgetService.refreshWidget();
+      return;
+    }
+    _lastCountdownHash = newHash;
+
     if (!mounted) return;
     setState(() {
       _events = events;
@@ -87,7 +104,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (confirm != true) return;
 
-    // SESSION 2: Medium haptic feedback on delete
     HapticFeedback.mediumImpact();
 
     if (event.id != null) {
@@ -117,7 +133,6 @@ class _HomeScreenState extends State<HomeScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _events.isEmpty
-              // SESSION 2: Empty state with icon + updated text
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(32.0),
