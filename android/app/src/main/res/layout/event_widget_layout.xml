@@ -43,17 +43,37 @@
             android:ellipsize="end"
             android:textColor="#FFFFFF" />
 
-        <!-- SESSION 3: Progress Bar (hidden by default, shown when enabled) -->
-        <ProgressBar
-            android:id="@+id/widget_progress"
-            style="?android:attr/progressBarStyleHorizontal"
+        <!-- SESSION 3: Progress Bar - thicker, rounded, with percentage -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="4dp"
-            android:layout_marginTop="6dp"
-            android:max="100"
-            android:progress="0"
-            android:progressDrawable="@drawable/widget_progress_drawable"
-            android:visibility="gone" />
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical">
+
+            <ProgressBar
+                android:id="@+id/widget_progress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_height="6dp"
+                android:layout_weight="1"
+                android:max="100"
+                android:progress="0"
+                android:progressDrawable="@drawable/widget_progress_drawable"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/widget_progress_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="0%"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF"
+                android:visibility="gone" />
+
+        </LinearLayout>
 
     </LinearLayout>
 
