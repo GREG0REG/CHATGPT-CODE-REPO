@@ -1,83 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_background">
+    android:background="@drawable/widget_background_fallback">
 
-    <!-- Background Image (if custom image selected) -->
+    <!-- Background layer: either a theme-color gradient bitmap or a
+         user-picked gallery image with a baked-in dark overlay. -->
     <ImageView
-        android:id="@+id/widget_bg_image"
+        android:id="@+id/widget_background"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scaleType="centerCrop"
-        android:visibility="gone" />
+        android:contentDescription="@null" />
 
-    <!-- Dark overlay for readability when image is used -->
-    <View
-        android:id="@+id/widget_overlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#66000000"
-        android:visibility="gone" />
-
-    <!-- Main content -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:gravity="center_vertical"
         android:padding="12dp">
 
-        <!-- Event info -->
-        <LinearLayout
-            android:layout_width="0dp"
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:text="Event Title"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="#FFFFFF" />
 
-            <TextView
-                android:id="@+id/widget_event_title"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Event Title"
-                android:textColor="#FFFFFF"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:maxLines="1"
-                android:ellipsize="end" />
+        <TextView
+            android:id="@+id/widget_countdown"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Countdown"
+            android:textSize="16sp"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:textColor="#FFFFFF" />
 
-            <TextView
-                android:id="@+id/widget_countdown"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="3 days left"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:alpha="0.9" />
-        </LinearLayout>
-
-        <!-- Progress bar (optional) -->
+        <!-- SESSION 3: Progress Bar (hidden by default, shown when enabled) -->
         <ProgressBar
             android:id="@+id/widget_progress"
             style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:indeterminate="false"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginTop="6dp"
             android:max="100"
-            android:progress="65"
-            android:progressDrawable="@drawable/circular_progress"
+            android:progress="0"
+            android:progressDrawable="@drawable/widget_progress_drawable"
             android:visibility="gone" />
-    </LinearLayout>
 
-    <!-- Pulse animation overlay (for under 24h events) -->
-    <View
-        android:id="@+id/widget_pulse_overlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@drawable/pulse_animation"
-        android:visibility="gone" />
+    </LinearLayout>
 
 </FrameLayout>
