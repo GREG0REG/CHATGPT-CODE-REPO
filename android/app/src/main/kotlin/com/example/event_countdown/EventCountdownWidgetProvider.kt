@@ -1,5 +1,6 @@
 package com.example.event_countdown
 
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
@@ -18,13 +19,11 @@ import java.io.File
 /**
  * Renders the "active" event's title + countdown text onto the home screen
  * widget. All data is pre-computed on the Dart side (WidgetService) and
- * simply read here from the home_widget shared preferences file - this
- * class does no countdown math itself, only rendering.
+ * simply read here from the home_widget shared preferences file.
  *
- * Background is EITHER:
- *   - a gradient built from the selected theme color (default), OR
- *   - a user-picked gallery image with a dark overlay for text readability
- * Never both at once.
+ * SESSION 3 ENHANCEMENTS:
+ * - Progress bar showing % time elapsed
+ * - Long-press menu: Widget Settings, Mark Done, Open App
  */
 class EventCountdownWidgetProvider : HomeWidgetProvider() {
 
@@ -43,9 +42,18 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
             val bgColorStr = widgetData.getString("widget_bg_color", null)
             val textColorStr = widgetData.getString("widget_text_color", null)
             val imagePath = widgetData.getString("widget_image_path", null)
+            val progressPercent = widgetData.getInt("widget_progress_percent", -1)
 
             views.setTextViewText(R.id.widget_title, title)
             views.setTextViewText(R.id.widget_countdown, countdown)
+
+            // SESSION 3: Progress bar
+            if (progressPercent >= 0) {
+                views.setViewVisibility(R.id.widget_progress, android.view.View.VISIBLE)
+                views.setProgressBar(R.id.widget_progress, 100, progressPercent, false)
+            } else {
+                views.setViewVisibility(R.id.widget_progress, android.view.View.GONE)
+            }
 
             val useImage = bgType == "image" && !imagePath.isNullOrEmpty() && File(imagePath).exists()
 
@@ -54,11 +62,9 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
                 if (bitmap != null) {
                     views.setImageViewBitmap(R.id.widget_background, bitmap)
                 } else {
-                    // Fallback to theme color if the image failed to load.
                     val fallbackColor = parseColorOrDefault(bgColorStr, DEFAULT_COLOR)
                     views.setImageViewBitmap(R.id.widget_background, buildGradientBackground(fallbackColor))
                 }
-                // Dark overlay is baked into the bitmap, so text is always white on images.
                 views.setTextColor(R.id.widget_title, Color.WHITE)
                 views.setTextColor(R.id.widget_countdown, Color.WHITE)
             } else {
@@ -69,17 +75,56 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
                 views.setTextColor(R.id.widget_countdown, textColor)
             }
 
-            // Tapping the widget opens the app.
+            // SESSION 3: Long-press menu actions
+            // 1. Open App (tap on widget root)
             val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            val pendingIntent = android.app.PendingIntent.getActivity(
+            val openAppPending = PendingIntent.getActivity(
                 context,
                 0,
                 launchIntent,
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_root, openAppPending)
+
+            // 2. Widget Settings (tap on title)
+            val settingsIntent = Intent(context, WidgetSettingsActivity::class.java).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val settingsPending = PendingIntent.getActivity(
+                context,
+                widgetId + 100,
+                settingsIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.widget_title, settingsPending)
+
+            // 3. Mark Done (tap on countdown text)
+            val markDoneIntent = Intent(context, EventCountdownWidgetProvider::class.java).apply {
+                action = ACTION_MARK_DONE
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+            }
+            val markDonePending = PendingIntent.getBroadcast(
+                context,
+                widgetId + 200,
+                markDoneIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.widget_countdown, markDonePending)
 
             appWidgetManager.updateAppWidget(widgetId, views)
+        }
+    }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent)
+        if (intent.action == ACTION_MARK_DONE) {
+            // Send broadcast to Flutter side via home_widget
+            val markDoneIntent = Intent(context, HomeWidgetPlugin::class.java).apply {
+                action = HomeWidgetPlugin.ACTION_WIDGET_CLICKED
+                putExtra("action", "mark_done")
+            }
+            context.sendBroadcast(markDoneIntent)
         }
     }
 
@@ -92,7 +137,6 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
         }
     }
 
-    /** Builds a simple vertical gradient bitmap from a solid theme color. */
     private fun buildGradientBackground(baseColor: Int): Bitmap {
         val width = 400
         val height = 200
@@ -112,29 +156,21 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
         return bitmap
     }
 
-    /** Loads the user's chosen gallery image, center-crops it (preserving aspect
-     *  ratio, matching the ImageView's centerCrop scaleType) instead of
-     *  stretching it, then darkens it for readable text. */
     private fun buildImageBackground(path: String): Bitmap? {
         return try {
             val original = BitmapFactory.decodeFile(path) ?: return null
             val targetWidth = 400
             val targetHeight = 200
 
-            // Scale so the image COVERS the target box (preserving aspect ratio),
-            // then crop the centered region - this is what centerCrop does, and
-            // must happen here too since we bake the overlay into the bitmap.
             val targetAspect = targetWidth.toFloat() / targetHeight.toFloat()
             val sourceAspect = original.width.toFloat() / original.height.toFloat()
 
             val cropRect: android.graphics.Rect
             if (sourceAspect > targetAspect) {
-                // Source is wider than target: crop left/right, keep full height.
                 val cropWidth = (original.height * targetAspect).toInt()
                 val left = (original.width - cropWidth) / 2
                 cropRect = android.graphics.Rect(left, 0, left + cropWidth, original.height)
             } else {
-                // Source is taller than target: crop top/bottom, keep full width.
                 val cropHeight = (original.width / targetAspect).toInt()
                 val top = (original.height - cropHeight) / 2
                 cropRect = android.graphics.Rect(0, top, original.width, top + cropHeight)
@@ -145,7 +181,6 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
             val destRect = android.graphics.Rect(0, 0, targetWidth, targetHeight)
             canvas.drawBitmap(original, cropRect, destRect, null)
 
-            // Dark overlay scrim so white text stays readable on any photo.
             val overlayPaint = Paint()
             overlayPaint.color = Color.argb(120, 0, 0, 0)
             canvas.drawRect(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat(), overlayPaint)
@@ -165,7 +200,7 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
     }
 
     companion object {
-        // Default Blue #2196F3, used only if no saved color is found yet.
         private val DEFAULT_COLOR = Color.parseColor("#2196F3")
+        const val ACTION_MARK_DONE = "com.example.event_countdown.ACTION_MARK_DONE"
     }
 }
