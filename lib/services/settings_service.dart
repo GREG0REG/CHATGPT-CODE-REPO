@@ -23,13 +23,16 @@ class SettingsService {
   static const _kCustomColor = 'custom_color'; // ARGB int
   static const _kHighContrast = 'high_contrast'; // bool
 
+  // --- New keys (Session 3) ---
+  static const _kWidgetProgressBar = 'widget_progress_bar'; // bool
+  static const _kWidgetPulseAnimation = 'widget_pulse_animation'; // bool
+
   Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
 
   // ============================================
   // EXISTING SETTINGS (Session 1) — preserved
   // ============================================
 
-  // --- Smart countdown format (default OFF) ---
   Future<bool> getSmartFormatEnabled() async {
     final p = await _prefs;
     return p.getBool(_kSmartFormat) ?? false;
@@ -40,7 +43,6 @@ class SettingsService {
     await p.setBool(_kSmartFormat, value);
   }
 
-  // --- 24-hour vs 12-hour time (default 24h / true) ---
   Future<bool> getUse24HourFormat() async {
     final p = await _prefs;
     return p.getBool(_kUse24Hour) ?? true;
@@ -51,7 +53,6 @@ class SettingsService {
     await p.setBool(_kUse24Hour, value);
   }
 
-  // --- Default theme (default: Default Blue) ---
   Future<AppThemeOption> getSelectedTheme() async {
     final p = await _prefs;
     return AppThemes.fromName(p.getString(_kThemeName));
@@ -62,7 +63,6 @@ class SettingsService {
     await p.setString(_kThemeName, AppThemes.nameOf(option));
   }
 
-  // --- Widget background type (default: theme color) ---
   Future<WidgetBackgroundType> getWidgetBackgroundType() async {
     final p = await _prefs;
     final raw = p.getString(_kWidgetBgType);
@@ -77,7 +77,6 @@ class SettingsService {
     await p.setString(_kWidgetBgType, type.name);
   }
 
-  // --- Custom widget image path ---
   Future<String?> getWidgetImagePath() async {
     final p = await _prefs;
     return p.getString(_kWidgetImagePath);
@@ -93,10 +92,9 @@ class SettingsService {
   }
 
   // ============================================
-  // NEW SETTINGS (Session 2)
+  // SESSION 2 SETTINGS
   // ============================================
 
-  // --- Theme mode: system / light / dark (default: system) ---
   Future<ThemeMode> getThemeMode() async {
     final p = await _prefs;
     final index = p.getInt(_kThemeMode) ?? 0;
@@ -108,7 +106,6 @@ class SettingsService {
     await p.setInt(_kThemeMode, mode.index);
   }
 
-  // --- Custom hex color (for customHex theme) ---
   Future<Color?> getCustomColor() async {
     final p = await _prefs;
     final value = p.getInt(_kCustomColor);
@@ -126,7 +123,6 @@ class SettingsService {
     await p.remove(_kCustomColor);
   }
 
-  // --- High contrast accessibility (default: false) ---
   Future<bool> getHighContrast() async {
     final p = await _prefs;
     return p.getBool(_kHighContrast) ?? false;
@@ -135,5 +131,31 @@ class SettingsService {
   Future<void> setHighContrast(bool value) async {
     final p = await _prefs;
     await p.setBool(_kHighContrast, value);
+  }
+
+  // ============================================
+  // SESSION 3: WIDGET ENHANCEMENTS
+  // ============================================
+
+  /// Whether to show progress bar on widget (default: false)
+  Future<bool> getWidgetProgressBar() async {
+    final p = await _prefs;
+    return p.getBool(_kWidgetProgressBar) ?? false;
+  }
+
+  Future<void> setWidgetProgressBar(bool value) async {
+    final p = await _prefs;
+    await p.setBool(_kWidgetProgressBar, value);
+  }
+
+  /// Whether to enable pulse animation on widget when under 24h (default: false)
+  Future<bool> getWidgetPulseAnimation() async {
+    final p = await _prefs;
+    return p.getBool(_kWidgetPulseAnimation) ?? false;
+  }
+
+  Future<void> setWidgetPulseAnimation(bool value) async {
+    final p = await _prefs;
+    await p.setBool(_kWidgetPulseAnimation, value);
   }
 }
