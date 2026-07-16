@@ -6,6 +6,14 @@ import '../services/countdown_service.dart';
 class EventCard extends StatelessWidget {
   final Event event;
   final bool smartFormatEnabled;
+import 'package:flutter/material.dart';
+
+import '../models/event.dart';
+import '../services/countdown_service.dart';
+
+class EventCard extends StatelessWidget {
+  final Event event;
+  final bool smartFormatEnabled;
   final bool use24HourFormat;
   final VoidCallback onTap;
   final VoidCallback onDelete;
@@ -52,61 +60,100 @@ class EventCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: ListTile(
+      child: InkWell(
         onTap: onTap,
-        // SESSION 2: Hero animation tag
-        leading: Hero(
-          tag: 'event_avatar_${event.id}',
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: urgencyColor.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(
-              child: Icon(
-                Icons.event,
-                color: urgencyColor,
-                size: 20,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Leading icon with fixed size
+              Hero(
+                tag: 'event_avatar_${event.id}',
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: urgencyColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.event,
+                      color: urgencyColor,
+                      size: 22,
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ),
-        title: Hero(
-          tag: 'event_title_${event.id}',
-          child: Material(
-            color: Colors.transparent,
-            child: Text(
-              event.title,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (subtitleParts.isNotEmpty)
-              Text(subtitleParts.join(' • '), style: const TextStyle(fontSize: 12)),
-            const SizedBox(height: 4),
-            Text(
-              result.text,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).colorScheme.primary,
+              const SizedBox(width: 12),
+              // Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Hero(
+                      tag: 'event_title_${event.id}',
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Text(
+                          event.title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    if (subtitleParts.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitleParts.join(' • '),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Text(
+                      result.text,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-        trailing: IconButton(
-          icon: const Icon(Icons.delete_outline),
-          onPressed: onDelete,
-          // SESSION 2: Minimum 48dp touch target
-          iconSize: 24,
-          padding: const EdgeInsets.all(12),
-          constraints: const BoxConstraints(
-            minWidth: 48,
-            minHeight: 48,
+              const SizedBox(width: 8),
+              // Delete button with fixed size
+              Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(24),
+                child: InkWell(
+                  onTap: onDelete,
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.delete_outline,
+                      color: Theme.of(context).colorScheme.error,
+                      size: 22,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
