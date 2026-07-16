@@ -4,9 +4,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../db/database_helper.dart';
 import '../main.dart';
+import '../models/notification_history.dart';
+import '../services/battery_service.dart';
 import '../services/export_import_service.dart';
 import '../services/notification_service.dart';
 import '../services/settings_service.dart';
@@ -22,21 +25,29 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  // Session 1 settings
+  // Session 1-3 settings
   bool _smartFormat = false;
   bool _use24Hour = true;
   AppThemeOption _theme = AppThemeOption.defaultBlue;
   WidgetBackgroundType _bgType = WidgetBackgroundType.themeColor;
   String? _imagePath;
-
-  // Session 2 settings
   ThemeMode _themeMode = ThemeMode.system;
   Color _customColor = Colors.blue;
   bool _highContrast = false;
-
-  // Session 3 settings
   bool _widgetProgressBar = false;
   bool _widgetPulseAnimation = false;
+
+  // Session 4 settings
+  bool _quietHoursEnabled = false;
+  TimeOfDay _quietStart = const TimeOfDay(hour: 22, minute: 0);
+  TimeOfDay _quietEnd = const TimeOfDay(hour: 7, minute: 0);
+  List<NotificationHistory> _notificationHistory = [];
+
+  // Session 9 settings
+  bool _batteryOptimization = true;
+  bool _adaptiveRefresh = true;
+  int _batteryLevel = 100;
+  bool _isCharging = false;
 
   bool _loading = true;
   bool _busy = false;
@@ -54,15 +65,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final theme = await s.getSelectedTheme();
     final bgType = await s.getWidgetBackgroundType();
     final imagePath = await s.getWidgetImagePath();
-
-    // Session 2
     final mode = await s.getThemeMode();
     final custom = await s.getCustomColor();
     final hc = await s.getHighContrast();
-
-    // Session 3
     final progressBar = await s.getWidgetProgressBar();
     final pulseAnim = await s.getWidgetPulseAnimation();
+
+    // Session 4
+    final quietEnabled = await s.getQuietHoursEnabled();
+    final quietStartMin = await s.getQuietHoursStart();
+    final quietEndMin = await s.getQuietHoursEnd();
+
+    // Session 9
+    final batOpt = await s.getBatteryOptimizationEnabled();
+    final adaptRefresh = await s.getAdaptiveRefreshEnabled();
 
     if (!mounted) return;
     setState(() {
@@ -76,8 +92,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _highContrast = hc;
       _widgetProgressBar = progressBar;
       _widgetPulseAnimation = pulseAnim;
+      _quietHoursEnabled = quietEnabled;
+      _quietStart = TimeOfDay(
+        hour: quietStartMin ~/ 60,
+        minute: quietStartMin % 60,
+      );
+      _quietEnd = TimeOfDay(
+        hour: quietEndMin ~/ 60,
+        minute: quietEndMin % 60,
+      );
+      _batteryOptimization = batOpt;
+      _adaptiveRefresh = adaptRefresh;
       _loading = false;
     });
+
+    _loadBatteryInfo();
+    _loadHistory();
+  }
+
+  Future<void> _loadBatteryInfo() async {
+    try {
+      final level = await BatteryService.instance.getBatteryLevel();
+      final charging = await BatteryService.instance.isCharging();
+      if (mounted) {
+        setState(() {
+          _batteryLevel = level;
+          _isCharging = charging;
+        });
+      }
+    } catch (e) {
+      // Ignore on unsupported platforms
+    }
+  }
+
+  Future<void> _loadHistory() async {
+    final history = await DatabaseHelper.instance.getNotificationHistory(limit: 20);
+    if (mounted) setState(() => _notificationHistory = history);
   }
 
   // --- Session 1 callbacks (preserved) ---
@@ -121,7 +171,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return true;
   }
 
-  // --- Session 2: Theme Mode ---
+  // --- Session 2 callbacks ---
   Future<void> _setThemeMode(ThemeMode mode) async {
     await SettingsService.instance.setThemeMode(mode);
     setState(() => _themeMode = mode);
@@ -130,7 +180,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // --- Session 2: Custom Color ---
   Future<void> _showColorPicker() async {
     final Color picked = await showColorPickerDialog(
       context,
@@ -159,7 +208,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // --- Session 2: High Contrast ---
   Future<void> _setHighContrast(bool value) async {
     await SettingsService.instance.setHighContrast(value);
     setState(() => _highContrast = value);
@@ -168,18 +216,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // --- Session 3: Widget Progress Bar ---
+  // --- Session 3 callbacks ---
   Future<void> _setWidgetProgressBar(bool value) async {
     await SettingsService.instance.setWidgetProgressBar(value);
     setState(() => _widgetProgressBar = value);
     await WidgetService.refreshWidget();
   }
 
-  // --- Session 3: Widget Pulse Animation ---
   Future<void> _setWidgetPulseAnimation(bool value) async {
     await SettingsService.instance.setWidgetPulseAnimation(value);
     setState(() => _widgetPulseAnimation = value);
     await WidgetService.refreshWidget();
+  }
+
+  // ============================================
+  // SESSION 4: Quiet Hours
+  // ============================================
+  Future<void> _setQuietHoursEnabled(bool value) async {
+    await SettingsService.instance.setQuietHoursEnabled(value);
+    setState(() => _quietHoursEnabled = value);
+  }
+
+  Future<void> _pickQuietStart() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _quietStart,
+    );
+    if (picked == null) return;
+    await SettingsService.instance.setQuietHoursStart(picked.hour * 60 + picked.minute);
+    setState(() => _quietStart = picked);
+  }
+
+  Future<void> _pickQuietEnd() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _quietEnd,
+    );
+    if (picked == null) return;
+    await SettingsService.instance.setQuietHoursEnd(picked.hour * 60 + picked.minute);
+    setState(() => _quietEnd = picked);
+  }
+
+  Future<void> _clearHistory() async {
+    await DatabaseHelper.instance.clearNotificationHistory();
+    setState(() => _notificationHistory = []);
+    _showSnack('History cleared');
+  }
+
+  // ============================================
+  // SESSION 9: Battery & Performance
+  // ============================================
+  Future<void> _setBatteryOptimization(bool value) async {
+    await SettingsService.instance.setBatteryOptimizationEnabled(value);
+    setState(() => _batteryOptimization = value);
+  }
+
+  Future<void> _setAdaptiveRefresh(bool value) async {
+    await SettingsService.instance.setAdaptiveRefreshEnabled(value);
+    setState(() => _adaptiveRefresh = value);
+  }
+
+  Future<void> _runVacuum() async {
+    setState(() => _busy = true);
+    try {
+      await DatabaseHelper.instance.vacuum();
+      await SettingsService.instance.setLastVacuum(DateTime.now());
+      _showSnack('Database optimized');
+    } catch (e) {
+      _showSnack('Optimization failed: $e');
+    } finally {
+      setState(() => _busy = false);
+    }
   }
 
   // --- Export / Import (preserved) ---
@@ -367,7 +474,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const Divider(),
 
-                // SESSION 1: COUNTDOWN DISPLAY (preserved)
+                // SESSION 1: COUNTDOWN DISPLAY
                 const _SectionHeader('Countdown Display'),
                 SwitchListTile(
                   title: const Text('Smart countdown format'),
@@ -415,7 +522,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const Divider(),
 
-                // SESSION 1: WIDGET BACKGROUND (preserved)
+                // ============================================
+                // SESSION 4: QUIET HOURS
+                // ============================================
+                const _SectionHeader('Quiet Hours'),
+                SwitchListTile(
+                  secondary: const Icon(Icons.do_not_disturb_on),
+                  title: const Text('Enable Quiet Hours'),
+                  subtitle: const Text('Skip non-urgent notifications during set hours'),
+                  value: _quietHoursEnabled,
+                  onChanged: _setQuietHoursEnabled,
+                ),
+                if (_quietHoursEnabled) ...[
+                  ListTile(
+                    leading: const Icon(Icons.bedtime),
+                    title: const Text('Start time'),
+                    subtitle: Text('${_quietStart.hour.toString().padLeft(2, '0')}:${_quietStart.minute.toString().padLeft(2, '0')}'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _pickQuietStart,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.wb_sunny),
+                    title: const Text('End time'),
+                    subtitle: Text('${_quietEnd.hour.toString().padLeft(2, '0')}:${_quietEnd.minute.toString().padLeft(2, '0')}'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _pickQuietEnd,
+                  ),
+                ],
+                const Divider(),
+
+                // SESSION 4: NOTIFICATION HISTORY
+                const _SectionHeader('Notification History'),
+                if (_notificationHistory.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('No notifications sent yet.'),
+                  )
+                else
+                  ..._notificationHistory.take(5).map((h) {
+                    final dt = DateTime.fromMillisecondsSinceEpoch(h.sentAtMillis);
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.history, size: 20),
+                      title: Text(h.eventTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text('${h.reminderType} • ${dt.month}/${dt.day} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}'),
+                    );
+                  }),
+                if (_notificationHistory.isNotEmpty)
+                  TextButton(
+                    onPressed: _clearHistory,
+                    child: const Text('Clear History'),
+                  ),
+                const Divider(),
+
+                // SESSION 1: WIDGET BACKGROUND
                 const _SectionHeader('Home Screen Widget Background'),
                 RadioListTile<WidgetBackgroundType>(
                   title: const Text('App theme color'),
@@ -456,7 +616,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
                 const Divider(),
 
-                // SESSION 1: BACKUP (preserved)
+                // ============================================
+                // SESSION 9: BATTERY & PERFORMANCE
+                // ============================================
+                const _SectionHeader('Battery & Performance'),
+                ListTile(
+                  leading: Icon(
+                    _isCharging ? Icons.battery_charging_full : Icons.battery_full,
+                    color: _batteryLevel < 20 ? Colors.red : null,
+                  ),
+                  title: const Text('Battery Status'),
+                  subtitle: Text('$_batteryLevel%${_isCharging ? ' • Charging' : ''}'),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.battery_saver),
+                  title: const Text('Battery Optimization'),
+                  subtitle: const Text('Slow down refresh when battery is low'),
+                  value: _batteryOptimization,
+                  onChanged: _setBatteryOptimization,
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.speed),
+                  title: const Text('Adaptive Refresh'),
+                  subtitle: const Text('Faster updates when events are imminent'),
+                  value: _adaptiveRefresh,
+                  onChanged: _setAdaptiveRefresh,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.storage),
+                  title: const Text('Optimize Database'),
+                  subtitle: const Text('Clean up and compact local storage'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _runVacuum,
+                ),
+                const Divider(),
+
+                // SESSION 1: BACKUP
                 const _SectionHeader('Backup'),
                 ListTile(
                   leading: const Icon(Icons.upload_file),
