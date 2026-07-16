@@ -47,9 +47,6 @@
             android:exported="true"
             android:theme="@style/LaunchTheme"
             android:launchMode="singleTop">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE"/>
-            </intent-filter>
         </activity>
 
         <meta-data
@@ -66,7 +63,7 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_info" />
+                android:resource="@xml/event_widget_info" />
         </receiver>
 
         <!-- Required by home_widget so it can be launched/updated in the background -->
