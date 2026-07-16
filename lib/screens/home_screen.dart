@@ -35,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // ============================================
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 60),
-      (_) => _loadEventsOnly(), // Don't refresh widget every 30s
+      (_) => _loadEventsOnly(),
     );
   }
 
@@ -100,11 +100,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
     HapticFeedback.mediumImpact();
 
+    // ============================================
+    // FIX: Delete immediately and refresh state before async cleanup
+    // ============================================
     if (event.id != null) {
+      // Remove from UI immediately
+      setState(() {
+        _events.removeWhere((e) => e.id == event.id);
+      });
+      
+      // Then do async cleanup
       await DatabaseHelper.instance.deleteEvent(event.id!);
       await NotificationService.instance.cancelForEvent(event.id!);
+      await WidgetService.refreshWidget();
     }
-    await _loadAll();
   }
 
   @override
@@ -166,9 +175,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: ListView.builder(
                     itemCount: _events.length,
                     // ============================================
-                    // FIX: Add itemExtent for better ListView performance
+                    // FIX: Remove itemExtent to allow dynamic card heights
                     // ============================================
-                    itemExtent: 90,
                     itemBuilder: (context, index) {
                       final event = _events[index];
                       return EventCard(
