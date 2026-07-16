@@ -6,22 +6,23 @@ import 'package:workmanager/workmanager.dart';
 
 import 'screens/home_screen.dart';
 import 'screens/widget_settings_screen.dart';
+import 'services/backup_service.dart';
+import 'services/battery_service.dart';
 import 'services/notification_service.dart';
 import 'services/settings_service.dart';
 import 'services/widget_service.dart';
 import 'theme/app_themes.dart';
 
-/// Unique name for the periodic background task that refreshes the home
-/// screen widget every 30-60 minutes (battery efficient - no polling loop).
 const String kWidgetRefreshTaskName = 'event_countdown_widget_refresh';
+const String kBackupTaskName = 'event_countdown_weekly_backup';
 
-/// Entry point for workmanager background tasks. Must be a top-level or
-/// static function annotated so it can run in a separate background isolate.
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     if (task == kWidgetRefreshTaskName) {
       await WidgetService.refreshWidget();
+    } else if (task == kBackupTaskName) {
+      return Future.value(await BackupService.executeBackup());
     }
     return Future.value(true);
   });
@@ -36,9 +37,6 @@ Future<void> main() async {
     callbackDispatcher,
     isInDebugMode: false,
   );
-  // Battery-efficient periodic refresh: workmanager's Android minimum
-  // periodic interval is 15 minutes; we use 30 minutes to stay within the
-  // requested 30-60 minute battery-efficient window.
   await Workmanager().registerPeriodicTask(
     kWidgetRefreshTaskName,
     kWidgetRefreshTaskName,
@@ -47,7 +45,10 @@ Future<void> main() async {
     existingWorkPolicy: ExistingWorkPolicy.keep,
   );
 
-  // Push initial widget data immediately on launch too.
+  // SESSION 6: Register weekly backup
+  await BackupService.registerWeeklyBackup();
+
+  // Push initial widget data immediately on launch.
   await WidgetService.refreshWidget();
 
   runApp(const EventCountdownApp());
@@ -60,7 +61,8 @@ class EventCountdownApp extends StatefulWidget {
   State<EventCountdownApp> createState() => EventCountdownAppState();
 }
 
-class EventCountdownAppState extends State<EventCountdownApp> {
+class EventCountdownAppState extends State<EventCountdownApp>
+    with WidgetsBindingObserver {
   AppThemeOption _theme = AppThemeOption.defaultBlue;
   ThemeMode _themeMode = ThemeMode.system;
   Color? _customColor;
@@ -69,7 +71,31 @@ class EventCountdownAppState extends State<EventCountdownApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadAllSettings();
+    _checkFirstLaunch();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // ============================================
+  // SESSION 9: Screen-state awareness
+  // ============================================
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final home = HomeScreen.homeScreenKey.currentState;
+    if (home == null) return;
+
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      home.pauseRefresh();
+    } else if (state == AppLifecycleState.resumed) {
+      home.resumeRefresh();
+    }
   }
 
   Future<void> _loadAllSettings() async {
@@ -87,8 +113,65 @@ class EventCountdownAppState extends State<EventCountdownApp> {
     }
   }
 
-  /// Called by the Settings screen after the user changes the theme so the
-  /// whole app rebuilds with the new colors immediately.
+  // ============================================
+  // SESSION 6: Restore prompt on first launch
+  // ============================================
+  Future<void> _checkFirstLaunch() async {
+    final isFirst = await SettingsService.instance.isFirstLaunch();
+    if (!isFirst) return;
+
+    await SettingsService.instance.setFirstLaunch(false);
+
+    // Delay to let UI build
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+
+    final backupPath = await BackupService.findRecentBackup();
+    if (backupPath == null) return;
+
+    if (!mounted) return;
+    final shouldRestore = await showDialog<bool>(
+      context: navigatorKey.currentContext!,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Restore Backup?'),
+        content: const Text(
+          'A previous backup was found. Would you like to restore your events?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Skip'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldRestore == true) {
+      try {
+        final count = await ExportImportService.importFromJson(backupPath);
+        final events = await DatabaseHelper.instance.getAllEventsSorted();
+        await NotificationService.instance.rescheduleAll(events);
+        await WidgetService.refreshWidget();
+
+        if (mounted) {
+          ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+            SnackBar(content: Text('Restored $count event(s)')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+            SnackBar(content: Text('Restore failed: $e')),
+          );
+        }
+      }
+    }
+  }
+
   static EventCountdownAppState? of(BuildContext context) =>
       context.findAncestorStateOfType<EventCountdownAppState>();
 
@@ -115,6 +198,7 @@ class EventCountdownAppState extends State<EventCountdownApp> {
         return MaterialApp(
           title: 'Event Countdown',
           debugShowCheckedModeBanner: false,
+          navigatorKey: navigatorKey,
           themeMode: _themeMode,
           theme: AppThemes.buildTheme(
             _theme,
@@ -131,9 +215,6 @@ class EventCountdownAppState extends State<EventCountdownApp> {
             highContrast: _highContrast,
           ),
           home: const HomeScreen(),
-          // ============================================
-          // SESSION 3: Handle widget settings deep link
-          // ============================================
           routes: {
             '/widget_settings': (context) => const WidgetSettingsScreen(),
           },
@@ -142,3 +223,5 @@ class EventCountdownAppState extends State<EventCountdownApp> {
     );
   }
 }
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
