@@ -1,7 +1,9 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../db/database_helper.dart';
+import '../models/custom_reminder.dart';
 import '../models/event.dart';
 import '../services/notification_service.dart';
 import '../services/settings_service.dart';
@@ -28,17 +30,25 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
   bool _use24Hour = true;
   bool _isSaving = false;
 
+  // SESSION 5
+  RecurrenceType _recurrence = RecurrenceType.none;
+
+  // SESSION 4
+  List<CustomReminder> _customReminders = [];
+
   bool get _isEditing => widget.existing != null;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _loadExistingReminders();
     final e = widget.existing;
     if (e != null) {
       _titleController.text = e.title;
       _notesController.text = e.notes ?? '';
       _date = DateTime.fromMillisecondsSinceEpoch(e.dateMillis);
+      _recurrence = e.recurrence;
       if (e.startTimeMillis != null) {
         final dt = DateTime.fromMillisecondsSinceEpoch(e.startTimeMillis!);
         _startTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
@@ -54,6 +64,14 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
   Future<void> _loadSettings() async {
     final use24 = await SettingsService.instance.getUse24HourFormat();
     if (mounted) setState(() => _use24Hour = use24);
+  }
+
+  Future<void> _loadExistingReminders() async {
+    if (widget.existing?.id != null) {
+      final reminders = await DatabaseHelper.instance
+          .getCustomRemindersForEvent(widget.existing!.id!);
+      if (mounted) setState(() => _customReminders = reminders);
+    }
   }
 
   @override
@@ -122,6 +140,62 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
         .millisecondsSinceEpoch;
   }
 
+  // ============================================
+  // SESSION 4: Custom reminder management
+  // ============================================
+  Future<void> _addCustomReminder() async {
+    final defaultMinutes = await SettingsService.instance.getDefaultReminderMinutes();
+    final result = await showDialog<Map<String, dynamic>?>(
+      context: context,
+      builder: (ctx) => _ReminderDialog(defaultMinutes: defaultMinutes),
+    );
+    if (result == null) return;
+
+    final reminder = CustomReminder(
+      eventId: widget.existing?.id ?? 0,
+      minutesBefore: result['minutes'] as int,
+      type: result['alarm'] == true ? 'alarm' : 'notification',
+      soundUri: result['sound'] as String?,
+    );
+
+    if (_isEditing && widget.existing?.id != null) {
+      final id = await DatabaseHelper.instance.insertCustomReminder(
+        reminder.copyWith(eventId: widget.existing!.id!),
+      );
+      setState(() {
+        _customReminders.add(reminder.copyWith(id: id, eventId: widget.existing!.id!));
+      });
+    } else {
+      setState(() => _customReminders.add(reminder));
+    }
+  }
+
+  Future<void> _pickReminderSound(CustomReminder reminder) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.audio,
+      allowMultiple: false,
+    );
+    if (result?.files.single.path == null) return;
+
+    final soundPath = result!.files.single.path;
+    final updated = reminder.copyWith(soundUri: soundPath);
+
+    if (reminder.id != null) {
+      await DatabaseHelper.instance.updateCustomReminder(updated);
+    }
+    setState(() {
+      final idx = _customReminders.indexWhere((r) => r.id == reminder.id);
+      if (idx >= 0) _customReminders[idx] = updated;
+    });
+  }
+
+  Future<void> _deleteReminder(CustomReminder reminder) async {
+    if (reminder.id != null) {
+      await DatabaseHelper.instance.deleteCustomReminder(reminder.id!);
+    }
+    setState(() => _customReminders.removeWhere((r) => r.id == reminder.id));
+  }
+
   Future<void> _save() async {
     if (_isSaving) return;
     if (!_formKey.currentState!.validate()) return;
@@ -146,6 +220,7 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
         notes: _notesController.text.trim().isEmpty
             ? null
             : _notesController.text.trim(),
+        recurrence: _recurrence,
       );
 
       int id;
@@ -157,6 +232,15 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
       }
 
       final savedEvent = event.copyWith(id: id);
+
+      // Save custom reminders for new events
+      if (!_isEditing) {
+        for (final r in _customReminders) {
+          await DatabaseHelper.instance.insertCustomReminder(
+            r.copyWith(eventId: id),
+          );
+        }
+      }
 
       try {
         await NotificationService.instance.scheduleForEvent(savedEvent);
@@ -191,7 +275,6 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // SESSION 2: Hero animation on title
         title: Hero(
           tag: widget.existing != null
               ? 'event_title_${widget.existing!.id}'
@@ -225,7 +308,6 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // SESSION 2: Hero animation on title field
             Hero(
               tag: widget.existing != null
                   ? 'event_avatar_${widget.existing!.id}'
@@ -253,6 +335,34 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
               onTap: _pickDate,
             ),
             const Divider(),
+
+            // ============================================
+            // SESSION 5: Recurrence
+            // ============================================
+            const Padding(
+              padding: EdgeInsets.fromLTRB(0, 8, 0, 4),
+              child: Text(
+                'Recurrence',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ),
+            SegmentedButton<RecurrenceType>(
+              segments: const [
+                ButtonSegment(value: RecurrenceType.none, label: Text('None')),
+                ButtonSegment(value: RecurrenceType.daily, label: Text('Daily')),
+                ButtonSegment(value: RecurrenceType.weekly, label: Text('Weekly')),
+                ButtonSegment(value: RecurrenceType.monthly, label: Text('Monthly')),
+                ButtonSegment(value: RecurrenceType.yearly, label: Text('Yearly')),
+              ],
+              selected: {_recurrence},
+              onSelectionChanged: (selected) {
+                if (selected.isNotEmpty) {
+                  setState(() => _recurrence = selected.first);
+                }
+              },
+            ),
+            const Divider(),
+
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Set start time'),
@@ -311,6 +421,49 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
                 alignLabelWithHint: true,
               ),
             ),
+            const SizedBox(height: 16),
+
+            // ============================================
+            // SESSION 4: Custom reminders
+            // ============================================
+            const Padding(
+              padding: EdgeInsets.fromLTRB(0, 8, 0, 4),
+              child: Text(
+                'Custom Reminders',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+            ),
+            ..._customReminders.map((r) {
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: Icon(
+                  r.isAlarm ? Icons.alarm : Icons.notifications,
+                  color: r.isAlarm ? Colors.red : null,
+                ),
+                title: Text('${r.minutesBefore} minutes before'),
+                subtitle: r.soundUri != null ? const Text('Custom sound') : null,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (r.soundUri == null)
+                      IconButton(
+                        icon: const Icon(Icons.music_note, size: 20),
+                        onPressed: () => _pickReminderSound(r),
+                      ),
+                    IconButton(
+                      icon: const Icon(Icons.delete, size: 20),
+                      onPressed: () => _deleteReminder(r),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            OutlinedButton.icon(
+              onPressed: _addCustomReminder,
+              icon: const Icon(Icons.add_alarm),
+              label: const Text('Add reminder'),
+            ),
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _isSaving ? null : _save,
@@ -335,6 +488,68 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ============================================
+// SESSION 4: Reminder dialog
+// ============================================
+class _ReminderDialog extends StatefulWidget {
+  final int defaultMinutes;
+  const _ReminderDialog({required this.defaultMinutes});
+
+  @override
+  State<_ReminderDialog> createState() => _ReminderDialogState();
+}
+
+class _ReminderDialogState extends State<_ReminderDialog> {
+  late int _minutes;
+  bool _isAlarm = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _minutes = widget.defaultMinutes;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add Reminder'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('$_minutes minutes before event'),
+          Slider(
+            value: _minutes.toDouble(),
+            min: 5,
+            max: 10080, // 1 week
+            divisions: 100,
+            label: '$_minutes min',
+            onChanged: (v) => setState(() => _minutes = v.round()),
+          ),
+          SwitchListTile(
+            title: const Text('Full-screen alarm'),
+            value: _isAlarm,
+            onChanged: (v) => setState(() => _isAlarm = v),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, {
+            'minutes': _minutes,
+            'alarm': _isAlarm,
+            'sound': null,
+          }),
+          child: const Text('Add'),
+        ),
+      ],
     );
   }
 }
