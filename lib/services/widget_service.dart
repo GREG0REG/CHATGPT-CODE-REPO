@@ -119,5 +119,4 @@ class WidgetService {
   static Future<void> registerInteractivityCallback() async {
     // No-op: tap-to-open is handled natively. Kept for clarity.
   }
-}import 'package:flutter/material.dart';
-import 'package:home_widget/home_widget.dart';
+}
