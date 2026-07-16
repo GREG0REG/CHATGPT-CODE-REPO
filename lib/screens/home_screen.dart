@@ -11,6 +11,7 @@ import '../services/widget_service.dart';
 import '../widgets/event_card.dart';
 import 'add_edit_event_screen.dart';
 import 'settings_screen.dart';
+import '../services/battery_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
