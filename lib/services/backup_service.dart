@@ -4,11 +4,8 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:workmanager/workmanager.dart';
 
-import 'db/database_helper.dart';
-import 'services/export_import_service.dart';
-
-import '../db/database_helper.dart';
-import '../models/event.dart';
+import '../db/database_helper.dart';        // ← FIXED: was 'db/database_helper.dart'
+import '../models/event.dart';              // ← ADDED: needed for Event type
 
 const String kBackupTaskName = 'event_countdown_weekly_backup';
 
