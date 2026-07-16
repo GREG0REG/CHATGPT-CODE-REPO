@@ -40,4 +40,22 @@ class CustomReminder {
       isEnabled: (map['isEnabled'] as int? ?? 1) == 1,
     );
   }
+
+  CustomReminder copyWith({
+    int? id,
+    int? eventId,
+    int? minutesBefore,
+    String? type,
+    String? soundUri,
+    bool? isEnabled,
+  }) {
+    return CustomReminder(
+      id: id ?? this.id,
+      eventId: eventId ?? this.eventId,
+      minutesBefore: minutesBefore ?? this.minutesBefore,
+      type: type ?? this.type,
+      soundUri: soundUri ?? this.soundUri,
+      isEnabled: isEnabled ?? this.isEnabled,
+    );
+  }
 }
