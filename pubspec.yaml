@@ -25,6 +25,7 @@ dependencies:
   dynamic_color: 1.7.0
   flex_color_picker: ^3.6.0
   cupertino_icons: ^1.0.8
+  battery_plus: ^6.0.0
 
 dev_dependencies:
   flutter_test:
