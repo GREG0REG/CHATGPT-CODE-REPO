@@ -6,6 +6,7 @@ import '../models/event.dart';
 import '../services/notification_service.dart';
 import '../services/settings_service.dart';
 import '../services/widget_service.dart';
+import '../models/custom_reminder.dart';
 
 class AddEditEventScreen extends StatefulWidget {
   final Event? existing;
