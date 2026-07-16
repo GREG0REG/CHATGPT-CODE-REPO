@@ -8,17 +8,16 @@ import 'countdown_service.dart';
 import 'settings_service.dart';
 
 /// Pushes the currently-active event's countdown data into the shared
-/// storage that the native Android AppWidgetProvider reads, then asks
-/// Android to redraw the widget.
+/// storage that the native Android AppWidgetProvider reads.
 class WidgetService {
   WidgetService._();
   static const String androidWidgetName = 'EventCountdownWidgetProvider';
 
   static const _kTitle = 'event_title';
   static const _kCountdown = 'countdown_text';
-  static const _kBgType = 'widget_bg_type'; // "theme" | "image"
-  static const _kBgColor = 'widget_bg_color'; // ARGB int as string
-  static const _kTextColor = 'widget_text_color'; // ARGB int as string
+  static const _kBgType = 'widget_bg_type';
+  static const _kBgColor = 'widget_bg_color';
+  static const _kTextColor = 'widget_text_color';
   static const _kImagePath = 'widget_image_path';
   static const _kProgressPercent = 'widget_progress_percent';
   static const _kPulseEnabled = 'widget_pulse_enabled';
@@ -52,31 +51,24 @@ class WidgetService {
         smartFormatEnabled: smart,
       ).text;
 
-      // ============================================
-      // FIX: Calculate progress for ALL event types
-      // For date-only events: progress from midnight of event date to now
-      // For start+deadline: progress from start to deadline
-      // ============================================
       if (progressBarEnabled) {
         final start = active.startTimeMillis ?? active.dateMillis;
         final deadline = active.deadlineMillis ?? active.startTimeMillis ?? active.dateMillis;
-        
+
         if (deadline > start) {
           final total = deadline - start;
           final elapsed = now.millisecondsSinceEpoch - start;
           progressPercent = ((elapsed / total) * 100).clamp(0, 100).toInt();
         } else if (active.dateMillis > 0) {
-          // Fallback: show progress toward the date
           final total = active.dateMillis - now.millisecondsSinceEpoch;
           if (total > 0) {
-            progressPercent = 0; // Event hasn't started yet
+            progressPercent = 0;
           } else {
-            progressPercent = 100; // Event passed
+            progressPercent = 100;
           }
         }
       }
 
-      // SESSION 3: Check if under 24 hours (urgent)
       final target = active.deadlineMillis ?? active.startTimeMillis ?? active.dateMillis;
       final diff = Duration(milliseconds: target - now.millisecondsSinceEpoch);
       isUrgent = diff.inHours < 24 && !diff.isNegative;
@@ -105,7 +97,6 @@ class WidgetService {
       await HomeWidget.saveWidgetData<String>(_kImagePath, '');
     }
 
-    // SESSION 3: Save progress and pulse data
     await HomeWidget.saveWidgetData<int>(_kProgressPercent, progressPercent);
     await HomeWidget.saveWidgetData<bool>(_kPulseEnabled, pulseEnabled);
     await HomeWidget.saveWidgetData<bool>(_kIsUrgent, isUrgent);
@@ -117,6 +108,6 @@ class WidgetService {
   }
 
   static Future<void> registerInteractivityCallback() async {
-    // No-op: tap-to-open is handled natively. Kept for clarity.
+    // No-op: tap-to-open is handled natively.
   }
 }
