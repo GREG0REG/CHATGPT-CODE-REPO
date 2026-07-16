@@ -12,7 +12,7 @@ import '../models/notification_history.dart';
 import '../services/battery_service.dart';
 import '../services/export_import_service.dart';
 import '../services/notification_service.dart';
-import '../services/settings_service.dart';
+import '../services/settings_service.dart';        // ← FIXED: was missing
 import '../services/widget_service.dart';
 import '../theme/app_themes.dart';
 import 'widget_settings_screen.dart';
@@ -29,7 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _smartFormat = false;
   bool _use24Hour = true;
   AppThemeOption _theme = AppThemeOption.defaultBlue;
-  WidgetBackgroundType _bgType = WidgetBackgroundType.themeColor;
+  WidgetBackgroundType _bgType = WidgetBackgroundType.themeColor;  // ← This type comes from settings_service.dart import
   String? _imagePath;
   ThemeMode _themeMode = ThemeMode.system;
   Color _customColor = Colors.blue;
