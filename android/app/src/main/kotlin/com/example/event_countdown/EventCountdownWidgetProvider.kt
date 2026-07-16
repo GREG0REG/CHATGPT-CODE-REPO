@@ -12,7 +12,6 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
 import android.widget.RemoteViews
-import es.antonborri.home_widget.HomeWidgetPlugin
 import es.antonborri.home_widget.HomeWidgetProvider
 import java.io.File
 
@@ -99,7 +98,7 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_title, settingsPending)
 
-            // 3. Mark Done (tap on countdown text)
+            // 3. Mark Done (tap on countdown text) - sends broadcast to Flutter
             val markDoneIntent = Intent(context, EventCountdownWidgetProvider::class.java).apply {
                 action = ACTION_MARK_DONE
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
@@ -119,12 +118,13 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         if (intent.action == ACTION_MARK_DONE) {
-            // Send broadcast to Flutter side via home_widget
-            val markDoneIntent = Intent(context, HomeWidgetPlugin::class.java).apply {
-                action = HomeWidgetPlugin.ACTION_WIDGET_CLICKED
-                putExtra("action", "mark_done")
+            // Broadcast to Flutter app using a custom action
+            // The Flutter side listens for this via home_widget interactivity callback
+            val flutterIntent = Intent().apply {
+                action = "com.example.event_countdown.MARK_DONE"
+                setPackage(context.packageName)
             }
-            context.sendBroadcast(markDoneIntent)
+            context.sendBroadcast(flutterIntent)
         }
     }
 
