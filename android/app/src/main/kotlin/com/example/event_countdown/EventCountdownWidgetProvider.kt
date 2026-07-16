@@ -23,7 +23,7 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
 
         fun parseColorOrDefault(colorStr: String?, defaultColor: Int): Int {
             return try {
-                if (colorStr.isNullOrEmpty()) defaultColor else colorStr.toInt()
+                if (colorStr.isNullOrEmpty()) defaultColor else colorStr.toLong().toInt()
             } catch (e: NumberFormatException) {
                 defaultColor
             }
