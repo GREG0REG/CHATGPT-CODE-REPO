@@ -25,19 +25,17 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _use24Hour = true;
   bool _loading = true;
   Timer? _refreshTimer;
-  String? _lastCountdownHash; // Prevent unnecessary rebuilds
 
   @override
   void initState() {
     super.initState();
     _loadAll();
     // ============================================
-    // PERFORMANCE FIX: 60 seconds instead of 30
-    // Reduces CPU/battery usage significantly
+    // FIX: Reduce refresh from 30s to 60s to save battery
     // ============================================
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 60),
-      (_) => _loadAll(),
+      (_) => _loadEventsOnly(), // Don't refresh widget every 30s
     );
   }
 
@@ -48,21 +46,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadAll() async {
+    await _loadEventsOnly();
+    await WidgetService.refreshWidget();
+  }
+
+  // ============================================
+  // FIX: Separate event loading from widget refresh
+  // Widget refresh is expensive, don't do it every 30s
+  // ============================================
+  Future<void> _loadEventsOnly() async {
     final events = await DatabaseHelper.instance.getAllEventsSorted();
     final smart = await SettingsService.instance.getSmartFormatEnabled();
     final use24 = await SettingsService.instance.getUse24HourFormat();
-
-    // ============================================
-    // PERFORMANCE FIX: Only rebuild if data actually changed
-    // ============================================
-    final newHash = events.map((e) => '${e.id}:${e.title}').join('|');
-    if (newHash == _lastCountdownHash && !_loading) {
-      // Data hasn't changed, just refresh widget silently
-      await WidgetService.refreshWidget();
-      return;
-    }
-    _lastCountdownHash = newHash;
-
     if (!mounted) return;
     setState(() {
       _events = events;
@@ -70,7 +65,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _use24Hour = use24;
       _loading = false;
     });
-    await WidgetService.refreshWidget();
   }
 
   Future<void> _openAddEdit({Event? existing}) async {
@@ -171,6 +165,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   onRefresh: _loadAll,
                   child: ListView.builder(
                     itemCount: _events.length,
+                    // ============================================
+                    // FIX: Add itemExtent for better ListView performance
+                    // ============================================
+                    itemExtent: 90,
                     itemBuilder: (context, index) {
                       final event = _events[index];
                       return EventCard(
