@@ -10,21 +10,59 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Shader
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetProvider
 import java.io.File
 
-/**
- * Renders the "active" event's title + countdown text onto the home screen
- * widget. All data is pre-computed on the Dart side (WidgetService) and
- * simply read here from the home_widget shared preferences file.
- *
- * SESSION 3 ENHANCEMENTS:
- * - Progress bar showing % time elapsed with percentage text
- * - Long-press menu: Widget Settings, Mark Done, Open App
- */
 class EventCountdownWidgetProvider : HomeWidgetProvider() {
+
+    companion object {
+        const val DEFAULT_COLOR = -0x1
+
+        fun parseColorOrDefault(colorStr: String?, defaultColor: Int): Int {
+            return try {
+                if (colorStr.isNullOrEmpty()) defaultColor else colorStr.toInt()
+            } catch (e: NumberFormatException) {
+                defaultColor
+            }
+        }
+
+        fun buildGradientBackground(color: Int): Bitmap {
+            val width = 400
+            val height = 200
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            val darkerColor = darkenColor(color, 0.7f)
+            val gradient = LinearGradient(
+                0f, 0f, width.toFloat(), height.toFloat(),
+                color, darkerColor,
+                Shader.TileMode.CLAMP
+            )
+            val paint = Paint().apply { shader = gradient }
+            canvas.drawRect(RectF(0f, 0f, width.toFloat(), height.toFloat()), paint)
+            return bitmap
+        }
+
+        fun buildImageBackground(imagePath: String): Bitmap? {
+            return try {
+                val file = File(imagePath)
+                if (!file.exists()) return null
+                BitmapFactory.decodeFile(file.absolutePath)
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        private fun darkenColor(color: Int, factor: Float): Int {
+            val a = Color.alpha(color)
+            val r = (Color.red(color) * factor).toInt().coerceIn(0, 255)
+            val g = (Color.green(color) * factor).toInt().coerceIn(0, 255)
+            val b = (Color.blue(color) * factor).toInt().coerceIn(0, 255)
+            return Color.argb(a, r, g, b)
+        }
+    }
 
     override fun onUpdate(
         context: Context,
@@ -42,19 +80,25 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
             val textColorStr = widgetData.getString("widget_text_color", null)
             val imagePath = widgetData.getString("widget_image_path", null)
             val progressPercent = widgetData.getInt("widget_progress_percent", -1)
+            val pulseEnabled = widgetData.getBoolean("widget_pulse_enabled", false)
+            val isUrgent = widgetData.getBoolean("widget_is_urgent", false)
 
             views.setTextViewText(R.id.widget_title, title)
             views.setTextViewText(R.id.widget_countdown, countdown)
 
-            // SESSION 3: Progress bar with percentage text
+            // Progress bar
             if (progressPercent >= 0) {
-                views.setViewVisibility(R.id.widget_progress, android.view.View.VISIBLE)
-                views.setViewVisibility(R.id.widget_progress_text, android.view.View.VISIBLE)
-                views.setProgressBar(R.id.widget_progress, 100, progressPercent, false)
+                views.setViewVisibility(R.id.widget_progress_container, android.view.View.VISIBLE)
                 views.setTextViewText(R.id.widget_progress_text, "$progressPercent%")
             } else {
-                views.setViewVisibility(R.id.widget_progress, android.view.View.GONE)
-                views.setViewVisibility(R.id.widget_progress_text, android.view.View.GONE)
+                views.setViewVisibility(R.id.widget_progress_container, android.view.View.GONE)
+            }
+
+            // Pulse overlay
+            if (pulseEnabled && isUrgent) {
+                views.setViewVisibility(R.id.widget_pulse_overlay, android.view.View.VISIBLE)
+            } else {
+                views.setViewVisibility(R.id.widget_pulse_overlay, android.view.View.GONE)
             }
 
             val useImage = bgType == "image" && !imagePath.isNullOrEmpty() && File(imagePath).exists()
@@ -79,8 +123,7 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
                 views.setTextColor(R.id.widget_progress_text, textColor)
             }
 
-            // SESSION 3: Long-press menu actions
-            // 1. Open App (tap on widget root)
+            // Open app on tap
             val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
             val openAppPending = PendingIntent.getActivity(
                 context,
@@ -90,14 +133,7 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_root, openAppPending)
 
-            // 2. Widget Settings (tap on title)
-            val settingsIntent = Intent(context, WidgetSettingsActivity::class.java).apply {
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val settingsPending = PendingIntent.getActivity(
-                context,
-                widgetId + 100,
-                settingsIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-EventCountdownWidgetProvider.kt
+            appWidgetManager.updateAppWidget(widgetId, views)
+        }
+    }
+}
