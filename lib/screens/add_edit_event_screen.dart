@@ -493,7 +493,7 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
 }
 
 // ============================================
-// SESSION 4: Reminder dialog
+// SESSION 4: Reminder dialog with manual input
 // ============================================
 class _ReminderDialog extends StatefulWidget {
   final int defaultMinutes;
@@ -504,13 +504,24 @@ class _ReminderDialog extends StatefulWidget {
 }
 
 class _ReminderDialogState extends State<_ReminderDialog> {
+  late int _hours;
   late int _minutes;
   bool _isAlarm = false;
 
   @override
   void initState() {
     super.initState();
-    _minutes = widget.defaultMinutes;
+    _hours = widget.defaultMinutes ~/ 60;
+    _minutes = widget.defaultMinutes % 60;
+  }
+
+  int get _totalMinutes => _hours * 60 + _minutes;
+
+  void _setPreset(int hours, int minutes) {
+    setState(() {
+      _hours = hours;
+      _minutes = minutes;
+    });
   }
 
   @override
@@ -519,20 +530,82 @@ class _ReminderDialogState extends State<_ReminderDialog> {
       title: const Text('Add Reminder'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('$_minutes minutes before event'),
-          Slider(
-            value: _minutes.toDouble(),
-            min: 5,
-            max: 10080, // 1 week
-            divisions: 100,
-            label: '$_minutes min',
-            onChanged: (v) => setState(() => _minutes = v.round()),
+          // Hours and Minutes input
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  initialValue: _hours.toString(),
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Hours',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (v) {
+                    setState(() {
+                      _hours = int.tryParse(v) ?? 0;
+                      if (_hours < 0) _hours = 0;
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(':', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  initialValue: _minutes.toString(),
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Minutes',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (v) {
+                    setState(() {
+                      _minutes = int.tryParse(v) ?? 0;
+                      if (_minutes < 0) _minutes = 0;
+                      if (_minutes > 59) _minutes = 59;
+                    });
+                  },
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 16),
+          // Total display
+          Center(
+            child: Text(
+              '$_totalMinutes minutes before event',
+              style: TextStyle(
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Quick presets
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: [
+              _PresetChip(label: '5m', onTap: () => _setPreset(0, 5)),
+              _PresetChip(label: '15m', onTap: () => _setPreset(0, 15)),
+              _PresetChip(label: '30m', onTap: () => _setPreset(0, 30)),
+              _PresetChip(label: '1h', onTap: () => _setPreset(1, 0)),
+              _PresetChip(label: '2h', onTap: () => _setPreset(2, 0)),
+              _PresetChip(label: '1d', onTap: () => _setPreset(24, 0)),
+            ],
+          ),
+          const SizedBox(height: 16),
           SwitchListTile(
             title: const Text('Full-screen alarm'),
             value: _isAlarm,
             onChanged: (v) => setState(() => _isAlarm = v),
+            contentPadding: EdgeInsets.zero,
           ),
         ],
       ),
@@ -543,13 +616,33 @@ class _ReminderDialogState extends State<_ReminderDialog> {
         ),
         TextButton(
           onPressed: () => Navigator.pop(context, {
-            'minutes': _minutes,
+            'minutes': _totalMinutes,
             'alarm': _isAlarm,
             'sound': null,
           }),
           child: const Text('Add'),
         ),
       ],
+    );
+  }
+}
+
+class _PresetChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _PresetChip({
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      label: Text(label),
+      onPressed: onTap,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+      side: BorderSide.none,
     );
   }
 }
