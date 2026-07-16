@@ -19,7 +19,7 @@ dependencies:
   # Local key-value settings storage
   shared_preferences: ^2.3.2
 
-  # Local notifications (1 day before / 1 hour before)
+  # Local notifications (custom reminders, full-screen alarms)
   flutter_local_notifications: ^17.2.3
   timezone: ^0.9.4
 
@@ -40,14 +40,19 @@ dependencies:
   share_plus: ^10.0.2
 
   # ============================================
-  # SESSION 2: NEW DEPENDENCIES
+  # SESSION 2: THEME DEPENDENCIES
   # ============================================
   # Material You dynamic colors (Android 12+)
-  # PINNED to 1.7.0 — Flutter 3.24.0 does not have Color.toARGB32()
+  # PINNED to 1.7.0 (NOT ^1.7.0) - Flutter 3.24.0 compatibility
   dynamic_color: 1.7.0
 
   # Custom hex color picker with palette, wheel, sliders
   flex_color_picker: ^3.6.0
+
+  # ============================================
+  # SESSION 4: ALARM MANAGER (for full-screen alarms)
+  # ============================================
+  android_alarm_manager_plus: ^4.0.4
 
   # Icons
   cupertino_icons: ^1.0.8
