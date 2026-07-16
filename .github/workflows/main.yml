@@ -22,25 +22,28 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       
+      # ============================================
+      # CACHE: Speeds up builds by caching pub dependencies
+      # ============================================
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            build/
+          key: ${{ runner.os }}-flutter-${{ hashFiles('pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+      
       - run: flutter pub get
       
-      - name: Generate signing keystore
-        run: |
-          mkdir -p android/app
-          keytool -genkey -v -keystore android/app/release-key.jks -storepass releasepass -alias release -keypass releasepass -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Event Countdown,O=Personal,C=US"
-          echo "storePassword=releasepass" > android/key.properties
-          echo "keyPassword=releasepass" >> android/key.properties
-          echo "keyAlias=release" >> android/key.properties
-          echo "storeFile=release-key.jks" >> android/key.properties
+      # ============================================
+      # DEBUG BUILD: Much faster than release
+      # ============================================
+      - run: flutter build apk --debug
       
-      - name: Configure release signing
-        run: |
-          sed -i 's/signingConfig signingConfigs.debug/signingConfig signingConfigs.release/' android/app/build.gradle
-      
-      - run: flutter build apk --release
-      
-      - name: Upload APK
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
