@@ -11,6 +11,7 @@ class Event {
   final int? startTimeMillis; // full timestamp, or null if not set
   final int? deadlineMillis; // full timestamp, or null if not set
   final String? notes;
+  final RecurrenceType recurrence; // SESSION 5
 
   Event({
     this.id,
@@ -19,20 +20,17 @@ class Event {
     this.startTimeMillis,
     this.deadlineMillis,
     this.notes,
+    this.recurrence = RecurrenceType.none,
   });
 
   /// The timestamp used for sorting / "which event is next" purposes.
-  /// We use whichever of start/deadline comes first and is still in the
-  /// future-relevant sense; if neither is set we fall back to the date.
   int get primarySortMillis {
     if (startTimeMillis != null) return startTimeMillis!;
     if (deadlineMillis != null) return deadlineMillis!;
     return dateMillis;
   }
 
-  /// The final relevant timestamp for this event (the point after which
-  /// the event is fully "done"). Used to decide when to move to the next
-  /// upcoming event.
+  /// The final relevant timestamp for this event.
   int get finalMillis {
     if (deadlineMillis != null) return deadlineMillis!;
     if (startTimeMillis != null) return startTimeMillis!;
@@ -42,19 +40,13 @@ class Event {
   // ============================================
   // SESSION 2: URGENCY COLOR
   // ============================================
-  /// Returns a color based on how many days until the event's deadline
-  /// (or start time if no deadline):
-  ///   Green  > 7 days
-  ///   Yellow 3-7 days
-  ///   Red    < 3 days
-  ///   Grey   if completed
   Color getUrgencyColor(DateTime now) {
     final nowMillis = now.millisecondsSinceEpoch;
     final target = deadlineMillis ?? startTimeMillis ?? dateMillis;
     final diff = Duration(milliseconds: target - nowMillis);
 
     if (diff.isNegative || diff.inDays < 0) {
-      return Colors.grey; // Completed / passed
+      return Colors.grey;
     } else if (diff.inDays > 7) {
       return Colors.green;
     } else if (diff.inDays >= 3) {
@@ -64,10 +56,7 @@ class Event {
     }
   }
 
-  /// Convenience: returns the countdown text string for this event at [now].
   String getCountdownText(DateTime now, {required bool smartFormatEnabled}) {
-    // This is a thin wrapper around CountdownService that callers can use
-    // directly on an Event instance.
     final diff = Duration(
       milliseconds: (deadlineMillis ?? startTimeMillis ?? dateMillis) - now.millisecondsSinceEpoch,
     );
@@ -86,6 +75,66 @@ class Event {
     }
   }
 
+  // ============================================
+  // SESSION 5: Recurrence helpers
+  // ============================================
+  bool get isRecurring => recurrence != RecurrenceType.none;
+
+  /// Generates the next occurrence of this event based on its recurrence.
+  /// Returns null if not recurring.
+  Event? generateNextOccurrence() {
+    if (!isRecurring) return null;
+
+    final base = DateTime.fromMillisecondsSinceEpoch(dateMillis);
+    final nextDate = _nextDate(base, recurrence);
+
+    int? nextStart;
+    if (startTimeMillis != null) {
+      final start = DateTime.fromMillisecondsSinceEpoch(startTimeMillis!);
+      final diff = start.difference(base);
+      nextStart = nextDate.add(diff).millisecondsSinceEpoch;
+    }
+
+    int? nextDeadline;
+    if (deadlineMillis != null) {
+      final deadline = DateTime.fromMillisecondsSinceEpoch(deadlineMillis!);
+      final diff = deadline.difference(base);
+      nextDeadline = nextDate.add(diff).millisecondsSinceEpoch;
+    }
+
+    return Event(
+      title: title,
+      dateMillis: nextDate.millisecondsSinceEpoch,
+      startTimeMillis: nextStart,
+      deadlineMillis: nextDeadline,
+      notes: notes,
+      recurrence: recurrence,
+    );
+  }
+
+  static DateTime _nextDate(DateTime current, RecurrenceType type) {
+    switch (type) {
+      case RecurrenceType.daily:
+        return current.add(const Duration(days: 1));
+      case RecurrenceType.weekly:
+        return current.add(const Duration(days: 7));
+      case RecurrenceType.monthly:
+        var next = DateTime(current.year, current.month + 1, current.day);
+        if (next.day != current.day) {
+          next = DateTime(current.year, current.month + 2, 0);
+        }
+        return next;
+      case RecurrenceType.yearly:
+        var next = DateTime(current.year + 1, current.month, current.day);
+        if (next.month != current.month) {
+          next = DateTime(current.year + 1, current.month + 1, 0);
+        }
+        return next;
+      case RecurrenceType.none:
+        return current;
+    }
+  }
+
   Event copyWith({
     int? id,
     String? title,
@@ -95,6 +144,7 @@ class Event {
     int? deadlineMillis,
     bool clearDeadline = false,
     String? notes,
+    RecurrenceType? recurrence,
   }) {
     return Event(
       id: id ?? this.id,
@@ -105,6 +155,7 @@ class Event {
       deadlineMillis:
           clearDeadline ? null : (deadlineMillis ?? this.deadlineMillis),
       notes: notes ?? this.notes,
+      recurrence: recurrence ?? this.recurrence,
     );
   }
 
@@ -116,6 +167,7 @@ class Event {
       'startTimeMillis': startTimeMillis,
       'deadlineMillis': deadlineMillis,
       'notes': notes,
+      'recurrence': recurrence.name,
     };
   }
 
@@ -127,6 +179,9 @@ class Event {
       startTimeMillis: map['startTimeMillis'] as int?,
       deadlineMillis: map['deadlineMillis'] as int?,
       notes: map['notes'] as String?,
+      recurrence: RecurrenceType.values.byName(
+        (map['recurrence'] as String?) ?? 'none',
+      ),
     );
   }
 
@@ -134,3 +189,5 @@ class Event {
 
   factory Event.fromJson(Map<String, dynamic> json) => Event.fromMap(json);
 }
+
+enum RecurrenceType { none, daily, weekly, monthly, yearly }
