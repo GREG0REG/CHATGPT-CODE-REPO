@@ -11,50 +11,19 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Local database for events
   sqflite: ^2.3.3+1
   path: ^1.9.0
   path_provider: ^2.1.4
-
-  # Local key-value settings storage
   shared_preferences: ^2.3.2
-
-  # Local notifications (custom reminders, full-screen alarms)
   flutter_local_notifications: ^17.2.3
   timezone: ^0.9.4
-
-  # Background task scheduling for widget updates (every 30-60 min)
   workmanager: ^0.5.2
-
-  # Home screen widget bridge (Android App Widget)
   home_widget: ^0.6.0
-
-  # Gallery access for custom widget background image
   image_picker: ^1.1.2
-
-  # File picker, needed only so "Import events from JSON" can let the user
-  # choose the .json file to import. Local file access only, no network.
   file_picker: ^8.1.2
-
-  # Used to let the user share/save the exported JSON file easily
   share_plus: ^10.0.2
-
-  # ============================================
-  # SESSION 2: THEME DEPENDENCIES
-  # ============================================
-  # Material You dynamic colors (Android 12+)
-  # PINNED to 1.7.0 (NOT ^1.7.0) - Flutter 3.24.0 compatibility
   dynamic_color: 1.7.0
-
-  # Custom hex color picker with palette, wheel, sliders
   flex_color_picker: ^3.6.0
-
-  # ============================================
-  # SESSION 4: ALARM MANAGER (for full-screen alarms)
-  # ============================================
-  android_alarm_manager_plus: ^4.0.4
-
-  # Icons
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
