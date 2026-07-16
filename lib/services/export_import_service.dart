@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../db/database_helper.dart';
 import '../models/event.dart';
@@ -37,13 +36,6 @@ class ExportImportService {
     } catch (e) {
       // Downloads not accessible, fallback to app directory only
     }
-
-    // Share the file so user can save it anywhere
-    await Share.shareXFiles(
-      [XFile(appFile.path)],
-      text: 'Event Countdown backup',
-      subject: 'Event Countdown Export',
-    );
 
     return downloadsPath ?? appFile.path;
   }
