@@ -21,7 +21,7 @@ import java.io.File
  * simply read here from the home_widget shared preferences file.
  *
  * SESSION 3 ENHANCEMENTS:
- * - Progress bar showing % time elapsed
+ * - Progress bar showing % time elapsed with percentage text
  * - Long-press menu: Widget Settings, Mark Done, Open App
  */
 class EventCountdownWidgetProvider : HomeWidgetProvider() {
@@ -46,12 +46,15 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
             views.setTextViewText(R.id.widget_title, title)
             views.setTextViewText(R.id.widget_countdown, countdown)
 
-            // SESSION 3: Progress bar
+            // SESSION 3: Progress bar with percentage text
             if (progressPercent >= 0) {
                 views.setViewVisibility(R.id.widget_progress, android.view.View.VISIBLE)
+                views.setViewVisibility(R.id.widget_progress_text, android.view.View.VISIBLE)
                 views.setProgressBar(R.id.widget_progress, 100, progressPercent, false)
+                views.setTextViewText(R.id.widget_progress_text, "$progressPercent%")
             } else {
                 views.setViewVisibility(R.id.widget_progress, android.view.View.GONE)
+                views.setViewVisibility(R.id.widget_progress_text, android.view.View.GONE)
             }
 
             val useImage = bgType == "image" && !imagePath.isNullOrEmpty() && File(imagePath).exists()
@@ -66,12 +69,14 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
                 }
                 views.setTextColor(R.id.widget_title, Color.WHITE)
                 views.setTextColor(R.id.widget_countdown, Color.WHITE)
+                views.setTextColor(R.id.widget_progress_text, Color.WHITE)
             } else {
                 val themeColor = parseColorOrDefault(bgColorStr, DEFAULT_COLOR)
                 val textColor = parseColorOrDefault(textColorStr, Color.WHITE)
                 views.setImageViewBitmap(R.id.widget_background, buildGradientBackground(themeColor))
                 views.setTextColor(R.id.widget_title, textColor)
                 views.setTextColor(R.id.widget_countdown, textColor)
+                views.setTextColor(R.id.widget_progress_text, textColor)
             }
 
             // SESSION 3: Long-press menu actions
@@ -98,7 +103,7 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_title, settingsPending)
 
-            // 3. Mark Done (tap on countdown text) - sends broadcast to Flutter
+            // 3. Mark Done (tap on countdown text)
             val markDoneIntent = Intent(context, EventCountdownWidgetProvider::class.java).apply {
                 action = ACTION_MARK_DONE
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
@@ -118,8 +123,6 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         if (intent.action == ACTION_MARK_DONE) {
-            // Broadcast to Flutter app using a custom action
-            // The Flutter side listens for this via home_widget interactivity callback
             val flutterIntent = Intent().apply {
                 action = "com.example.event_countdown.MARK_DONE"
                 setPackage(context.packageName)
