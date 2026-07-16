@@ -13,6 +13,7 @@ import '../services/notification_service.dart';
 import '../services/settings_service.dart';
 import '../services/widget_service.dart';
 import '../theme/app_themes.dart';
+import 'widget_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -33,6 +34,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ThemeMode _themeMode = ThemeMode.system;
   Color _customColor = Colors.blue;
   bool _highContrast = false;
+
+  // Session 3 settings
+  bool _widgetProgressBar = false;
+  bool _widgetPulseAnimation = false;
 
   bool _loading = true;
   bool _busy = false;
@@ -56,6 +61,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final custom = await s.getCustomColor();
     final hc = await s.getHighContrast();
 
+    // Session 3
+    final progressBar = await s.getWidgetProgressBar();
+    final pulseAnim = await s.getWidgetPulseAnimation();
+
     if (!mounted) return;
     setState(() {
       _smartFormat = smart;
@@ -66,6 +75,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _themeMode = mode;
       _customColor = custom ?? Colors.blue;
       _highContrast = hc;
+      _widgetProgressBar = progressBar;
+      _widgetPulseAnimation = pulseAnim;
       _loading = false;
     });
   }
@@ -158,6 +169,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // --- Session 3: Widget Progress Bar ---
+  Future<void> _setWidgetProgressBar(bool value) async {
+    await SettingsService.instance.setWidgetProgressBar(value);
+    setState(() => _widgetProgressBar = value);
+    await WidgetService.refreshWidget();
+  }
+
+  // --- Session 3: Widget Pulse Animation ---
+  Future<void> _setWidgetPulseAnimation(bool value) async {
+    await SettingsService.instance.setWidgetPulseAnimation(value);
+    setState(() => _widgetPulseAnimation = value);
+    await WidgetService.refreshWidget();
+  }
+
   // --- Export / Import (preserved) ---
   Future<void> _exportEvents() async {
     setState(() => _busy = true);
@@ -228,8 +253,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: AbsorbPointer(
@@ -238,9 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             ListView(
               children: [
-                // ============================================
                 // SESSION 2: THEME MODE
-                // ============================================
                 const _SectionHeader('Appearance'),
                 ListTile(
                   leading: const Icon(Icons.brightness_auto),
@@ -272,15 +293,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const Divider(),
 
-                // ============================================
                 // SESSION 2: APP THEME
-                // ============================================
                 const _SectionHeader('App Theme'),
                 ...AppThemes.all.map((info) {
                   final isSelected = _theme == info.option;
-                  final isCustom = info.option == AppThemeOption.customHex;
-                  final isMaterialYou = info.option == AppThemeOption.materialYou;
-
                   return RadioListTile<AppThemeOption>(
                     title: Row(
                       children: [
@@ -296,7 +312,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     groupValue: _theme,
                     onChanged: (v) {
                       if (v != null) _setTheme(v);
-                      // Show color picker immediately if custom selected
                       if (v == AppThemeOption.customHex) {
                         _showColorPicker();
                       }
@@ -304,7 +319,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   );
                 }),
 
-                // Show custom color preview + picker button
                 if (_theme == AppThemeOption.customHex) ...[
                   ListTile(
                     leading: Container(
@@ -327,9 +341,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 const Divider(),
 
-                // ============================================
                 // SESSION 2: HIGH CONTRAST
-                // ============================================
                 SwitchListTile(
                   secondary: const Icon(Icons.contrast),
                   title: const Text('High Contrast'),
@@ -339,9 +351,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const Divider(),
 
-                // ============================================
                 // SESSION 1: COUNTDOWN DISPLAY (preserved)
-                // ============================================
                 const _SectionHeader('Countdown Display'),
                 SwitchListTile(
                   title: const Text('Smart countdown format'),
@@ -361,9 +371,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const Divider(),
 
-                // ============================================
+                // SESSION 3: WIDGET ENHANCEMENTS
+                const _SectionHeader('Widget Options'),
+                SwitchListTile(
+                  secondary: const Icon(Icons.linear_scale),
+                  title: const Text('Show Progress Bar'),
+                  subtitle: const Text('Display time elapsed percentage on widget'),
+                  value: _widgetProgressBar,
+                  onChanged: _setWidgetProgressBar,
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.animation),
+                  title: const Text('Pulse Animation'),
+                  subtitle: const Text('Gentle pulse effect when event is under 24 hours'),
+                  value: _widgetPulseAnimation,
+                  onChanged: _setWidgetPulseAnimation,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.tune),
+                  title: const Text('Advanced Widget Settings'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const WidgetSettingsScreen()),
+                    );
+                  },
+                ),
+                const Divider(),
+
                 // SESSION 1: WIDGET BACKGROUND (preserved)
-                // ============================================
                 const _SectionHeader('Home Screen Widget Background'),
                 RadioListTile<WidgetBackgroundType>(
                   title: const Text('App theme color'),
@@ -404,9 +440,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
                 const Divider(),
 
-                // ============================================
                 // SESSION 1: BACKUP (preserved)
-                // ============================================
                 const _SectionHeader('Backup'),
                 ListTile(
                   leading: const Icon(Icons.upload_file),
