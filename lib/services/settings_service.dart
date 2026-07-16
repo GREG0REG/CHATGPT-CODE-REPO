@@ -1,271 +1,303 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest_all.dart' as tz_data;
 
-import '../theme/app_themes.dart';
+import '../db/database_helper.dart';
+import '../models/custom_reminder.dart';
+import '../models/event.dart';
+import '../models/notification_history.dart';
+import 'settings_service.dart';
 
-enum WidgetBackgroundType { themeColor, customImage }
+/// Background handler for notification actions (snooze, dismiss).
+@pragma('vm:entry-point')
+void notificationActionBackground(NotificationResponse response) {
+  // Handle snooze actions in background
+  if (response.actionId?.startsWith('snooze_') ?? false) {
+    final minutesStr = response.actionId!.split('_')[1];
+    final minutes = int.tryParse(minutesStr) ?? 5;
+    final payload = response.payload;
 
-/// Wraps shared_preferences for all app settings.
-class SettingsService {
-  SettingsService._();
-  static final SettingsService instance = SettingsService._();
+    if (payload != null && payload.isNotEmpty) {
+      final parts = payload.split('|');
+      if (parts.length >= 2) {
+        final title = parts[0];
+        final body = parts[1];
+        final idBase = parts.length > 2 ? int.tryParse(parts[2]) ?? 0 : 0;
 
-  // --- Existing keys (Session 1-3) ---
-  static const _kSmartFormat = 'smart_countdown_format';
-  static const _kUse24Hour = 'use_24_hour_time';
-  static const _kThemeName = 'selected_theme';
-  static const _kWidgetBgType = 'widget_background_type';
-  static const _kWidgetImagePath = 'widget_custom_image_path';
-  static const _kThemeMode = 'theme_mode';
-  static const _kCustomColor = 'custom_color';
-  static const _kHighContrast = 'high_contrast';
-  static const _kWidgetProgressBar = 'widget_progress_bar';
-  static const _kWidgetPulseAnimation = 'widget_pulse_animation';
-
-  // --- Session 4 keys ---
-  static const _kQuietHoursEnabled = 'quiet_hours_enabled';
-  static const _kQuietHoursStart = 'quiet_hours_start'; // minutes from midnight
-  static const _kQuietHoursEnd = 'quiet_hours_end'; // minutes from midnight
-  static const _kDefaultReminderMinutes = 'default_reminder_minutes'; // default custom reminder
-
-  // --- Session 9 keys ---
-  static const _kBatteryOptimization = 'battery_optimization_enabled';
-  static const _kAdaptiveRefresh = 'adaptive_refresh_enabled';
-  static const _kLastVacuumMillis = 'last_vacuum_millis';
-  static const _kFirstLaunch = 'first_launch';
-
-  Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
-
-  // ============================================
-  // EXISTING SETTINGS (Sessions 1-3)
-  // ============================================
-
-  Future<bool> getSmartFormatEnabled() async {
-    final p = await _prefs;
-    return p.getBool(_kSmartFormat) ?? false;
-  }
-
-  Future<void> setSmartFormatEnabled(bool value) async {
-    final p = await _prefs;
-    await p.setBool(_kSmartFormat, value);
-  }
-
-  Future<bool> getUse24HourFormat() async {
-    final p = await _prefs;
-    return p.getBool(_kUse24Hour) ?? true;
-  }
-
-  Future<void> setUse24HourFormat(bool value) async {
-    final p = await _prefs;
-    await p.setBool(_kUse24Hour, value);
-  }
-
-  Future<AppThemeOption> getSelectedTheme() async {
-    final p = await _prefs;
-    return AppThemes.fromName(p.getString(_kThemeName));
-  }
-
-  Future<void> setSelectedTheme(AppThemeOption option) async {
-    final p = await _prefs;
-    await p.setString(_kThemeName, AppThemes.nameOf(option));
-  }
-
-  Future<WidgetBackgroundType> getWidgetBackgroundType() async {
-    final p = await _prefs;
-    final raw = p.getString(_kWidgetBgType);
-    if (raw == WidgetBackgroundType.customImage.name) {
-      return WidgetBackgroundType.customImage;
-    }
-    return WidgetBackgroundType.themeColor;
-  }
-
-  Future<void> setWidgetBackgroundType(WidgetBackgroundType type) async {
-    final p = await _prefs;
-    await p.setString(_kWidgetBgType, type.name);
-  }
-
-  Future<String?> getWidgetImagePath() async {
-    final p = await _prefs;
-    return p.getString(_kWidgetImagePath);
-  }
-
-  Future<void> setWidgetImagePath(String? path) async {
-    final p = await _prefs;
-    if (path == null) {
-      await p.remove(_kWidgetImagePath);
-    } else {
-      await p.setString(_kWidgetImagePath, path);
+        NotificationService.instance._scheduleSnooze(
+          idBase: idBase,
+          title: title,
+          body: body,
+          minutes: minutes,
+        );
+      }
     }
   }
+}
 
-  Future<ThemeMode> getThemeMode() async {
-    final p = await _prefs;
-    final index = p.getInt(_kThemeMode) ?? 0;
-    return ThemeMode.values[index.clamp(0, ThemeMode.values.length - 1)];
+class NotificationService {
+  NotificationService._();
+  static final NotificationService instance = NotificationService._();
+
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
+
+  bool _initialized = false;
+
+  // Notification channels
+  static const String _channelDefault = 'event_countdown_default';
+  static const String _channelUrgent = 'event_countdown_urgent';
+  static const String _channelAlarm = 'event_countdown_alarms';
+
+  Future<void> init() async {
+    if (_initialized) return;
+    tz_data.initializeTimeZones();
+    tz.setLocalLocation(tz.local);
+
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidInit);
+    await _plugin.initialize(
+      initSettings,
+      onDidReceiveBackgroundNotificationResponse: notificationActionBackground,
+    );
+
+    // Create notification channels
+    await _createChannels();
+
+    // Android 13+ runtime notification permission.
+    final androidImpl = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    await androidImpl?.requestNotificationsPermission();
+    await androidImpl?.requestExactAlarmsPermission();
+
+    _initialized = true;
   }
 
-  Future<void> setThemeMode(ThemeMode mode) async {
-    final p = await _prefs;
-    await p.setInt(_kThemeMode, mode.index);
+  Future<void> _createChannels() async {
+    final androidImpl = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImpl == null) return;
+
+    await androidImpl.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _channelDefault,
+        'Event Reminders',
+        description: 'Standard event reminders',
+        importance: Importance.high,
+      ),
+    );
+
+    await androidImpl.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _channelUrgent,
+        'Urgent Reminders',
+        description: 'High priority reminders for imminent events',
+        importance: Importance.max,
+      ),
+    );
+
+    await androidImpl.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _channelAlarm,
+        'Event Alarms',
+        description: 'Full-screen alarm notifications',
+        importance: Importance.max,
+        playSound: true,
+      ),
+    );
   }
 
-  Future<Color?> getCustomColor() async {
-    final p = await _prefs;
-    final value = p.getInt(_kCustomColor);
-    if (value == null) return null;
-    return Color(value);
-  }
+  /// Two notification IDs per event: dayBefore = id*10+1, hourBefore = id*10+2
+  int _dayBeforeId(int eventId) => eventId * 10 + 1;
+  int _hourBeforeId(int eventId) => eventId * 10 + 2;
+  int _customReminderId(int eventId, int reminderId) => eventId * 1000 + reminderId;
 
-  Future<void> setCustomColor(Color color) async {
-    final p = await _prefs;
-    await p.setInt(_kCustomColor, color.value);
-  }
-
-  Future<void> clearCustomColor() async {
-    final p = await _prefs;
-    await p.remove(_kCustomColor);
-  }
-
-  Future<bool> getHighContrast() async {
-    final p = await _prefs;
-    return p.getBool(_kHighContrast) ?? false;
-  }
-
-  Future<void> setHighContrast(bool value) async {
-    final p = await _prefs;
-    await p.setBool(_kHighContrast, value);
-  }
-
-  Future<bool> getWidgetProgressBar() async {
-    final p = await _prefs;
-    return p.getBool(_kWidgetProgressBar) ?? false;
-  }
-
-  Future<void> setWidgetProgressBar(bool value) async {
-    final p = await _prefs;
-    await p.setBool(_kWidgetProgressBar, value);
-  }
-
-  Future<bool> getWidgetPulseAnimation() async {
-    final p = await _prefs;
-    return p.getBool(_kWidgetPulseAnimation) ?? false;
-  }
-
-  Future<void> setWidgetPulseAnimation(bool value) async {
-    final p = await _prefs;
-    await p.setBool(_kWidgetPulseAnimation, value);
-  }
-
-  // ============================================
-  // SESSION 4: Quiet Hours
-  // ============================================
-
-  Future<bool> getQuietHoursEnabled() async {
-    final p = await _prefs;
-    return p.getBool(_kQuietHoursEnabled) ?? false;
-  }
-
-  Future<void> setQuietHoursEnabled(bool value) async {
-    final p = await _prefs;
-    await p.setBool(_kQuietHoursEnabled, value);
-  }
-
-  /// Returns quiet hours start as minutes from midnight (default 22:00 = 1320).
-  Future<int> getQuietHoursStart() async {
-    final p = await _prefs;
-    return p.getInt(_kQuietHoursStart) ?? 1320;
-  }
-
-  Future<void> setQuietHoursStart(int minutes) async {
-    final p = await _prefs;
-    await p.setInt(_kQuietHoursStart, minutes);
-  }
-
-  /// Returns quiet hours end as minutes from midnight (default 07:00 = 420).
-  Future<int> getQuietHoursEnd() async {
-    final p = await _prefs;
-    return p.getInt(_kQuietHoursEnd) ?? 420;
-  }
-
-  Future<void> setQuietHoursEnd(int minutes) async {
-    final p = await _prefs;
-    await p.setInt(_kQuietHoursEnd, minutes);
-  }
-
-  Future<int> getDefaultReminderMinutes() async {
-    final p = await _prefs;
-    return p.getInt(_kDefaultReminderMinutes) ?? 60;
-  }
-
-  Future<void> setDefaultReminderMinutes(int minutes) async {
-    final p = await _prefs;
-    await p.setInt(_kDefaultReminderMinutes, minutes);
-  }
-
-  // ============================================
-  // SESSION 9: Battery & Performance
-  // ============================================
-
-  Future<bool> getBatteryOptimizationEnabled() async {
-    final p = await _prefs;
-    return p.getBool(_kBatteryOptimization) ?? true;
-  }
-
-  Future<void> setBatteryOptimizationEnabled(bool value) async {
-    final p = await _prefs;
-    await p.setBool(_kBatteryOptimization, value);
-  }
-
-  Future<bool> getAdaptiveRefreshEnabled() async {
-    final p = await _prefs;
-    return p.getBool(_kAdaptiveRefresh) ?? true;
-  }
-
-  Future<void> setAdaptiveRefreshEnabled(bool value) async {
-    final p = await _prefs;
-    await p.setBool(_kAdaptiveRefresh, value);
-  }
-
-  Future<DateTime?> getLastVacuum() async {
-    final p = await _prefs;
-    final millis = p.getInt(_kLastVacuumMillis);
-    if (millis == null) return null;
-    return DateTime.fromMillisecondsSinceEpoch(millis);
-  }
-
-  Future<void> setLastVacuum(DateTime time) async {
-    final p = await _prefs;
-    await p.setInt(_kLastVacuumMillis, time.millisecondsSinceEpoch);
-  }
-
-  Future<bool> isFirstLaunch() async {
-    final p = await _prefs;
-    return p.getBool(_kFirstLaunch) ?? true;
-  }
-
-  Future<void> setFirstLaunch(bool value) async {
-    final p = await _prefs;
-    await p.setBool(_kFirstLaunch, value);
-  }
-
-  // ============================================
-  // SESSION 4: Quiet hours check
-  // ============================================
-
-  /// Returns true if current time falls within quiet hours.
-  Future<bool> isInQuietHours(DateTime now) async {
-    if (!await getQuietHoursEnabled()) return false;
-
-    final start = await getQuietHoursStart();
-    final end = await getQuietHoursEnd();
-    final nowMinutes = now.hour * 60 + now.minute;
-
-    if (start < end) {
-      // Same day range (e.g. 10:00 - 14:00)
-      return nowMinutes >= start && nowMinutes < end;
-    } else {
-      // Overnight range (e.g. 22:00 - 07:00)
-      return nowMinutes >= start || nowMinutes < end;
+  Future<void> cancelForEvent(int eventId) async {
+    await _plugin.cancel(_dayBeforeId(eventId));
+    await _plugin.cancel(_hourBeforeId(eventId));
+    // Cancel all custom reminders for this event
+    final reminders = await DatabaseHelper.instance.getCustomRemindersForEvent(eventId);
+    for (final r in reminders) {
+      if (r.id != null) {
+        await _plugin.cancel(_customReminderId(eventId, r.id!));
+      }
     }
+  }
+
+  Future<void> scheduleForEvent(Event event) async {
+    if (event.id == null) return;
+    await cancelForEvent(event.id!);
+
+    // Check quiet hours for immediate scheduling decisions
+    final now = DateTime.now();
+    final inQuietHours = await SettingsService.instance.isInQuietHours(now);
+
+    // Which timestamp drives the reminders: start time if set, else deadline.
+    final anchorMillis = event.startTimeMillis ?? event.deadlineMillis;
+    if (anchorMillis == null) return;
+
+    final anchor = DateTime.fromMillisecondsSinceEpoch(anchorMillis);
+
+    // ============================================
+    // DEFAULT REMINDERS (preserved from Sessions 1-3)
+    // ============================================
+    final label = event.startTimeMillis != null ? 'starts' : 'deadline is';
+
+    // 1 day before, at 9:00 AM.
+    final dayBeforeDate = anchor.subtract(const Duration(days: 1));
+    final dayBefore = DateTime(
+      dayBeforeDate.year,
+      dayBeforeDate.month,
+      dayBeforeDate.day,
+      9,
+      0,
+    );
+
+    // 1 hour before the anchor.
+    final hourBefore = anchor.subtract(const Duration(hours: 1));
+
+    if (dayBefore.isAfter(now)) {
+      await _scheduleAt(
+        id: _dayBeforeId(event.id!),
+        title: event.title,
+        body: '${event.title} $label tomorrow',
+        when: dayBefore,
+        channelId: _channelDefault,
+        payload: '${event.title}|${event.title} $label tomorrow|${event.id}',
+      );
+      await _logHistory(event, 'day_before');
+    }
+
+    if (hourBefore.isAfter(now)) {
+      await _scheduleAt(
+        id: _hourBeforeId(event.id!),
+        title: event.title,
+        body: '${event.title} $label in 1 hour',
+        when: hourBefore,
+        channelId: _channelUrgent,
+        payload: '${event.title}|${event.title} $label in 1 hour|${event.id}',
+      );
+      await _logHistory(event, 'hour_before');
+    }
+
+    // ============================================
+    // SESSION 4: Custom reminders
+    // ============================================
+    final customReminders = await DatabaseHelper.instance.getCustomRemindersForEvent(event.id!);
+    for (final reminder in customReminders) {
+      if (!reminder.isEnabled) continue;
+
+      final reminderTime = anchor.subtract(Duration(minutes: reminder.minutesBefore));
+      if (reminderTime.isAfter(now)) {
+        final isAlarm = reminder.isAlarm;
+        await _scheduleAt(
+          id: _customReminderId(event.id!, reminder.id ?? 0),
+          title: event.title,
+          body: '${event.title} ${event.startTimeMillis != null ? 'starts' : 'deadline is'} '
+              'in ${reminder.minutesBefore} minutes',
+          when: reminderTime,
+          channelId: isAlarm ? _channelAlarm : _channelUrgent,
+          fullScreen: isAlarm,
+          soundUri: reminder.soundUri,
+          payload: '${event.title}|Custom reminder|${event.id}',
+        );
+        await _logHistory(event, 'custom_${reminder.minutesBefore}');
+      }
+    }
+  }
+
+  Future<void> _scheduleAt({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime when,
+    required String channelId,
+    bool fullScreen = false,
+    String? soundUri,
+    String? payload,
+  }) async {
+    // Skip if in quiet hours and not an alarm
+    if (!fullScreen) {
+      final inQuiet = await SettingsService.instance.isInQuietHours(when);
+      if (inQuiet) return;
+    }
+
+    AndroidNotificationSound? sound;
+    if (soundUri != null && soundUri.isNotEmpty) {
+      sound = UriAndroidNotificationSound(soundUri);
+    }
+
+    final androidDetails = AndroidNotificationDetails(
+      channelId,
+      channelId == _channelAlarm ? 'Event Alarms' : 'Event Reminders',
+      channelDescription: 'Reminders for upcoming events',
+      importance: fullScreen ? Importance.max : Importance.high,
+      priority: fullScreen ? Priority.max : Priority.high,
+      fullScreenIntent: fullScreen,
+      category: fullScreen ? AndroidNotificationCategory.alarm : AndroidNotificationCategory.reminder,
+      sound: sound,
+      actions: fullScreen
+          ? [
+              const AndroidNotificationAction('dismiss', 'Dismiss'),
+              const AndroidNotificationAction('snooze_5', 'Snooze 5m'),
+              const AndroidNotificationAction('snooze_15', 'Snooze 15m'),
+            ]
+          : [
+              const AndroidNotificationAction('snooze_5', 'Snooze 5m'),
+              const AndroidNotificationAction('snooze_10', 'Snooze 10m'),
+              const AndroidNotificationAction('snooze_30', 'Snooze 30m'),
+            ],
+    );
+    final details = NotificationDetails(android: androidDetails);
+
+    await _plugin.zonedSchedule(
+      id,
+      title,
+      body,
+      tz.TZDateTime.from(when, tz.local),
+      details,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      payload: payload,
+    );
+  }
+
+  Future<void> _scheduleSnooze({
+    required int idBase,
+    required String title,
+    required String body,
+    required int minutes,
+  }) async {
+    final when = DateTime.now().add(Duration(minutes: minutes));
+    await _scheduleAt(
+      id: idBase + 99999, // Unique ID for snooze
+      title: 'Snoozed: $title',
+      body: body,
+      when: when,
+      channelId: _channelUrgent,
+      payload: '$title|$body|$idBase',
+    );
+  }
+
+  Future<void> _logHistory(Event event, String type) async {
+    await DatabaseHelper.instance.insertNotificationHistory(
+      NotificationHistory(
+        eventId: event.id,
+        eventTitle: event.title,
+        reminderType: type,
+        sentAtMillis: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  Future<void> rescheduleAll(List<Event> events) async {
+    for (final e in events) {
+      await scheduleForEvent(e);
+    }
+  }
+
+  Future<void> showBatteryOptimizationDialog() async {
+    // No-op: UI layer handles the dialog. This method exists for testing.
   }
 }
