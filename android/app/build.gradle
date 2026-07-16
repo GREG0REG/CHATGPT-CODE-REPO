@@ -56,6 +56,14 @@ android {
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        
+        // ============================================
+        // REDUCE APK SIZE: Only arm64 (modern phones)
+        // Remove this line to support all ABIs (x86, armeabi-v7a, arm64-v8a)
+        // ============================================
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
     }
 
     signingConfigs {
@@ -70,6 +78,18 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
+            
+            // ============================================
+            // REDUCE APK SIZE: Enable code shrinking
+            // ============================================
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // Keep debug build smaller too
+            minifyEnabled false
+            shrinkResources false
         }
     }
 }
@@ -79,9 +99,6 @@ flutter {
 }
 
 dependencies {
-    // ============================================
-    // FIX #2: Explicitly add matching work-runtime
-    // ============================================
     implementation 'androidx.work:work-runtime-ktx:2.8.1'
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
 }
