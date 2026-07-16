@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/event.dart';
 import '../services/countdown_service.dart';
@@ -28,6 +29,20 @@ class EventCard extends StatelessWidget {
     final minute = dt.minute.toString().padLeft(2, '0');
     final suffix = use24HourFormat ? '' : (dt.hour >= 12 ? ' PM' : ' AM');
     return '$datePart, $hour:$minute$suffix';
+  }
+
+  // ============================================
+  // SESSION 6: Share specific event
+  // ============================================
+  Future<void> _shareEvent(BuildContext context) async {
+    final now = DateTime.now();
+    final result = CountdownService.buildCountdownText(
+      event,
+      now,
+      smartFormatEnabled: smartFormatEnabled,
+    );
+    final text = '${event.title}\n${result.text}';
+    await Share.share(text, subject: event.title);
   }
 
   @override
@@ -69,10 +84,28 @@ class EventCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
-                    child: Icon(
-                      Icons.event,
-                      color: urgencyColor,
-                      size: 22,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(
+                          Icons.event,
+                          color: urgencyColor,
+                          size: 22,
+                        ),
+                        // ============================================
+                        // SESSION 5: Recurring icon
+                        // ============================================
+                        if (event.isRecurring)
+                          const Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Icon(
+                              Icons.sync,
+                              size: 14,
+                              color: Colors.blue,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -122,7 +155,26 @@ class EventCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
+              // SESSION 6: Share button
+              Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(24),
+                child: InkWell(
+                  onTap: () => _shareEvent(context),
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    width: 40,
+                    height: 48,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.share,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
               Material(
                 color: Colors.transparent,
                 borderRadius: BorderRadius.circular(24),
@@ -130,7 +182,7 @@ class EventCard extends StatelessWidget {
                   onTap: onDelete,
                   borderRadius: BorderRadius.circular(24),
                   child: Container(
-                    width: 48,
+                    width: 40,
                     height: 48,
                     alignment: Alignment.center,
                     child: Icon(
