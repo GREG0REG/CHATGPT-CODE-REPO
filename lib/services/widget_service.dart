@@ -9,9 +9,7 @@ import 'settings_service.dart';
 
 /// Pushes the currently-active event's countdown data into the shared
 /// storage that the native Android AppWidgetProvider reads, then asks
-/// Android to redraw the widget. This is called:
-///  - once right after the app starts / an event changes
-///  - periodically from the workmanager background task (every 30-60 min)
+/// Android to redraw the widget.
 class WidgetService {
   WidgetService._();
   static const String androidWidgetName = 'EventCountdownWidgetProvider';
@@ -22,6 +20,9 @@ class WidgetService {
   static const _kBgColor = 'widget_bg_color'; // ARGB int as string
   static const _kTextColor = 'widget_text_color'; // ARGB int as string
   static const _kImagePath = 'widget_image_path';
+  static const _kProgressPercent = 'widget_progress_percent';
+  static const _kPulseEnabled = 'widget_pulse_enabled';
+  static const _kIsUrgent = 'widget_is_urgent';
 
   static Future<void> refreshWidget() async {
     final events = await DatabaseHelper.instance.getAllEventsSorted();
@@ -32,9 +33,14 @@ class WidgetService {
     final theme = await SettingsService.instance.getSelectedTheme();
     final bgType = await SettingsService.instance.getWidgetBackgroundType();
     final imagePath = await SettingsService.instance.getWidgetImagePath();
+    final progressBarEnabled = await SettingsService.instance.getWidgetProgressBar();
+    final pulseEnabled = await SettingsService.instance.getWidgetPulseAnimation();
 
     String title;
     String countdownText;
+    int progressPercent = -1;
+    bool isUrgent = false;
+
     if (active == null) {
       title = 'No upcoming events';
       countdownText = '';
@@ -45,6 +51,22 @@ class WidgetService {
         now,
         smartFormatEnabled: smart,
       ).text;
+
+      // SESSION 3: Calculate progress percentage
+      if (progressBarEnabled && active.startTimeMillis != null && active.deadlineMillis != null) {
+        final start = active.startTimeMillis!;
+        final deadline = active.deadlineMillis!;
+        final total = deadline - start;
+        final elapsed = now.millisecondsSinceEpoch - start;
+        if (total > 0) {
+          progressPercent = ((elapsed / total) * 100).clamp(0, 100).toInt();
+        }
+      }
+
+      // SESSION 3: Check if under 24 hours (urgent)
+      final target = active.deadlineMillis ?? active.startTimeMillis ?? active.dateMillis;
+      final diff = Duration(milliseconds: target - now.millisecondsSinceEpoch);
+      isUrgent = diff.inHours < 24 && !diff.isNegative;
     }
 
     final themeColor = AppThemes.colorFor(theme);
@@ -64,12 +86,16 @@ class WidgetService {
       _kTextColor,
       textColor.value.toString(),
     );
-    if (imagePath != null &&
-        bgType == WidgetBackgroundType.customImage) {
+    if (imagePath != null && bgType == WidgetBackgroundType.customImage) {
       await HomeWidget.saveWidgetData<String>(_kImagePath, imagePath);
     } else {
       await HomeWidget.saveWidgetData<String>(_kImagePath, '');
     }
+
+    // SESSION 3: Save progress and pulse data
+    await HomeWidget.saveWidgetData<int>(_kProgressPercent, progressPercent);
+    await HomeWidget.saveWidgetData<bool>(_kPulseEnabled, pulseEnabled && isUrgent);
+    await HomeWidget.saveWidgetData<bool>(_kIsUrgent, isUrgent);
 
     await HomeWidget.updateWidget(
       name: androidWidgetName,
@@ -77,12 +103,7 @@ class WidgetService {
     );
   }
 
-  /// Registers the callback used when the widget itself is tapped/interacted
-  /// with while the app is backgrounded. Tapping simply opens the app, which
-  /// is handled natively via the PendingIntent set on the widget's root view,
-  /// so no special background callback logic is required here.
   static Future<void> registerInteractivityCallback() async {
-    // No-op: tap-to-open is handled by a plain launch PendingIntent in the
-    // native AppWidgetProvider. Kept as an explicit hook for clarity.
+    // No-op: tap-to-open is handled natively. Kept for clarity.
   }
 }
