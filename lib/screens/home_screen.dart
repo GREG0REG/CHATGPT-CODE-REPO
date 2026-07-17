@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -20,7 +21,9 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  static final GlobalKey<_HomeScreenState> homeScreenKey = GlobalKey<_HomeScreenState>();
+
   List<Event> _events = [];
   bool _smartFormat = false;
   bool _use24Hour = true;
@@ -41,6 +44,19 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  void pauseRefresh() {
+    _refreshTimer?.cancel();
+  }
+
+  void resumeRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _loadEventsOnly(),
+    );
+    _loadEventsOnly();
   }
 
   Future<void> _loadAll() async {
@@ -66,6 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _openAddEdit({Event? existing}) async {
     Event? eventToEdit = existing;
+
     if (existing != null && existing.id != null && existing.id! < 0) {
       final parentId = -existing.id!;
       final parent = await DatabaseHelper.instance.getEvent(parentId);
@@ -74,9 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Recurring Event'),
-            content: const Text(
-              'This is a recurring event. What would you like to edit?',
-            ),
+            content: const Text('This is a recurring event. What would you like to edit?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, _EditChoice.series),
@@ -89,9 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         );
-
         if (choice == null) return;
-
         if (choice == _EditChoice.series) {
           eventToEdit = parent;
         } else {
@@ -106,13 +119,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => AddEditEventScreen(existing: eventToEdit),
-      ),
+      MaterialPageRoute(builder: (_) => AddEditEventScreen(existing: eventToEdit)),
     );
-    if (result == true) {
-      await _loadAll();
-    }
+    if (result == true) await _loadAll();
   }
 
   Future<void> _deleteEvent(Event event) async {
@@ -142,35 +151,27 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       );
-
       if (choice == null) return;
 
       HapticFeedback.mediumImpact();
 
       if (choice == _DeleteChoice.series) {
         setState(() {
-          _events.removeWhere((e) =>
-              e.id == event.id ||
-              (e.id != null && e.id! < 0 && -e.id! == parentId));
+          _events.removeWhere((e) => e.id == event.id ||
+            (e.id != null && e.id! < 0 && -e.id! == parentId));
         });
         await DatabaseHelper.instance.deleteEvent(parentId);
         await NotificationService.instance.cancelForEvent(parentId);
       } else {
         final excluded = List<int>.from(parent.excludedDates);
         excluded.add(event.dateMillis);
-        final updated = parent.copyWith(
-          excludedDatesJson: jsonEncode(excluded),
-        );
+        final updated = parent.copyWith(excludedDatesJson: jsonEncode(excluded));
         await DatabaseHelper.instance.updateEvent(updated);
         setState(() {
           _events.removeWhere((e) =>
-              e.id == event.id ||
-              (e.id != null &&
-                  e.id! < 0 &&
-                  e.dateMillis == event.dateMillis));
+            e.id == event.id || (e.id != null && e.id! < 0 && e.dateMillis == event.dateMillis));
         });
       }
-
       await WidgetService.refreshWidget();
       return;
     }
@@ -181,25 +182,16 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Delete event?'),
         content: Text('Delete "${event.title}"? This cannot be undone.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
         ],
       ),
     );
     if (confirm != true) return;
 
     HapticFeedback.mediumImpact();
-
     if (event.id != null) {
-      setState(() {
-        _events.removeWhere((e) => e.id == event.id);
-      });
+      setState(() => _events.removeWhere((e) => e.id == event.id));
       await DatabaseHelper.instance.deleteEvent(event.id!);
       await NotificationService.instance.cancelForEvent(event.id!);
       await WidgetService.refreshWidget();
@@ -226,40 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _events.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.calendar_today_outlined,
-                          size: 64,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No events yet!',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Tap + to add your first event.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
+              ? _buildEmptyState()
               : RefreshIndicator(
                   onRefresh: _loadAll,
                   child: ListView.builder(
@@ -280,6 +239,29 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openAddEdit(),
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.calendar_today_outlined, size: 64,
+              color: Theme.of(context).colorScheme.outline),
+            const SizedBox(height: 16),
+            Text('No events yet!', textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurface)),
+            const SizedBox(height: 8),
+            Text('Tap + to add your first event.', textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16,
+                color: Theme.of(context).colorScheme.outline)),
+          ],
+        ),
       ),
     );
   }
