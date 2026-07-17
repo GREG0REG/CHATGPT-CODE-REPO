@@ -86,8 +86,8 @@ jobs:
           "
 
       # 7. Build the APK
-      - name: Build Release APK
-        run: flutter build apk --release
+      - name: Build Debug APK
+        run: flutter build apk --debug
 
       # 8. Upload APK
       - name: Upload APK
