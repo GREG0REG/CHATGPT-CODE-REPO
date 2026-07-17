@@ -2,11 +2,15 @@ import 'dart:math';
 
 import '../models/event.dart';
 
+import 'dart:math';
+import '../models/event.dart';
+
 class RecurrenceService {
   RecurrenceService._();
-
-  static const int _maxOccurrencesPerEvent = 3;
-  static const int _maxLookaheadDays = 730;
+  
+  // INCREASED: From 3 to 1000 - allows unlimited occurrences within 2-year window
+  static const int _maxOccurrencesPerEvent = 1000;
+  static const int _maxLookaheadDays = 730; // 2 years
 
   static List<Event> expandEvents(List<Event> rawEvents, DateTime now) {
     final result = <Event>[];
@@ -19,7 +23,7 @@ class RecurrenceService {
       }
 
       final virtuals = _generateVirtualOccurrences(event, now, cutoff);
-      // FIX: Keep the parent event so HomeScreen has a header card to attach children to.
+      // Keep the parent event so HomeScreen has a header card
       result.add(event);
       result.addAll(virtuals);
     }
@@ -32,15 +36,22 @@ class RecurrenceService {
     if (!event.isRecurring) {
       return event.finalMillis > now.millisecondsSinceEpoch ? event : null;
     }
+
     final virtuals = _generateVirtualOccurrences(
-      event, now, now.add(const Duration(days: _maxLookaheadDays)), maxCount: 1,
+      event,
+      now,
+      now.add(const Duration(days: _maxLookaheadDays)),
+      maxCount: 1,
     );
     return virtuals.isNotEmpty ? virtuals.first : null;
   }
 
   static List<Event> _generateVirtualOccurrences(
-    Event event, DateTime now, DateTime cutoff, {int maxCount = _maxOccurrencesPerEvent}
-  ) {
+    Event event,
+    DateTime now,
+    DateTime cutoff, {
+    int maxCount = _maxOccurrencesPerEvent,
+  }) {
     final virtuals = <Event>[];
     final excluded = event.excludedDates;
 
@@ -49,31 +60,51 @@ class RecurrenceService {
         return [];
       case RecurrenceType.daily:
         virtuals.addAll(_generateIntervalOccurrences(
-          event: event, now: now, cutoff: cutoff,
-          intervalDays: event.recurrenceInterval, maxCount: maxCount, excluded: excluded,
+          event: event,
+          now: now,
+          cutoff: cutoff,
+          intervalDays: event.recurrenceInterval,
+          maxCount: maxCount,
+          excluded: excluded,
         ));
         break;
       case RecurrenceType.weekly:
         virtuals.addAll(_generateIntervalOccurrences(
-          event: event, now: now, cutoff: cutoff,
-          intervalDays: event.recurrenceInterval * 7, maxCount: maxCount, excluded: excluded,
+          event: event,
+          now: now,
+          cutoff: cutoff,
+          intervalDays: event.recurrenceInterval * 7,
+          maxCount: maxCount,
+          excluded: excluded,
         ));
         break;
       case RecurrenceType.monthly:
         virtuals.addAll(_generateMonthlyOccurrences(
-          event: event, now: now, cutoff: cutoff,
-          intervalMonths: event.recurrenceInterval, maxCount: maxCount, excluded: excluded,
+          event: event,
+          now: now,
+          cutoff: cutoff,
+          intervalMonths: event.recurrenceInterval,
+          maxCount: maxCount,
+          excluded: excluded,
         ));
         break;
       case RecurrenceType.yearly:
         if (event.yearlyUseSpecificDates && event.yearlySpecificDates.isNotEmpty) {
           virtuals.addAll(_generateYearlySpecificOccurrences(
-            event: event, now: now, cutoff: cutoff, maxCount: maxCount, excluded: excluded,
+            event: event,
+            now: now,
+            cutoff: cutoff,
+            maxCount: maxCount,
+            excluded: excluded,
           ));
         } else {
           virtuals.addAll(_generateYearlyIntervalOccurrences(
-            event: event, now: now, cutoff: cutoff,
-            intervalYears: event.recurrenceInterval, maxCount: maxCount, excluded: excluded,
+            event: event,
+            now: now,
+            cutoff: cutoff,
+            intervalYears: event.recurrenceInterval,
+            maxCount: maxCount,
+            excluded: excluded,
           ));
         }
         break;
@@ -83,13 +114,19 @@ class RecurrenceService {
   }
 
   static List<Event> _generateIntervalOccurrences({
-    required Event event, required DateTime now, required DateTime cutoff,
-    required int intervalDays, required int maxCount, required List<int> excluded,
+    required Event event,
+    required DateTime now,
+    required DateTime cutoff,
+    required int intervalDays,
+    required int maxCount,
+    required List<int> excluded,
   }) {
     final virtuals = <Event>[];
     final baseDate = DateTime.fromMillisecondsSinceEpoch(event.dateMillis);
     var current = DateTime(baseDate.year, baseDate.month, baseDate.day);
     final nowDate = DateTime(now.year, now.month, now.day);
+
+    // Move to first future occurrence
     while (current.isBefore(nowDate)) {
       current = current.add(Duration(days: intervalDays));
     }
@@ -103,22 +140,33 @@ class RecurrenceService {
       }
       current = current.add(Duration(days: intervalDays));
     }
+
     return virtuals;
   }
 
   static List<Event> _generateMonthlyOccurrences({
-    required Event event, required DateTime now, required DateTime cutoff,
-    required int intervalMonths, required int maxCount, required List<int> excluded,
+    required Event event,
+    required DateTime now,
+    required DateTime cutoff,
+    required int intervalMonths,
+    required int maxCount,
+    required List<int> excluded,
   }) {
     final virtuals = <Event>[];
     final baseDate = DateTime.fromMillisecondsSinceEpoch(event.dateMillis);
     var currentYear = baseDate.year;
     var currentMonth = baseDate.month;
+
     final nowYearMonth = now.year * 12 + now.month;
     var currentYearMonth = currentYear * 12 + currentMonth;
+
+    // Move to first future occurrence
     while (currentYearMonth < nowYearMonth) {
       currentMonth += intervalMonths;
-      while (currentMonth > 12) { currentMonth -= 12; currentYear++; }
+      while (currentMonth > 12) {
+        currentMonth -= 12;
+        currentYear++;
+      }
       currentYearMonth = currentYear * 12 + currentMonth;
     }
 
@@ -127,49 +175,73 @@ class RecurrenceService {
       final daysInMonth = _daysInMonth(currentYear, currentMonth);
       final day = min(baseDate.day, daysInMonth);
       final current = DateTime(currentYear, currentMonth, day);
+
       if (current.isAfter(cutoff)) break;
+
       final occurrenceMillis = current.millisecondsSinceEpoch;
-      if (!current.isBefore(DateTime(now.year, now.month, now.day)) && !excluded.contains(occurrenceMillis)) {
+      if (!current.isBefore(DateTime(now.year, now.month, now.day)) &&
+          !excluded.contains(occurrenceMillis)) {
         virtuals.add(_buildVirtualEvent(event, current, occurrenceMillis));
         count++;
       }
+
       currentMonth += intervalMonths;
-      while (currentMonth > 12) { currentMonth -= 12; currentYear++; }
+      while (currentMonth > 12) {
+        currentMonth -= 12;
+        currentYear++;
+      }
     }
+
     return virtuals;
   }
 
   static List<Event> _generateYearlyIntervalOccurrences({
-    required Event event, required DateTime now, required DateTime cutoff,
-    required int intervalYears, required int maxCount, required List<int> excluded,
+    required Event event,
+    required DateTime now,
+    required DateTime cutoff,
+    required int intervalYears,
+    required int maxCount,
+    required List<int> excluded,
   }) {
     final virtuals = <Event>[];
     final baseDate = DateTime.fromMillisecondsSinceEpoch(event.dateMillis);
     var currentYear = baseDate.year;
-    while (currentYear < now.year) { currentYear += intervalYears; }
+
+    // Move to first future occurrence
+    while (currentYear < now.year) {
+      currentYear += intervalYears;
+    }
 
     int count = 0;
     while (count < maxCount) {
       final current = DateTime(currentYear, baseDate.month, baseDate.day);
       if (current.isAfter(cutoff)) break;
+
       final occurrenceMillis = current.millisecondsSinceEpoch;
-      if (!current.isBefore(DateTime(now.year, now.month, now.day)) && !excluded.contains(occurrenceMillis)) {
+      if (!current.isBefore(DateTime(now.year, now.month, now.day)) &&
+          !excluded.contains(occurrenceMillis)) {
         virtuals.add(_buildVirtualEvent(event, current, occurrenceMillis));
         count++;
       }
+
       currentYear += intervalYears;
     }
+
     return virtuals;
   }
 
   static List<Event> _generateYearlySpecificOccurrences({
-    required Event event, required DateTime now, required DateTime cutoff,
-    required int maxCount, required List<int> excluded,
+    required Event event,
+    required DateTime now,
+    required DateTime cutoff,
+    required int maxCount,
+    required List<int> excluded,
   }) {
     final virtuals = <Event>[];
     final specificDates = event.yearlySpecificDates;
     var currentYear = now.year;
 
+    // Generate candidates for current year
     final candidatesThisYear = <_OccurrenceCandidate>[];
     for (final sd in specificDates) {
       final dt = sd.toDateTime(currentYear);
@@ -180,18 +252,22 @@ class RecurrenceService {
     }
     candidatesThisYear.sort((a, b) => a.date.compareTo(b.date));
 
+    // Add occurrences from current year
     for (final cand in candidatesThisYear) {
       if (virtuals.length >= maxCount) break;
       final occurrenceMillis = cand.date.millisecondsSinceEpoch;
       if (!excluded.contains(occurrenceMillis)) {
         virtuals.add(_buildVirtualEvent(
-          event, cand.date, occurrenceMillis,
+          event,
+          cand.date,
+          occurrenceMillis,
           customStartTime: cand.specificDate.customStartTimeMillis,
           customDeadline: cand.specificDate.customDeadlineMillis,
         ));
       }
     }
 
+    // If we need more, generate from next year
     if (virtuals.length < maxCount) {
       final nextYear = currentYear + 1;
       final candidatesNextYear = specificDates.map((sd) {
@@ -202,10 +278,13 @@ class RecurrenceService {
       for (final cand in candidatesNextYear) {
         if (virtuals.length >= maxCount) break;
         if (cand.date.isAfter(cutoff)) break;
+
         final occurrenceMillis = cand.date.millisecondsSinceEpoch;
         if (!excluded.contains(occurrenceMillis)) {
           virtuals.add(_buildVirtualEvent(
-            event, cand.date, occurrenceMillis,
+            event,
+            cand.date,
+            occurrenceMillis,
             customStartTime: cand.specificDate.customStartTimeMillis,
             customDeadline: cand.specificDate.customDeadlineMillis,
           ));
@@ -217,22 +296,37 @@ class RecurrenceService {
   }
 
   static Event _buildVirtualEvent(
-    Event event, DateTime occurrenceDate, int occurrenceMillis,
-    {int? customStartTime, int? customDeadline}
-  ) {
+    Event event,
+    DateTime occurrenceDate,
+    int occurrenceMillis, {
+    int? customStartTime,
+    int? customDeadline,
+  }) {
     int? startMillis;
     int? deadlineMillis;
 
     if (event.startTimeMillis != null || customStartTime != null) {
-      final baseStart = DateTime.fromMillisecondsSinceEpoch(customStartTime ?? event.startTimeMillis!);
-      startMillis = DateTime(occurrenceDate.year, occurrenceDate.month, occurrenceDate.day,
-        baseStart.hour, baseStart.minute).millisecondsSinceEpoch;
+      final baseStart = DateTime.fromMillisecondsSinceEpoch(
+          customStartTime ?? event.startTimeMillis!);
+      startMillis = DateTime(
+        occurrenceDate.year,
+        occurrenceDate.month,
+        occurrenceDate.day,
+        baseStart.hour,
+        baseStart.minute,
+      ).millisecondsSinceEpoch;
     }
 
     if (event.deadlineMillis != null || customDeadline != null) {
-      final baseDeadline = DateTime.fromMillisecondsSinceEpoch(customDeadline ?? event.deadlineMillis!);
-      deadlineMillis = DateTime(occurrenceDate.year, occurrenceDate.month, occurrenceDate.day,
-        baseDeadline.hour, baseDeadline.minute).millisecondsSinceEpoch;
+      final baseDeadline = DateTime.fromMillisecondsSinceEpoch(
+          customDeadline ?? event.deadlineMillis!);
+      deadlineMillis = DateTime(
+        occurrenceDate.year,
+        occurrenceDate.month,
+        occurrenceDate.day,
+        baseDeadline.hour,
+        baseDeadline.minute,
+      ).millisecondsSinceEpoch;
     }
 
     return Event(
@@ -248,11 +342,13 @@ class RecurrenceService {
     );
   }
 
-  static int _daysInMonth(int year, int month) => DateTime(year, month + 1, 0).day;
+  static int _daysInMonth(int year, int month) =>
+      DateTime(year, month + 1, 0).day;
 }
 
 class _OccurrenceCandidate {
   final DateTime date;
   final YearlySpecificDate specificDate;
+
   _OccurrenceCandidate(this.date, this.specificDate);
 }
