@@ -1,6 +1,6 @@
 plugins {
     id "com.android.application"
-    id "kotlin-android"
+    id "org.jetbrains.kotlin.android"
     id "dev.flutter.flutter-gradle-plugin"
 }
 
@@ -49,8 +49,8 @@ android {
 
     defaultConfig {
         applicationId "com.example.event_countdown"
-        minSdkVersion flutter.minSdkVersion
-        targetSdkVersion flutter.targetSdkVersion
+        minSdkVersion (flutter.minSdkVersion ?: 21)
+        targetSdkVersion (flutter.targetSdkVersion ?: 35)
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true
@@ -68,9 +68,6 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
-            // ============================================
-            // OPTIMIZATION: Aggressive code & resource shrinking
-            // ============================================
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -88,33 +85,19 @@ android {
         }
     }
 
-    // ============================================
-    // OPTIMIZATION: Split APKs to reduce size
-    // ============================================
     splits {
-        // Split by ABI (CPU architecture)
         abi {
             enable true
             reset()
             include 'armeabi-v7a', 'arm64-v8a', 'x86_64'
             universalApk true
         }
-        
-        // Split by screen density
-        density {
-            enable true
-            exclude "ldpi", "tvdpi"
-        }
-        
-        // REMOVED: Language splitting is deprecated/removed in AGP 8.x
-        // Modern apps handle languages via Play Store Dynamic Delivery or App Bundles
     }
 
     lint {
-        checkReleaseBuilds true
-        disable 'InvalidPackage'
-        textReport true
-        textOutput "stdout"
+        checkReleaseBuilds = true
+        disable += 'InvalidPackage'
+        textReport = true
     }
 }
 
