@@ -19,7 +19,7 @@ class RecurrenceService {
       }
 
       final virtuals = _generateVirtualOccurrences(event, now, cutoff);
-      // FIX: Keep the parent event in the list so HomeScreen can build the group.
+      // FIX: Keep the parent event so HomeScreen has a header card to attach children to.
       result.add(event);
       result.addAll(virtuals);
     }
