@@ -130,17 +130,10 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         views.setTextViewText(R.id.widget_title, title)
         views.setTextViewText(R.id.widget_countdown, countdown)
         
-        // Progress bar
+        // Progress bar - show/hide only, don't manipulate width via RemoteViews
         if (progressPercent >= 0) {
             views.setViewVisibility(R.id.widget_progress_container, View.VISIBLE)
             views.setTextViewText(R.id.widget_progress_text, "$progressPercent%")
-            // Update progress fill width
-            views.setInt(R.id.widget_progress_fill, "setLayoutParams", 
-                android.widget.FrameLayout.LayoutParams(
-                    (progressPercent * 4).coerceIn(0, 400), // approximate width
-                    android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                ).width
-            )
         } else {
             views.setViewVisibility(R.id.widget_progress_container, View.GONE)
         }
