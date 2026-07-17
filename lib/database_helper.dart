@@ -1,9 +1,9 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
-import '../models/event.dart';
-import '../models/custom_reminder.dart';
-import '../models/notification_history.dart';
+import 'models/event.dart';
+import 'models/custom_reminder.dart';
+import 'models/notification_history.dart';
 
 class DatabaseHelper {
   DatabaseHelper._internal();
