@@ -1,237 +1,246 @@
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
+import 'dart:convert';
+import 'package:flutter/material.dart';
 
-import '../models/custom_reminder.dart';
-import '../models/event.dart';
-import '../models/notification_history.dart';
+// ============================================
+// RECURRENCE TYPES
+// ============================================
+enum RecurrenceType {
+  none,
+  daily,
+  weekly,
+  monthly,
+  yearly,
+}
 
-class DatabaseHelper {
-  DatabaseHelper._internal();
-  static final DatabaseHelper instance = DatabaseHelper._internal();
+// ============================================
+// YEARLY SPECIFIC DATE (for JSON serialization)
+// ============================================
+class YearlySpecificDate {
+  final int month; // 1-12
+  final int day; // 1-31
+  final int? customStartTimeMillis;
+  final int? customDeadlineMillis;
 
-  static Database? _database;
+  const YearlySpecificDate({
+    required this.month,
+    required this.day,
+    this.customStartTimeMillis,
+    this.customDeadlineMillis,
+  });
 
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+  Map<String, dynamic> toJson() => {
+        'm': month,
+        'd': day,
+        if (customStartTimeMillis != null) 's': customStartTimeMillis,
+        if (customDeadlineMillis != null) 'e': customDeadlineMillis,
+      };
+
+  factory YearlySpecificDate.fromJson(Map<String, dynamic> json) =>
+      YearlySpecificDate(
+        month: json['m'] as int,
+        day: json['d'] as int,
+        customStartTimeMillis: json['s'] as int?,
+        customDeadlineMillis: json['e'] as int?,
+      );
+
+  DateTime toDateTime(int year) => DateTime(year, month, day);
+
+  @override
+  String toString() => '$month/$day';
+}
+
+// ============================================
+// MAIN EVENT MODEL
+// ============================================
+class Event {
+  final int? id;
+  final String title;
+  final int dateMillis;
+  final int? startTimeMillis;
+  final int? deadlineMillis;
+  final String? notes;
+
+  // --- Recurrence fields (NEW) ---
+  final RecurrenceType recurrence;
+  final int recurrenceInterval; // 1-50, default 1
+  final bool yearlyUseSpecificDates; // only for yearly
+  final String? yearlySpecificDatesJson; // JSON list of YearlySpecificDate
+  final String? excludedDatesJson; // JSON list of excluded timestamps
+
+  const Event({
+    this.id,
+    required this.title,
+    required this.dateMillis,
+    this.startTimeMillis,
+    this.deadlineMillis,
+    this.notes,
+    this.recurrence = RecurrenceType.none,
+    this.recurrenceInterval = 1,
+    this.yearlyUseSpecificDates = false,
+    this.yearlySpecificDatesJson,
+    this.excludedDatesJson,
+  });
+
+  // --- Computed properties ---
+
+  bool get isRecurring => recurrence != RecurrenceType.none;
+
+  List<YearlySpecificDate> get yearlySpecificDates {
+    if (yearlySpecificDatesJson == null || yearlySpecificDatesJson!.isEmpty)
+      return [];
+    try {
+      final list = jsonDecode(yearlySpecificDatesJson!) as List;
+      return list
+          .map((e) => YearlySpecificDate.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
   }
 
-  Future<Database> _initDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'event_countdown.db');
-    return openDatabase(
-      path,
-      version: 3,
-      onCreate: (db, version) async {
-        await _createV1Tables(db);
-        await _createV2Tables(db);
-        await _createV3Tables(db);
-      },
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await _upgradeToV2(db);
-        }
-        if (oldVersion < 3) {
-          await _upgradeToV3(db);
-        }
-      },
-    );
+  List<int> get excludedDates {
+    if (excludedDatesJson == null || excludedDatesJson!.isEmpty) return [];
+    try {
+      final list = jsonDecode(excludedDatesJson!) as List;
+      return list.cast<int>();
+    } catch (_) {
+      return [];
+    }
   }
 
-  Future<void> _createV1Tables(Database db) async {
-    await db.execute('''
-      CREATE TABLE events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        dateMillis INTEGER NOT NULL,
-        startTimeMillis INTEGER,
-        deadlineMillis INTEGER,
-        notes TEXT
-      )
-    ''');
+  /// The timestamp used for sorting / "which event is next" purposes.
+  int get primarySortMillis {
+    if (startTimeMillis != null) return startTimeMillis!;
+    if (deadlineMillis != null) return deadlineMillis!;
+    return dateMillis;
   }
 
-  Future<void> _createV2Tables(Database db) async {
-    await db.execute('''
-      ALTER TABLE events ADD COLUMN recurrence TEXT DEFAULT 'none'
-    ''');
-
-    await db.execute('''
-      CREATE TABLE custom_reminders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        eventId INTEGER NOT NULL,
-        minutesBefore INTEGER NOT NULL,
-        type TEXT NOT NULL,
-        soundUri TEXT,
-        isEnabled INTEGER NOT NULL DEFAULT 1,
-        FOREIGN KEY (eventId) REFERENCES events(id) ON DELETE CASCADE
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE notification_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        eventId INTEGER,
-        eventTitle TEXT NOT NULL,
-        reminderType TEXT NOT NULL,
-        sentAtMillis INTEGER NOT NULL,
-        wasSnoozed INTEGER NOT NULL DEFAULT 0
-      )
-    ''');
-  }
-
-  Future<void> _upgradeToV2(Database db) async {
-    await db.execute('''
-      ALTER TABLE events ADD COLUMN recurrence TEXT DEFAULT 'none'
-    ''');
-
-    await db.execute('''
-      CREATE TABLE custom_reminders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        eventId INTEGER NOT NULL,
-        minutesBefore INTEGER NOT NULL,
-        type TEXT NOT NULL,
-        soundUri TEXT,
-        isEnabled INTEGER NOT NULL DEFAULT 1,
-        FOREIGN KEY (eventId) REFERENCES events(id) ON DELETE CASCADE
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE notification_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        eventId INTEGER,
-        eventTitle TEXT NOT NULL,
-        reminderType TEXT NOT NULL,
-        sentAtMillis INTEGER NOT NULL,
-        wasSnoozed INTEGER NOT NULL DEFAULT 0
-      )
-    ''');
+  /// The final relevant timestamp for this event.
+  int get finalMillis {
+    if (deadlineMillis != null) return deadlineMillis!;
+    if (startTimeMillis != null) return startTimeMillis!;
+    return dateMillis;
   }
 
   // ============================================
-  // v3: Recurrence interval + specific dates
+  // URGENCY COLOR (unchanged)
   // ============================================
-  Future<void> _createV3Tables(Database db) async {
-    await db.execute('''
-      ALTER TABLE events ADD COLUMN recurrenceInterval INTEGER DEFAULT 1
-    ''');
-    await db.execute('''
-      ALTER TABLE events ADD COLUMN specificDates TEXT
-    ''');
+  Color getUrgencyColor(DateTime now) {
+    final nowMillis = now.millisecondsSinceEpoch;
+    final target = deadlineMillis ?? startTimeMillis ?? dateMillis;
+    final diff = Duration(milliseconds: target - nowMillis);
+
+    if (diff.isNegative || diff.inDays < 0) {
+      return Colors.grey;
+    } else if (diff.inDays > 7) {
+      return Colors.green;
+    } else if (diff.inDays >= 3) {
+      return Colors.orange;
+    } else {
+      return Colors.red;
+    }
   }
 
-  Future<void> _upgradeToV3(Database db) async {
-    await db.execute('''
-      ALTER TABLE events ADD COLUMN recurrenceInterval INTEGER DEFAULT 1
-    ''');
-    await db.execute('''
-      ALTER TABLE events ADD COLUMN specificDates TEXT
-    ''');
+  /// Convenience: returns the countdown text string for this event at [now].
+  String getCountdownText(DateTime now, {required bool smartFormatEnabled}) {
+    final diff = Duration(
+      milliseconds: finalMillis - now.millisecondsSinceEpoch,
+    );
+
+    if (diff.isNegative) return 'Completed';
+
+    if (diff.inHours >= 24) {
+      final days = diff.inDays;
+      return '$days day${days == 1 ? '' : 's'} left';
+    } else if (diff.inMinutes >= 60) {
+      final hours = diff.inHours;
+      return '$hours hour${hours == 1 ? '' : 's'} left';
+    } else {
+      final minutes = diff.inMinutes < 1 ? 1 : diff.inMinutes;
+      return '$minutes minute${minutes == 1 ? '' : 's'} left';
+    }
   }
 
-  Future<int> insertEvent(Event event) async {
-    final db = await database;
-    return db.insert('events', event.toMap()..remove('id'));
-  }
-
-  Future<int> updateEvent(Event event) async {
-    final db = await database;
-    return db.update(
-      'events',
-      event.toMap(),
-      where: 'id = ?',
-      whereArgs: [event.id],
+  // ============================================
+  // COPY & SERIALIZATION
+  // ============================================
+  Event copyWith({
+    int? id,
+    String? title,
+    int? dateMillis,
+    int? startTimeMillis,
+    bool clearStartTime = false,
+    int? deadlineMillis,
+    bool clearDeadline = false,
+    String? notes,
+    RecurrenceType? recurrence,
+    int? recurrenceInterval,
+    bool? yearlyUseSpecificDates,
+    String? yearlySpecificDatesJson,
+    bool clearYearlySpecificDates = false,
+    String? excludedDatesJson,
+    bool clearExcludedDates = false,
+  }) {
+    return Event(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      dateMillis: dateMillis ?? this.dateMillis,
+      startTimeMillis: clearStartTime
+          ? null
+          : (startTimeMillis ?? this.startTimeMillis),
+      deadlineMillis: clearDeadline
+          ? null
+          : (deadlineMillis ?? this.deadlineMillis),
+      notes: notes ?? this.notes,
+      recurrence: recurrence ?? this.recurrence,
+      recurrenceInterval: recurrenceInterval ?? this.recurrenceInterval,
+      yearlyUseSpecificDates:
+          yearlyUseSpecificDates ?? this.yearlyUseSpecificDates,
+      yearlySpecificDatesJson: clearYearlySpecificDates
+          ? null
+          : (yearlySpecificDatesJson ?? this.yearlySpecificDatesJson),
+      excludedDatesJson: clearExcludedDates
+          ? null
+          : (excludedDatesJson ?? this.excludedDatesJson),
     );
   }
 
-  Future<int> deleteEvent(int id) async {
-    final db = await database;
-    return db.delete('events', where: 'id = ?', whereArgs: [id]);
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'dateMillis': dateMillis,
+      'startTimeMillis': startTimeMillis,
+      'deadlineMillis': deadlineMillis,
+      'notes': notes,
+      'recurrence': recurrence.index,
+      'recurrenceInterval': recurrenceInterval,
+      'yearlyUseSpecificDates': yearlyUseSpecificDates ? 1 : 0,
+      'yearlySpecificDatesJson': yearlySpecificDatesJson,
+      'excludedDatesJson': excludedDatesJson,
+    };
   }
 
-  Future<List<Event>> getAllEventsSorted() async {
-    final db = await database;
-    final rows = await db.query('events', orderBy: 'dateMillis ASC');
-    return rows.map((r) => Event.fromMap(r)).toList();
-  }
-
-  Future<Event?> getEvent(int id) async {
-    final db = await database;
-    final rows = await db.query('events', where: 'id = ?', whereArgs: [id]);
-    if (rows.isEmpty) return null;
-    return Event.fromMap(rows.first);
-  }
-
-  Future<void> replaceAllEvents(List<Event> events) async {
-    final db = await database;
-    await db.transaction((txn) async {
-      await txn.delete('events');
-      for (final e in events) {
-        await txn.insert('events', e.toMap()..remove('id'));
-      }
-    });
-  }
-
-  Future<int> insertCustomReminder(CustomReminder reminder) async {
-    final db = await database;
-    return db.insert('custom_reminders', reminder.toMap()..remove('id'));
-  }
-
-  Future<int> updateCustomReminder(CustomReminder reminder) async {
-    final db = await database;
-    return db.update(
-      'custom_reminders',
-      reminder.toMap(),
-      where: 'id = ?',
-      whereArgs: [reminder.id],
+  factory Event.fromMap(Map<String, dynamic> map) {
+    return Event(
+      id: map['id'] as int?,
+      title: map['title'] as String,
+      dateMillis: map['dateMillis'] as int,
+      startTimeMillis: map['startTimeMillis'] as int?,
+      deadlineMillis: map['deadlineMillis'] as int?,
+      notes: map['notes'] as String?,
+      recurrence: RecurrenceType.values[
+          (map['recurrence'] as int?)?.clamp(0, RecurrenceType.values.length - 1) ??
+              0],
+      recurrenceInterval:
+          (map['recurrenceInterval'] as int?)?.clamp(1, 50) ?? 1,
+      yearlyUseSpecificDates: (map['yearlyUseSpecificDates'] as int?) == 1,
+      yearlySpecificDatesJson: map['yearlySpecificDatesJson'] as String?,
+      excludedDatesJson: map['excludedDatesJson'] as String?,
     );
   }
 
-  Future<int> deleteCustomReminder(int id) async {
-    final db = await database;
-    return db.delete('custom_reminders', where: 'id = ?', whereArgs: [id]);
-  }
+  Map<String, dynamic> toJson() => toMap();
 
-  Future<List<CustomReminder>> getCustomRemindersForEvent(int eventId) async {
-    final db = await database;
-    final rows = await db.query(
-      'custom_reminders',
-      where: 'eventId = ?',
-      whereArgs: [eventId],
-      orderBy: 'minutesBefore DESC',
-    );
-    return rows.map((r) => CustomReminder.fromMap(r)).toList();
-  }
-
-  Future<void> deleteCustomRemindersForEvent(int eventId) async {
-    final db = await database;
-    await db.delete('custom_reminders', where: 'eventId = ?', whereArgs: [eventId]);
-  }
-
-  Future<int> insertNotificationHistory(NotificationHistory entry) async {
-    final db = await database;
-    return db.insert('notification_history', entry.toMap()..remove('id'));
-  }
-
-  Future<List<NotificationHistory>> getNotificationHistory({int limit = 50}) async {
-    final db = await database;
-    final rows = await db.query(
-      'notification_history',
-      orderBy: 'sentAtMillis DESC',
-      limit: limit,
-    );
-    return rows.map((r) => NotificationHistory.fromMap(r)).toList();
-  }
-
-  Future<void> clearNotificationHistory() async {
-    final db = await database;
-    await db.delete('notification_history');
-  }
-
-  Future<void> vacuum() async {
-    final db = await database;
-    await db.execute('VACUUM');
-  }
+  factory Event.fromJson(Map<String, dynamic> json) => Event.fromMap(json);
 }
