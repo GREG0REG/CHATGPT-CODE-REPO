@@ -2,6 +2,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 import '../models/event.dart';
+import '../models/custom_reminder.dart';
+import '../models/notification_history.dart';
 
 /// Local-only SQLite storage for events. No network, no cloud sync.
 class DatabaseHelper {
