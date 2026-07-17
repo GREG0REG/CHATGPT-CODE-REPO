@@ -4,13 +4,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../db/database_helper.dart';
+import '../database_helper.dart';
 import '../models/event.dart';
 import '../services/notification_service.dart';
 import '../services/recurrence_service.dart';
 import '../services/settings_service.dart';
 import '../services/widget_service.dart';
-import '../widgets/event_card.dart';
+import '../event_card.dart';
 import 'add_edit_event_screen.dart';
 import 'settings_screen.dart';
 
