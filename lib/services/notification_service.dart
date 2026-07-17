@@ -2,7 +2,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz_data;
 
-import '../db/database_helper.dart';
+import '../database_helper.dart';
 import '../models/custom_reminder.dart';
 import '../models/event.dart';
 
