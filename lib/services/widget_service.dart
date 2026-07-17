@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
 
-import '../db/database_helper.dart';
+import '../database_helper.dart';
 import '../models/event.dart';
-import '../services/recurrence_service.dart';
+import 'recurrence_service.dart';
 import '../theme/app_themes.dart';
 import 'countdown_service.dart';
 import 'settings_service.dart';
