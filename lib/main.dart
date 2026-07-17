@@ -89,7 +89,7 @@ class EventCountdownAppState extends State<EventCountdownApp>
   // ============================================
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final home = HomeScreen.homeScreenKey.currentState;
+    final home = _HomeScreenState.homeScreenKey.currentState;
     if (home == null) return;
 
     if (state == AppLifecycleState.paused ||
