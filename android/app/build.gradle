@@ -18,38 +18,8 @@ if (flutterVersionCode == null) {
 }
 
 def flutterVersionName = localProperties.getProperty('flutter.versionName')
-plugins {
-    id "com.android.application"
-    id "org.jetbrains.kotlin.android"
-    id "dev.flutter.flutter-gradle-plugin"
-}
-
-def localProperties = new Properties()
-def localPropertiesFile = rootProject.file('local.properties')
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.withReader('UTF-8') { reader ->
-        localProperties.load(reader)
-    }
-}
-
-def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
-if (flutterVersionCode == null) {
-    flutterVersionCode = '1'
-}
-
-def flutterVersionName = localProperties.getProperty('flutter.versionName')
 if (flutterVersionName == null) {
     flutterVersionName = '1.0'
-}
-
-configurations.all {
-    resolutionStrategy {
-        eachDependency { details ->
-            if (details.requested.group == 'androidx.work') {
-                details.useVersion '2.8.1'
-            }
-        }
-    }
 }
 
 android {
@@ -118,6 +88,16 @@ android {
         checkReleaseBuilds = true
         disable += 'InvalidPackage'
         textReport = true
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        eachDependency { details ->
+            if (details.requested.group == 'androidx.work') {
+                details.useVersion '2.8.1'
+            }
+        }
     }
 }
 
