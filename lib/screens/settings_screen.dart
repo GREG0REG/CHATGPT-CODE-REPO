@@ -11,7 +11,7 @@ import '../services/notification_service.dart';
 import '../services/settings_service.dart';
 import '../services/widget_service.dart';
 import '../theme/app_themes.dart';
-import '../widgets/simple_color_picker.dart';
+import '../WIDGETS/simple_color_picker.dart';
 import 'widget_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
