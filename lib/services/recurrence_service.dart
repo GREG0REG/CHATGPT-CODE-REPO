@@ -19,6 +19,8 @@ class RecurrenceService {
       }
 
       final virtuals = _generateVirtualOccurrences(event, now, cutoff);
+      // FIX: Keep the parent event in the list so HomeScreen can build the group.
+      result.add(event);
       result.addAll(virtuals);
     }
 
@@ -166,13 +168,11 @@ class RecurrenceService {
   }) {
     final virtuals = <Event>[];
     final specificDates = event.yearlySpecificDates;
-    // FIX: Start from current year, not next year
     var currentYear = now.year;
 
     final candidatesThisYear = <_OccurrenceCandidate>[];
     for (final sd in specificDates) {
       final dt = sd.toDateTime(currentYear);
-      // FIX: Include today (not just after today)
       final todayStart = DateTime(now.year, now.month, now.day);
       if (!dt.isBefore(todayStart)) {
         candidatesThisYear.add(_OccurrenceCandidate(dt, sd));
