@@ -72,10 +72,6 @@
                 android:resource="@xml/event_widget_info" />
         </receiver>
 
-        <!-- Required by home_widget so it can be launched/updated in the background -->
-        <receiver android:name="es.antonborri.home_widget.HomeWidgetBackgroundReceiver"
-            android:exported="false" />
-
     </application>
 
     <queries>
