@@ -53,6 +53,7 @@ android {
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        multiDexEnabled true
     }
 
     signingConfigs {
@@ -67,14 +68,53 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
-            
             // ============================================
-            // FIX: Enable shrinking and optimization for smaller APK
+            // OPTIMIZATION: Aggressive code & resource shrinking
             // ============================================
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            crunchPngs true
+            
+            packagingOptions {
+                jniLibs {
+                    useLegacyPackaging false
+                }
+            }
         }
+        debug {
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+
+    // ============================================
+    // OPTIMIZATION: Split APKs to reduce size
+    // ============================================
+    splits {
+        // Split by ABI (CPU architecture)
+        abi {
+            enable true
+            reset()
+            include 'armeabi-v7a', 'arm64-v8a', 'x86_64'
+            universalApk true
+        }
+        
+        // Split by screen density
+        density {
+            enable true
+            exclude "ldpi", "tvdpi"
+        }
+        
+        // REMOVED: Language splitting is deprecated/removed in AGP 8.x
+        // Modern apps handle languages via Play Store Dynamic Delivery or App Bundles
+    }
+
+    lint {
+        checkReleaseBuilds true
+        disable 'InvalidPackage'
+        textReport true
+        textOutput "stdout"
     }
 }
 
