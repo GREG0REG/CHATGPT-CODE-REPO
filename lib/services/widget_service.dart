@@ -12,7 +12,6 @@ class WidgetService {
   WidgetService._();
   static const String androidWidgetName = 'EventCountdownWidgetProvider';
 
-  // SharedPreferences keys - MUST match native side exactly
   static const _kTitle = 'event_title';
   static const _kCountdown = 'countdown_text';
   static const _kBgType = 'widget_bg_type';
@@ -27,19 +26,16 @@ class WidgetService {
     final rawEvents = await DatabaseHelper.instance.getAllEventsSorted();
     final now = DateTime.now();
 
-    // EXPAND recurring events for widget
     final expanded = RecurrenceService.expandEvents(rawEvents, now);
 
     final smart = await SettingsService.instance.getSmartFormatEnabled();
     final theme = await SettingsService.instance.getSelectedTheme();
     final bgType = await SettingsService.instance.getWidgetBackgroundType();
-    final imagePath = await SettingsService.instance.getWidgetImagePath();
     final progressBarEnabled =
         await SettingsService.instance.getWidgetProgressBar();
     final pulseEnabled =
         await SettingsService.instance.getWidgetPulseAnimation();
 
-    // Find first active event from expanded list
     Event? active;
     for (final e in expanded) {
       if (e.finalMillis > now.millisecondsSinceEpoch) {
@@ -85,7 +81,6 @@ class WidgetService {
     final themeColor = AppThemes.colorFor(theme);
     final textColor = AppThemes.autoContrastColor(themeColor);
 
-    // Use shared_preferences directly - same prefs file as native
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kTitle, title);
     await prefs.setString(_kCountdown, countdownText);
@@ -93,19 +88,13 @@ class WidgetService {
         bgType == WidgetBackgroundType.customImage ? 'image' : 'theme');
     await prefs.setString(_kBgColor, themeColor.value.toString());
     await prefs.setString(_kTextColor, textColor.value.toString());
-    if (imagePath != null && bgType == WidgetBackgroundType.customImage) {
-      await prefs.setString(_kImagePath, imagePath);
-    } else {
-      await prefs.setString(_kImagePath, '');
-    }
+    await prefs.setString(_kImagePath, '');
     await prefs.setInt(_kProgressPercent, progressPercent);
     await prefs.setBool(_kPulseEnabled, pulseEnabled);
     await prefs.setBool(_kIsUrgent, isUrgent);
 
-    // Trigger widget update via platform channel or workmanager
-    // Since we removed home_widget, we rely on Android's updatePeriodMillis
-    // or the user can tap to refresh. For immediate update, we'd need a method channel.
-    // For now, the widget will update on next periodic refresh or when app opens.
+    // Note: Widget will update on next system refresh or when user adds it
+    // For immediate update, we'd need a platform channel - not critical
   }
 
   static Future<void> registerInteractivityCallback() async {
