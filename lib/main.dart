@@ -1,15 +1,12 @@
 import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:workmanager/workmanager.dart';
 import 'database_helper.dart';
 import 'services/export_import_service.dart';
-
 import 'screens/home_screen.dart';
 import 'screens/widget_settings_screen.dart';
 import 'services/backup_service.dart';
-import 'services/battery_service.dart';
 import 'services/notification_service.dart';
 import 'services/settings_service.dart';
 import 'services/widget_service.dart';
@@ -32,25 +29,23 @@ void callbackDispatcher() {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   await NotificationService.instance.init();
 
   await Workmanager().initialize(
     callbackDispatcher,
     isInDebugMode: false,
   );
+
+  // OPTIMIZED: Changed from 30 minutes to 4 hours for battery life
   await Workmanager().registerPeriodicTask(
     kWidgetRefreshTaskName,
     kWidgetRefreshTaskName,
-    frequency: const Duration(minutes: 30),
+    frequency: const Duration(hours: 4),
     constraints: Constraints(networkType: NetworkType.not_required),
     existingWorkPolicy: ExistingWorkPolicy.keep,
   );
 
-  // SESSION 6: Register weekly backup
   await BackupService.registerWeeklyBackup();
-
-  // Push initial widget data immediately on launch.
   await WidgetService.refreshWidget();
 
   runApp(const EventCountdownApp());
@@ -84,20 +79,17 @@ class EventCountdownAppState extends State<EventCountdownApp>
     super.dispose();
   }
 
-  // ============================================
-  // SESSION 9: Screen-state awareness
-  // FIXED: Use lifecycle callbacks instead of accessing private _HomeScreenState
-  // ============================================
   @override
-void didChangeAppLifecycleState(AppLifecycleState state) {
-  // Timer auto-handles itself - no manual pause/resume needed
-}
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Timer auto-handles itself
+  }
 
   Future<void> _loadAllSettings() async {
     final theme = await SettingsService.instance.getSelectedTheme();
     final mode = await SettingsService.instance.getThemeMode();
     final custom = await SettingsService.instance.getCustomColor();
     final hc = await SettingsService.instance.getHighContrast();
+
     if (mounted) {
       setState(() {
         _theme = theme;
@@ -108,23 +100,19 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     }
   }
 
-  // ============================================
-  // SESSION 6: Restore prompt on first launch
-  // ============================================
   Future<void> _checkFirstLaunch() async {
     final isFirst = await SettingsService.instance.isFirstLaunch();
     if (!isFirst) return;
 
     await SettingsService.instance.setFirstLaunch(false);
-
-    // Delay to let UI build
     await Future.delayed(const Duration(seconds: 2));
+
     if (!mounted) return;
 
     final backupPath = await BackupService.findRecentBackup();
     if (backupPath == null) return;
-
     if (!mounted) return;
+
     final shouldRestore = await showDialog<bool>(
       context: navigatorKey.currentContext!,
       builder: (ctx) => AlertDialog(
@@ -199,14 +187,16 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
             _theme,
             brightness: Brightness.light,
             customColor: _customColor,
-            dynamicScheme: _theme == AppThemeOption.materialYou ? lightDynamic : null,
+            dynamicScheme:
+                _theme == AppThemeOption.materialYou ? lightDynamic : null,
             highContrast: _highContrast,
           ),
           darkTheme: AppThemes.buildTheme(
             _theme,
             brightness: Brightness.dark,
             customColor: _customColor,
-            dynamicScheme: _theme == AppThemeOption.materialYou ? darkDynamic : null,
+            dynamicScheme:
+                _theme == AppThemeOption.materialYou ? darkDynamic : null,
             highContrast: _highContrast,
           ),
           home: const HomeScreen(),
