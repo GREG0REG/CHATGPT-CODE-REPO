@@ -3,12 +3,11 @@ import 'package:home_widget/home_widget.dart';
 
 import '../db/database_helper.dart';
 import '../models/event.dart';
+import '../services/recurrence_service.dart';
 import '../theme/app_themes.dart';
 import 'countdown_service.dart';
 import 'settings_service.dart';
 
-/// Pushes the currently-active event's countdown data into the shared
-/// storage that the native Android AppWidgetProvider reads.
 class WidgetService {
   WidgetService._();
   static const String androidWidgetName = 'EventCountdownWidgetProvider';
@@ -24,16 +23,29 @@ class WidgetService {
   static const _kIsUrgent = 'widget_is_urgent';
 
   static Future<void> refreshWidget() async {
-    final events = await DatabaseHelper.instance.getAllEventsSorted();
+    final rawEvents = await DatabaseHelper.instance.getAllEventsSorted();
     final now = DateTime.now();
-    final active = CountdownService.getActiveEvent(events, now);
+
+    // EXPAND recurring events for widget
+    final expanded = RecurrenceService.expandEvents(rawEvents, now);
 
     final smart = await SettingsService.instance.getSmartFormatEnabled();
     final theme = await SettingsService.instance.getSelectedTheme();
     final bgType = await SettingsService.instance.getWidgetBackgroundType();
     final imagePath = await SettingsService.instance.getWidgetImagePath();
-    final progressBarEnabled = await SettingsService.instance.getWidgetProgressBar();
-    final pulseEnabled = await SettingsService.instance.getWidgetPulseAnimation();
+    final progressBarEnabled =
+        await SettingsService.instance.getWidgetProgressBar();
+    final pulseEnabled =
+        await SettingsService.instance.getWidgetPulseAnimation();
+
+    // Find first active event from expanded list
+    Event? active;
+    for (final e in expanded) {
+      if (e.finalMillis > now.millisecondsSinceEpoch) {
+        active = e;
+        break;
+      }
+    }
 
     String title;
     String countdownText;
@@ -53,23 +65,18 @@ class WidgetService {
 
       if (progressBarEnabled) {
         final start = active.startTimeMillis ?? active.dateMillis;
-        final deadline = active.deadlineMillis ?? active.startTimeMillis ?? active.dateMillis;
+        final deadline =
+            active.deadlineMillis ?? active.startTimeMillis ?? active.dateMillis;
 
         if (deadline > start) {
           final total = deadline - start;
           final elapsed = now.millisecondsSinceEpoch - start;
           progressPercent = ((elapsed / total) * 100).clamp(0, 100).toInt();
-        } else if (active.dateMillis > 0) {
-          final total = active.dateMillis - now.millisecondsSinceEpoch;
-          if (total > 0) {
-            progressPercent = 0;
-          } else {
-            progressPercent = 100;
-          }
         }
       }
 
-      final target = active.deadlineMillis ?? active.startTimeMillis ?? active.dateMillis;
+      final target =
+          active.deadlineMillis ?? active.startTimeMillis ?? active.dateMillis;
       final diff = Duration(milliseconds: target - now.millisecondsSinceEpoch);
       isUrgent = diff.inHours < 24 && !diff.isNegative;
     }
@@ -84,13 +91,9 @@ class WidgetService {
       bgType == WidgetBackgroundType.customImage ? 'image' : 'theme',
     );
     await HomeWidget.saveWidgetData<String>(
-      _kBgColor,
-      themeColor.value.toString(),
-    );
+        _kBgColor, themeColor.value.toString());
     await HomeWidget.saveWidgetData<String>(
-      _kTextColor,
-      textColor.value.toString(),
-    );
+        _kTextColor, textColor.value.toString());
     if (imagePath != null && bgType == WidgetBackgroundType.customImage) {
       await HomeWidget.saveWidgetData<String>(_kImagePath, imagePath);
     } else {
