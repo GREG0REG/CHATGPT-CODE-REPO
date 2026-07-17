@@ -1,6 +1,5 @@
 import '../models/event.dart';
 
-/// Which phase of its lifecycle an event is currently in.
 enum CountdownPhase {
   beforeStart,
   active,
@@ -14,11 +13,9 @@ class CountdownResult {
   const CountdownResult(this.phase, this.text);
 }
 
-/// Pure logic, no Flutter/UI dependencies.
 class CountdownService {
   CountdownService._();
 
-  /// Returns the first event that is not yet fully passed.
   static Event? getActiveEvent(List<Event> sortedEvents, DateTime now) {
     final nowMillis = now.millisecondsSinceEpoch;
     for (final e in sortedEvents) {
@@ -77,8 +74,6 @@ class CountdownService {
     }
   }
 
-  // ---- PHASE 1 formatting ----
-
   static String _smartBeforeStart(Duration diff) {
     if (diff.isNegative) return 'Completed';
     if (diff.inHours >= 24) {
@@ -110,8 +105,6 @@ class CountdownService {
       return '$minutes ${_unit(minutes, 'minute')} left';
     }
   }
-
-  // ---- PHASE 2 formatting ----
 
   static String _smartLeft(Duration diff) {
     if (diff.isNegative) return 'Completed';
