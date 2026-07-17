@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../db/database_helper.dart';
+import '../database_helper.dart';
 import '../main.dart';
 import '../models/notification_history.dart';
 import '../services/battery_service.dart';
