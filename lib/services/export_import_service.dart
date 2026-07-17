@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
-import '../db/database_helper.dart';
+import '../database_helper.dart';
 import '../models/event.dart';
 
 /// Exports/imports events to/from a local JSON file. Purely local - no
