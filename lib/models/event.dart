@@ -1,224 +1,237 @@
-import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
 
-/// A single countdown event.
-class Event {
-  final int? id;
-  final String title;
-  final int dateMillis;
-  final int? startTimeMillis;
-  final int? deadlineMillis;
-  final String? notes;
-  final RecurrenceType recurrence;
-  final int recurrenceInterval; // 1-30 days, 1-12 weeks, etc.
-  final String? specificDates; // comma-separated millis for yearly specific dates
+import '../models/custom_reminder.dart';
+import '../models/event.dart';
+import '../models/notification_history.dart';
 
-  Event({
-    this.id,
-    required this.title,
-    required this.dateMillis,
-    this.startTimeMillis,
-    this.deadlineMillis,
-    this.notes,
-    this.recurrence = RecurrenceType.none,
-    this.recurrenceInterval = 1,
-    this.specificDates,
-  });
+class DatabaseHelper {
+  DatabaseHelper._internal();
+  static final DatabaseHelper instance = DatabaseHelper._internal();
 
-  int get primarySortMillis {
-    if (startTimeMillis != null) return startTimeMillis!;
-    if (deadlineMillis != null) return deadlineMillis!;
-    return dateMillis;
+  static Database? _database;
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
   }
 
-  int get finalMillis {
-    if (deadlineMillis != null) return deadlineMillis!;
-    if (startTimeMillis != null) return startTimeMillis!;
-    return dateMillis;
-  }
-
-  Color getUrgencyColor(DateTime now) {
-    final nowMillis = now.millisecondsSinceEpoch;
-    final target = deadlineMillis ?? startTimeMillis ?? dateMillis;
-    final diff = Duration(milliseconds: target - nowMillis);
-
-    if (diff.isNegative || diff.inDays < 0) {
-      return Colors.grey;
-    } else if (diff.inDays > 7) {
-      return Colors.green;
-    } else if (diff.inDays >= 3) {
-      return Colors.orange;
-    } else {
-      return Colors.red;
-    }
-  }
-
-  String getCountdownText(DateTime now, {required bool smartFormatEnabled}) {
-    final diff = Duration(
-      milliseconds: (deadlineMillis ?? startTimeMillis ?? dateMillis) - now.millisecondsSinceEpoch,
-    );
-
-    if (diff.isNegative) return 'Completed';
-
-    if (diff.inHours >= 24) {
-      final days = diff.inDays;
-      return '$days day${days == 1 ? '' : 's'} left';
-    } else if (diff.inMinutes >= 60) {
-      final hours = diff.inHours;
-      return '$hours hour${hours == 1 ? '' : 's'} left';
-    } else {
-      final minutes = diff.inMinutes < 1 ? 1 : diff.inMinutes;
-      return '$minutes minute${minutes == 1 ? '' : 's'} left';
-    }
-  }
-
-  bool get isRecurring => recurrence != RecurrenceType.none;
-
-  bool get isYearlySpecificDates => recurrence == RecurrenceType.yearly && specificDates != null && specificDates!.isNotEmpty;
-
-  /// Returns the next specific date from the list that is in the future.
-  int? _nextSpecificDate(DateTime now) {
-    if (specificDates == null || specificDates!.isEmpty) return null;
-    final nowMillis = now.millisecondsSinceEpoch;
-    final dates = specificDates!.split(',').map(int.parse).toList()..sort();
-    for (final d in dates) {
-      if (d > nowMillis) return d;
-    }
-    // All passed, return first date of next year
-    return null;
-  }
-
-  /// Generates the next occurrence of this event.
-  Event? generateNextOccurrence() {
-    if (!isRecurring) return null;
-
-    final base = DateTime.fromMillisecondsSinceEpoch(dateMillis);
-    DateTime nextDate;
-
-    switch (recurrence) {
-      case RecurrenceType.daily:
-        nextDate = base.add(Duration(days: recurrenceInterval));
-        break;
-      case RecurrenceType.weekly:
-        nextDate = base.add(Duration(days: recurrenceInterval * 7));
-        break;
-      case RecurrenceType.monthly:
-        nextDate = DateTime(base.year, base.month + recurrenceInterval, base.day);
-        // Handle month-end overflow
-        if (nextDate.day != base.day) {
-          nextDate = DateTime(base.year, base.month + recurrenceInterval + 1, 0);
+  Future<Database> _initDatabase() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, 'event_countdown.db');
+    return openDatabase(
+      path,
+      version: 3,
+      onCreate: (db, version) async {
+        await _createV1Tables(db);
+        await _createV2Tables(db);
+        await _createV3Tables(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await _upgradeToV2(db);
         }
-        break;
-      case RecurrenceType.yearly:
-        if (isYearlySpecificDates) {
-          final nextSpecific = _nextSpecificDate(DateTime.now());
-          if (nextSpecific != null) {
-            nextDate = DateTime.fromMillisecondsSinceEpoch(nextSpecific);
-          } else {
-            // All specific dates passed for this year, move to next year
-            final firstDate = DateTime.fromMillisecondsSinceEpoch(
-              int.parse(specificDates!.split(',').first),
-            );
-            nextDate = DateTime(firstDate.year + 1, firstDate.month, firstDate.day);
-          }
-        } else {
-          nextDate = DateTime(base.year + recurrenceInterval, base.month, base.day);
-          if (nextDate.month != base.month) {
-            nextDate = DateTime(base.year + recurrenceInterval, base.month + 1, 0);
-          }
+        if (oldVersion < 3) {
+          await _upgradeToV3(db);
         }
-        break;
-      case RecurrenceType.none:
-        return null;
-    }
-
-    int? nextStart;
-    if (startTimeMillis != null) {
-      final start = DateTime.fromMillisecondsSinceEpoch(startTimeMillis!);
-      final diff = start.difference(base);
-      nextStart = nextDate.add(diff).millisecondsSinceEpoch;
-    }
-
-    int? nextDeadline;
-    if (deadlineMillis != null) {
-      final deadline = DateTime.fromMillisecondsSinceEpoch(deadlineMillis!);
-      final diff = deadline.difference(base);
-      nextDeadline = nextDate.add(diff).millisecondsSinceEpoch;
-    }
-
-    return Event(
-      title: title,
-      dateMillis: nextDate.millisecondsSinceEpoch,
-      startTimeMillis: nextStart,
-      deadlineMillis: nextDeadline,
-      notes: notes,
-      recurrence: recurrence,
-      recurrenceInterval: recurrenceInterval,
-      specificDates: specificDates,
+      },
     );
   }
 
-  Event copyWith({
-    int? id,
-    String? title,
-    int? dateMillis,
-    int? startTimeMillis,
-    bool clearStartTime = false,
-    int? deadlineMillis,
-    bool clearDeadline = false,
-    String? notes,
-    RecurrenceType? recurrence,
-    int? recurrenceInterval,
-    String? specificDates,
-    bool clearSpecificDates = false,
-  }) {
-    return Event(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      dateMillis: dateMillis ?? this.dateMillis,
-      startTimeMillis:
-          clearStartTime ? null : (startTimeMillis ?? this.startTimeMillis),
-      deadlineMillis:
-          clearDeadline ? null : (deadlineMillis ?? this.deadlineMillis),
-      notes: notes ?? this.notes,
-      recurrence: recurrence ?? this.recurrence,
-      recurrenceInterval: recurrenceInterval ?? this.recurrenceInterval,
-      specificDates: clearSpecificDates ? null : (specificDates ?? this.specificDates),
+  Future<void> _createV1Tables(Database db) async {
+    await db.execute('''
+      CREATE TABLE events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        dateMillis INTEGER NOT NULL,
+        startTimeMillis INTEGER,
+        deadlineMillis INTEGER,
+        notes TEXT
+      )
+    ''');
+  }
+
+  Future<void> _createV2Tables(Database db) async {
+    await db.execute('''
+      ALTER TABLE events ADD COLUMN recurrence TEXT DEFAULT 'none'
+    ''');
+
+    await db.execute('''
+      CREATE TABLE custom_reminders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eventId INTEGER NOT NULL,
+        minutesBefore INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        soundUri TEXT,
+        isEnabled INTEGER NOT NULL DEFAULT 1,
+        FOREIGN KEY (eventId) REFERENCES events(id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE notification_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eventId INTEGER,
+        eventTitle TEXT NOT NULL,
+        reminderType TEXT NOT NULL,
+        sentAtMillis INTEGER NOT NULL,
+        wasSnoozed INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+  }
+
+  Future<void> _upgradeToV2(Database db) async {
+    await db.execute('''
+      ALTER TABLE events ADD COLUMN recurrence TEXT DEFAULT 'none'
+    ''');
+
+    await db.execute('''
+      CREATE TABLE custom_reminders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eventId INTEGER NOT NULL,
+        minutesBefore INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        soundUri TEXT,
+        isEnabled INTEGER NOT NULL DEFAULT 1,
+        FOREIGN KEY (eventId) REFERENCES events(id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE notification_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eventId INTEGER,
+        eventTitle TEXT NOT NULL,
+        reminderType TEXT NOT NULL,
+        sentAtMillis INTEGER NOT NULL,
+        wasSnoozed INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+  }
+
+  // ============================================
+  // v3: Recurrence interval + specific dates
+  // ============================================
+  Future<void> _createV3Tables(Database db) async {
+    await db.execute('''
+      ALTER TABLE events ADD COLUMN recurrenceInterval INTEGER DEFAULT 1
+    ''');
+    await db.execute('''
+      ALTER TABLE events ADD COLUMN specificDates TEXT
+    ''');
+  }
+
+  Future<void> _upgradeToV3(Database db) async {
+    await db.execute('''
+      ALTER TABLE events ADD COLUMN recurrenceInterval INTEGER DEFAULT 1
+    ''');
+    await db.execute('''
+      ALTER TABLE events ADD COLUMN specificDates TEXT
+    ''');
+  }
+
+  Future<int> insertEvent(Event event) async {
+    final db = await database;
+    return db.insert('events', event.toMap()..remove('id'));
+  }
+
+  Future<int> updateEvent(Event event) async {
+    final db = await database;
+    return db.update(
+      'events',
+      event.toMap(),
+      where: 'id = ?',
+      whereArgs: [event.id],
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'title': title,
-      'dateMillis': dateMillis,
-      'startTimeMillis': startTimeMillis,
-      'deadlineMillis': deadlineMillis,
-      'notes': notes,
-      'recurrence': recurrence.name,
-      'recurrenceInterval': recurrenceInterval,
-      'specificDates': specificDates,
-    };
+  Future<int> deleteEvent(int id) async {
+    final db = await database;
+    return db.delete('events', where: 'id = ?', whereArgs: [id]);
   }
 
-  factory Event.fromMap(Map<String, dynamic> map) {
-    return Event(
-      id: map['id'] as int?,
-      title: map['title'] as String,
-      dateMillis: map['dateMillis'] as int,
-      startTimeMillis: map['startTimeMillis'] as int?,
-      deadlineMillis: map['deadlineMillis'] as int?,
-      notes: map['notes'] as String?,
-      recurrence: RecurrenceType.values.byName(
-        (map['recurrence'] as String?) ?? 'none',
-      ),
-      recurrenceInterval: map['recurrenceInterval'] as int? ?? 1,
-      specificDates: map['specificDates'] as String?,
+  Future<List<Event>> getAllEventsSorted() async {
+    final db = await database;
+    final rows = await db.query('events', orderBy: 'dateMillis ASC');
+    return rows.map((r) => Event.fromMap(r)).toList();
+  }
+
+  Future<Event?> getEvent(int id) async {
+    final db = await database;
+    final rows = await db.query('events', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return Event.fromMap(rows.first);
+  }
+
+  Future<void> replaceAllEvents(List<Event> events) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('events');
+      for (final e in events) {
+        await txn.insert('events', e.toMap()..remove('id'));
+      }
+    });
+  }
+
+  Future<int> insertCustomReminder(CustomReminder reminder) async {
+    final db = await database;
+    return db.insert('custom_reminders', reminder.toMap()..remove('id'));
+  }
+
+  Future<int> updateCustomReminder(CustomReminder reminder) async {
+    final db = await database;
+    return db.update(
+      'custom_reminders',
+      reminder.toMap(),
+      where: 'id = ?',
+      whereArgs: [reminder.id],
     );
   }
 
-  Map<String, dynamic> toJson() => toMap();
+  Future<int> deleteCustomReminder(int id) async {
+    final db = await database;
+    return db.delete('custom_reminders', where: 'id = ?', whereArgs: [id]);
+  }
 
-  factory Event.fromJson(Map<String, dynamic> json) => Event.fromMap(json);
+  Future<List<CustomReminder>> getCustomRemindersForEvent(int eventId) async {
+    final db = await database;
+    final rows = await db.query(
+      'custom_reminders',
+      where: 'eventId = ?',
+      whereArgs: [eventId],
+      orderBy: 'minutesBefore DESC',
+    );
+    return rows.map((r) => CustomReminder.fromMap(r)).toList();
+  }
+
+  Future<void> deleteCustomRemindersForEvent(int eventId) async {
+    final db = await database;
+    await db.delete('custom_reminders', where: 'eventId = ?', whereArgs: [eventId]);
+  }
+
+  Future<int> insertNotificationHistory(NotificationHistory entry) async {
+    final db = await database;
+    return db.insert('notification_history', entry.toMap()..remove('id'));
+  }
+
+  Future<List<NotificationHistory>> getNotificationHistory({int limit = 50}) async {
+    final db = await database;
+    final rows = await db.query(
+      'notification_history',
+      orderBy: 'sentAtMillis DESC',
+      limit: limit,
+    );
+    return rows.map((r) => NotificationHistory.fromMap(r)).toList();
+  }
+
+  Future<void> clearNotificationHistory() async {
+    final db = await database;
+    await db.delete('notification_history');
+  }
+
+  Future<void> vacuum() async {
+    final db = await database;
+    await db.execute('VACUUM');
+  }
 }
-
-enum RecurrenceType { none, daily, weekly, monthly, yearly }
