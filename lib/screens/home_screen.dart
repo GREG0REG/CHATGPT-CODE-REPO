@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
 import '../database_helper.dart';
 import '../models/event.dart';
 import '../services/notification_service.dart';
@@ -33,9 +31,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _loadAll();
+    // OPTIMIZED: Only rebuild UI every 60s, don't query database
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 60),
-      (_) => _loadEventsOnly(),
+      (_) {
+        if (mounted) setState(() {});
+      },
     );
   }
 
@@ -53,7 +54,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 60),
-      (_) => _loadEventsOnly(),
+      (_) {
+        if (mounted) setState(() {});
+      },
     );
     _loadEventsOnly();
   }
@@ -68,10 +71,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final now = DateTime.now();
     final smart = await SettingsService.instance.getSmartFormatEnabled();
     final use24 = await SettingsService.instance.getUse24HourFormat();
-
     final expanded = RecurrenceService.expandEvents(rawEvents, now);
 
     if (!mounted) return;
+
     setState(() {
       _events = expanded;
       _smartFormat = smart;
@@ -101,7 +104,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Recurring Event'),
-            content: const Text('This is a recurring event. What would you like to edit?'),
+            content:
+                const Text('This is a recurring event. What would you like to edit?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, _EditChoice.series),
@@ -114,7 +118,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ],
           ),
         );
+
         if (choice == null) return;
+
         if (choice == _EditChoice.series) {
           eventToEdit = parent;
         } else {
@@ -129,8 +135,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => AddEditEventScreen(existing: eventToEdit)),
+      MaterialPageRoute(
+          builder: (_) => AddEditEventScreen(existing: eventToEdit)),
     );
+
     if (result == true) await _loadAll();
   }
 
@@ -161,14 +169,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
       );
+
       if (choice == null) return;
 
       HapticFeedback.mediumImpact();
 
       if (choice == _DeleteChoice.series) {
         setState(() {
-          _events.removeWhere((e) => e.id == event.id ||
-            (e.id != null && e.id! < 0 && -e.id! == parentId));
+          _events.removeWhere((e) =>
+              e.id == event.id ||
+              (e.id != null && e.id! < 0 && -e.id! == parentId));
         });
         await DatabaseHelper.instance.deleteEvent(parentId);
         await NotificationService.instance.cancelForEvent(parentId);
@@ -177,11 +187,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         excluded.add(event.dateMillis);
         final updated = parent.copyWith(excludedDatesJson: jsonEncode(excluded));
         await DatabaseHelper.instance.updateEvent(updated);
+
         setState(() {
           _events.removeWhere((e) =>
-            e.id == event.id || (e.id != null && e.id! < 0 && e.dateMillis == event.dateMillis));
+              e.id == event.id ||
+              (e.id != null && e.id! < 0 && e.dateMillis == event.dateMillis));
         });
       }
+
       await WidgetService.refreshWidget();
       return;
     }
@@ -192,14 +205,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         title: const Text('Delete event?'),
         content: Text('Delete "${event.title}"? This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete')),
         ],
       ),
     );
+
     if (confirm != true) return;
 
     HapticFeedback.mediumImpact();
+
     if (event.id != null) {
       setState(() => _events.removeWhere((e) => e.id == event.id));
       await DatabaseHelper.instance.deleteEvent(event.id!);
@@ -258,9 +277,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
+              await Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
               await _loadAll();
             },
           ),
@@ -277,10 +295,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     itemBuilder: (context, index) {
                       final group = groups[index];
                       final isRecurringParent = group.parent.isRecurring &&
-                          group.parent.id != null && group.parent.id! > 0;
+                          group.parent.id != null &&
+                          group.parent.id! > 0;
                       final hasChildren = group.children.isNotEmpty;
-                      final isExpanded = isRecurringParent &&
-                          _expandedParents.contains(group.parent.id);
+                      final isExpanded =
+                          isRecurringParent && _expandedParents.contains(group.parent.id);
 
                       return EventCard(
                         key: ValueKey('parent_${group.parent.id}'),
@@ -289,11 +308,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         use24HourFormat: _use24Hour,
                         onTap: () => _openAddEdit(existing: group.parent),
                         onDelete: () => _deleteEvent(group.parent),
-                        // FIX: Always pass children so the expand arrow is visible when collapsed.
                         childOccurrences: group.children,
-                        onExpandToggle: hasChildren
-                            ? () => _toggleExpand(group.parent.id!)
-                            : null,
+                        onExpandToggle:
+                            hasChildren ? () => _toggleExpand(group.parent.id!) : null,
                         isExpanded: isExpanded,
                       );
                     },
@@ -313,16 +330,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.calendar_today_outlined, size: 64,
-              color: Theme.of(context).colorScheme.outline),
+            Icon(
+              Icons.calendar_today_outlined,
+              size: 64,
+              color: Theme.of(context).colorScheme.outline,
+            ),
             const SizedBox(height: 16),
-            Text('No events yet!', textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface)),
+            Text(
+              'No events yet!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
             const SizedBox(height: 8),
-            Text('Tap + to add your first event.', textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16,
-                color: Theme.of(context).colorScheme.outline)),
+            Text(
+              'Tap + to add your first event.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
           ],
         ),
       ),
@@ -331,10 +362,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 }
 
 enum _EditChoice { series, occurrence }
+
 enum _DeleteChoice { series, skip }
 
 class _EventGroup {
   final Event parent;
   final List<Event> children;
+
   _EventGroup({required this.parent, required this.children});
 }
