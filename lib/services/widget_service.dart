@@ -1,5 +1,6 @@
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database_helper.dart';
@@ -17,6 +18,8 @@ class WidgetService {
   static const _kCountdown = 'countdown_text';
   static const _kBgColor = 'widget_bg_color';
   static const _kTextColor = 'widget_text_color';
+  
+  static const MethodChannel _channel = MethodChannel('com.example.event_countdown/widget');
 
   static Future<void> refreshWidget() async {
     developer.log('WIDGET: Starting refreshWidget()', name: 'WidgetService');
@@ -33,7 +36,6 @@ class WidgetService {
 
     Event? active;
     for (final e in expanded) {
-      developer.log('WIDGET: Checking event ${e.title} finalMillis=${e.finalMillis} now=${now.millisecondsSinceEpoch}', name: 'WidgetService');
       if (e.finalMillis > now.millisecondsSinceEpoch) {
         active = e;
         developer.log('WIDGET: Found active event: ${e.title}', name: 'WidgetService');
@@ -69,9 +71,13 @@ class WidgetService {
     
     developer.log('WIDGET: Saved to SharedPreferences', name: 'WidgetService');
 
-    // Verify save
-    final verifyTitle = prefs.getString(_kTitle);
-    developer.log('WIDGET: Verified title in prefs: $verifyTitle', name: 'WidgetService');
+    // Force widget update via platform channel
+    try {
+      await _channel.invokeMethod('updateWidget');
+      developer.log('WIDGET: Platform channel update triggered', name: 'WidgetService');
+    } catch (e) {
+      developer.log('WIDGET: Platform channel failed: $e', name: 'WidgetService');
+    }
   }
 
   static Future<void> registerInteractivityCallback() async {}
