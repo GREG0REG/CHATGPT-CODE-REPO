@@ -14,13 +14,8 @@ class WidgetService {
 
   static const _kTitle = 'event_title';
   static const _kCountdown = 'countdown_text';
-  static const _kBgType = 'widget_bg_type';
   static const _kBgColor = 'widget_bg_color';
   static const _kTextColor = 'widget_text_color';
-  static const _kImagePath = 'widget_image_path';
-  static const _kProgressPercent = 'widget_progress_percent';
-  static const _kPulseEnabled = 'widget_pulse_enabled';
-  static const _kIsUrgent = 'widget_is_urgent';
 
   static Future<void> refreshWidget() async {
     final rawEvents = await DatabaseHelper.instance.getAllEventsSorted();
@@ -30,11 +25,6 @@ class WidgetService {
 
     final smart = await SettingsService.instance.getSmartFormatEnabled();
     final theme = await SettingsService.instance.getSelectedTheme();
-    final bgType = await SettingsService.instance.getWidgetBackgroundType();
-    final progressBarEnabled =
-        await SettingsService.instance.getWidgetProgressBar();
-    final pulseEnabled =
-        await SettingsService.instance.getWidgetPulseAnimation();
 
     Event? active;
     for (final e in expanded) {
@@ -46,8 +36,6 @@ class WidgetService {
 
     String title;
     String countdownText;
-    int progressPercent = -1;
-    bool isUrgent = false;
 
     if (active == null) {
       title = 'No upcoming events';
@@ -59,23 +47,6 @@ class WidgetService {
         now,
         smartFormatEnabled: smart,
       ).text;
-
-      if (progressBarEnabled) {
-        final start = active.startTimeMillis ?? active.dateMillis;
-        final deadline =
-            active.deadlineMillis ?? active.startTimeMillis ?? active.dateMillis;
-
-        if (deadline > start) {
-          final total = deadline - start;
-          final elapsed = now.millisecondsSinceEpoch - start;
-          progressPercent = ((elapsed / total) * 100).clamp(0, 100).toInt();
-        }
-      }
-
-      final target =
-          active.deadlineMillis ?? active.startTimeMillis ?? active.dateMillis;
-      final diff = Duration(milliseconds: target - now.millisecondsSinceEpoch);
-      isUrgent = diff.inHours < 24 && !diff.isNegative;
     }
 
     final themeColor = AppThemes.colorFor(theme);
@@ -84,20 +55,9 @@ class WidgetService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kTitle, title);
     await prefs.setString(_kCountdown, countdownText);
-    await prefs.setString(_kBgType,
-        bgType == WidgetBackgroundType.customImage ? 'image' : 'theme');
     await prefs.setString(_kBgColor, themeColor.value.toString());
     await prefs.setString(_kTextColor, textColor.value.toString());
-    await prefs.setString(_kImagePath, '');
-    await prefs.setInt(_kProgressPercent, progressPercent);
-    await prefs.setBool(_kPulseEnabled, pulseEnabled);
-    await prefs.setBool(_kIsUrgent, isUrgent);
-
-    // Note: Widget will update on next system refresh or when user adds it
-    // For immediate update, we'd need a platform channel - not critical
   }
 
-  static Future<void> registerInteractivityCallback() async {
-    // No-op
-  }
+  static Future<void> registerInteractivityCallback() async {}
 }
