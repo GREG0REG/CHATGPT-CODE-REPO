@@ -88,14 +88,9 @@ class EventCountdownAppState extends State<EventCountdownApp>
   // FIXED: Use lifecycle callbacks instead of accessing private _HomeScreenState
   // ============================================
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
-      HomeScreenLifecycleCallbacks.onPause?.call();
-    } else if (state == AppLifecycleState.resumed) {
-      HomeScreenLifecycleCallbacks.onResume?.call();
-    }
-  }
+void didChangeAppLifecycleState(AppLifecycleState state) {
+  // Timer auto-handles itself - no manual pause/resume needed
+}
 
   Future<void> _loadAllSettings() async {
     final theme = await SettingsService.instance.getSelectedTheme();
