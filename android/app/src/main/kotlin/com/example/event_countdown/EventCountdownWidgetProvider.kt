@@ -21,8 +21,8 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
     companion object {
         const val DEFAULT_COLOR = -0x1
         
-        // SharedPreferences keys (must match home_widget package keys)
-        private const val PREFS_NAME = "home_widget_prefs"
+        // Flutter shared_preferences uses this exact name
+        private const val PREFS_NAME = "FlutterSharedPreferences"
         private const val KEY_TITLE = "event_title"
         private const val KEY_COUNTDOWN = "countdown_text"
         private const val KEY_BG_TYPE = "widget_bg_type"
@@ -130,7 +130,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         views.setTextViewText(R.id.widget_title, title)
         views.setTextViewText(R.id.widget_countdown, countdown)
         
-        // Progress bar - show/hide only, don't manipulate width via RemoteViews
+        // Progress bar
         if (progressPercent >= 0) {
             views.setViewVisibility(R.id.widget_progress_container, View.VISIBLE)
             views.setTextViewText(R.id.widget_progress_text, "$progressPercent%")
