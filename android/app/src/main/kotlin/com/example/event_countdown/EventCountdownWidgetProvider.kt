@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.widget.RemoteViews
 
@@ -37,28 +38,40 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         val textColorStr = prefs.getString(KEY_TEXT_COLOR, null)
         
         for (widgetId in appWidgetIds) {
-            val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
-            
-            views.setTextViewText(R.id.widget_title, title)
-            views.setTextViewText(R.id.widget_countdown, countdown)
-            
-            val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#2196F3"))
-            val textColor = parseColorOrDefault(textColorStr, Color.WHITE)
-            
-            views.setInt(R.id.widget_root, "setBackgroundColor", themeColor)
-            views.setTextColor(R.id.widget_title, textColor)
-            views.setTextColor(R.id.widget_countdown, textColor)
-            
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            val pendingIntent = PendingIntent.getActivity(
-                context,
-                0,
-                launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
-            
-            appWidgetManager.updateAppWidget(widgetId, views)
+            updateWidget(context, appWidgetManager, widgetId, title, countdown, bgColorStr, textColorStr)
         }
+    }
+
+    private fun updateWidget(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        widgetId: Int,
+        title: String,
+        countdown: String,
+        bgColorStr: String?,
+        textColorStr: String?
+    ) {
+        val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
+        
+        views.setTextViewText(R.id.widget_title, title)
+        views.setTextViewText(R.id.widget_countdown, countdown)
+        
+        val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#2196F3"))
+        val textColor = parseColorOrDefault(textColorStr, Color.WHITE)
+        
+        views.setInt(R.id.widget_root, "setBackgroundColor", themeColor)
+        views.setTextColor(R.id.widget_title, textColor)
+        views.setTextColor(R.id.widget_countdown, textColor)
+        
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+        
+        appWidgetManager.updateAppWidget(widgetId, views)
     }
 }
