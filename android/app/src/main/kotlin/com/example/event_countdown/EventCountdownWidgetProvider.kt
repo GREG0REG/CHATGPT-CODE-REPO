@@ -12,6 +12,7 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
+import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetProvider
 import java.io.File
@@ -30,11 +31,11 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
         }
 
         fun buildGradientBackground(color: Int): Bitmap {
-            val width = 400
-            val height = 200
+            val width = 800
+            val height = 300
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
-            val darkerColor = darkenColor(color, 0.7f)
+            val darkerColor = darkenColor(color, 0.6f)
             val gradient = LinearGradient(
                 0f, 0f, width.toFloat(), height.toFloat(),
                 color, darkerColor,
@@ -62,6 +63,16 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
             val b = (Color.blue(color) * factor).toInt().coerceIn(0, 255)
             return Color.argb(a, r, g, b)
         }
+
+        // Get urgency color based on days remaining
+        private fun getUrgencyColor(daysRemaining: Int): Int {
+            return when {
+                daysRemaining < 0 -> Color.parseColor("#9E9E9E") // Grey - passed
+                daysRemaining <= 2 -> Color.parseColor("#F44336") // Red - urgent
+                daysRemaining <= 7 -> Color.parseColor("#FF9800") // Orange - warning
+                else -> Color.parseColor("#4CAF50") // Green - safe
+            }
+        }
     }
 
     override fun onUpdate(
@@ -83,22 +94,38 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
             val pulseEnabled = widgetData.getBoolean("widget_pulse_enabled", false)
             val isUrgent = widgetData.getBoolean("widget_is_urgent", false)
 
+            // Set title and countdown
             views.setTextViewText(R.id.widget_title, title)
             views.setTextViewText(R.id.widget_countdown, countdown)
 
+            // Calculate urgency color for accent bar
+            val urgencyColor = if (countdown.contains("Completed") || countdown.isEmpty()) {
+                Color.parseColor("#9E9E9E")
+            } else {
+                // Extract days from countdown text like "3 days left" or "1 hour left"
+                val daysMatch = Regex("(\\d+)\\s+day").find(countdown)
+                val days = daysMatch?.groupValues?.get(1)?.toIntOrNull() ?: 
+                    if (countdown.contains("hour") || countdown.contains("minute")) 0 else 30
+                getUrgencyColor(days)
+            }
+            views.setInt(R.id.widget_urgency_bar, "setBackgroundColor", urgencyColor)
+
             // Progress bar
             if (progressPercent >= 0) {
-                views.setViewVisibility(R.id.widget_progress_container, android.view.View.VISIBLE)
+                views.setViewVisibility(R.id.widget_progress_container, View.VISIBLE)
                 views.setTextViewText(R.id.widget_progress_text, "$progressPercent%")
+                // Set progress fill width via layout params not directly possible in RemoteViews
+                // We use a workaround: set the fill view's width by creating a bitmap
+                // For simplicity, we'll just show the percentage text
             } else {
-                views.setViewVisibility(R.id.widget_progress_container, android.view.View.GONE)
+                views.setViewVisibility(R.id.widget_progress_container, View.GONE)
             }
 
             // Pulse overlay
             if (pulseEnabled && isUrgent) {
-                views.setViewVisibility(R.id.widget_pulse_overlay, android.view.View.VISIBLE)
+                views.setViewVisibility(R.id.widget_pulse_overlay, View.VISIBLE)
             } else {
-                views.setViewVisibility(R.id.widget_pulse_overlay, android.view.View.GONE)
+                views.setViewVisibility(R.id.widget_pulse_overlay, View.GONE)
             }
 
             val useImage = bgType == "image" && !imagePath.isNullOrEmpty() && File(imagePath).exists()
@@ -107,9 +134,11 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
                 val bitmap = buildImageBackground(imagePath!!)
                 if (bitmap != null) {
                     views.setImageViewBitmap(R.id.widget_background, bitmap)
+                    views.setViewVisibility(R.id.widget_dark_overlay, View.VISIBLE)
                 } else {
                     val fallbackColor = parseColorOrDefault(bgColorStr, DEFAULT_COLOR)
                     views.setImageViewBitmap(R.id.widget_background, buildGradientBackground(fallbackColor))
+                    views.setViewVisibility(R.id.widget_dark_overlay, View.GONE)
                 }
                 views.setTextColor(R.id.widget_title, Color.WHITE)
                 views.setTextColor(R.id.widget_countdown, Color.WHITE)
@@ -118,6 +147,7 @@ class EventCountdownWidgetProvider : HomeWidgetProvider() {
                 val themeColor = parseColorOrDefault(bgColorStr, DEFAULT_COLOR)
                 val textColor = parseColorOrDefault(textColorStr, Color.WHITE)
                 views.setImageViewBitmap(R.id.widget_background, buildGradientBackground(themeColor))
+                views.setViewVisibility(R.id.widget_dark_overlay, View.GONE)
                 views.setTextColor(R.id.widget_title, textColor)
                 views.setTextColor(R.id.widget_countdown, textColor)
                 views.setTextColor(R.id.widget_progress_text, textColor)
