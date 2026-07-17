@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="#40FFFFFF" />
-</shape>
+<animation-list xmlns:android="http://schemas.android.com/apk/res/android"
+    android:oneshot="false">
+    <item android:drawable="@drawable/widget_pulse_frame_1" android:duration="800"/>
+    <item android:drawable="@drawable/widget_pulse_frame_2" android:duration="800"/>
+</animation-list>
