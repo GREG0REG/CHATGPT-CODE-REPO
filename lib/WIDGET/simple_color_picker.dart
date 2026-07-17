@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
+/// A simple preset-color picker dialog.
+/// Used by SettingsScreen > Custom Color.
 class SimpleColorPickerDialog extends StatefulWidget {
   final Color initialColor;
 
-  const SimpleColorPickerDialog({super.key, required this.initialColor});
+  const SimpleColorPickerDialog({
+    super.key,
+    required this.initialColor,
+  });
 
   @override
   State<SimpleColorPickerDialog> createState() =>
@@ -11,99 +16,81 @@ class SimpleColorPickerDialog extends StatefulWidget {
 }
 
 class _SimpleColorPickerDialogState extends State<SimpleColorPickerDialog> {
-  late Color _selectedColor;
+  late Color _selected;
+
+  static const List<Color> _presets = [
+    Colors.red,
+    Colors.pink,
+    Colors.purple,
+    Colors.deepPurple,
+    Colors.indigo,
+    Colors.blue,
+    Colors.lightBlue,
+    Colors.cyan,
+    Colors.teal,
+    Colors.green,
+    Colors.lightGreen,
+    Colors.lime,
+    Colors.yellow,
+    Colors.amber,
+    Colors.orange,
+    Colors.deepOrange,
+    Colors.brown,
+    Colors.grey,
+    Colors.blueGrey,
+    Colors.black,
+  ];
 
   @override
   void initState() {
     super.initState();
-    _selectedColor = widget.initialColor;
+    _selected = widget.initialColor;
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Pick a Color'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Simple 3x6 grid of common colors
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              Colors.red,
-              Colors.pink,
-              Colors.purple,
-              Colors.deepPurple,
-              Colors.indigo,
-              Colors.blue,
-              Colors.lightBlue,
-              Colors.cyan,
-              Colors.teal,
-              Colors.green,
-              Colors.lightGreen,
-              Colors.lime,
-              Colors.yellow,
-              Colors.amber,
-              Colors.orange,
-              Colors.deepOrange,
-              Colors.brown,
-              Colors.grey,
-            ].map((color) {
-              final isSelected = _selectedColor.value == color.value;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedColor = color),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isSelected ? Colors.white : Colors.transparent,
-                      width: 3,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 20),
-          // Preview
-          Row(
-            children: [
-              const Text('Selected: '),
-              const SizedBox(width: 10),
-              Container(
-                width: 40,
-                height: 40,
+      title: const Text('Pick Custom Color'),
+      content: SizedBox(
+        width: 300,
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          alignment: WrapAlignment.center,
+          children: _presets.map((color) {
+            final isSel = color.value == _selected.value;
+            return InkWell(
+              onTap: () => setState(() => _selected = color),
+              customBorder: const CircleBorder(),
+              child: Container(
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  color: _selectedColor,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey),
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: isSel
+                      ? Border.all(color: Theme.of(context).colorScheme.onSurface, width: 3)
+                      : Border.all(color: Colors.transparent, width: 3),
+                  boxShadow: isSel
+                      ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 6, spreadRadius: 2)]
+                      : null,
                 ),
+                child: isSel
+                    ? const Icon(Icons.check, color: Colors.white, size: 18)
+                    : null,
               ),
-              const SizedBox(width: 10),
-              Text('#${_selectedColor.value.toRadixString(16).substring(2).toUpperCase()}'),
-            ],
-          ),
-        ],
+            );
+          }).toList(),
+        ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _selectedColor),
-          child: const Text('Select'),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _selected),
+          child: const Text('Save'),
         ),
       ],
     );
