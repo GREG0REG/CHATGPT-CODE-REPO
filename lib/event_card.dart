@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../models/event.dart';
-import '../services/countdown_service.dart';
+import 'models/event.dart';
+import 'services/countdown_service.dart';
 
 class EventCard extends StatefulWidget {
   final Event event;
