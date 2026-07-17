@@ -36,7 +36,6 @@ Future<void> main() async {
     isInDebugMode: false,
   );
 
-  // OPTIMIZED: Changed from 30 minutes to 4 hours for battery life
   await Workmanager().registerPeriodicTask(
     kWidgetRefreshTaskName,
     kWidgetRefreshTaskName,
@@ -46,7 +45,13 @@ Future<void> main() async {
   );
 
   await BackupService.registerWeeklyBackup();
-  await WidgetService.refreshWidget();
+  
+  // CRITICAL: Refresh widget with current data
+  try {
+    await WidgetService.refreshWidget();
+  } catch (e) {
+    debugPrint('Widget refresh error: $e');
+  }
 
   runApp(const EventCountdownApp());
 }
@@ -81,7 +86,10 @@ class EventCountdownAppState extends State<EventCountdownApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Timer auto-handles itself
+    if (state == AppLifecycleState.resumed) {
+      // Refresh widget when app comes to foreground
+      WidgetService.refreshWidget();
+    }
   }
 
   Future<void> _loadAllSettings() async {
