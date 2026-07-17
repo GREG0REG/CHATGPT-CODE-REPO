@@ -53,6 +53,7 @@ android {
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        multiDexEnabled true
     }
 
     signingConfigs {
@@ -69,12 +70,62 @@ android {
             signingConfig signingConfigs.release
             
             // ============================================
-            // FIX: Enable shrinking and optimization for smaller APK
+            // OPTIMIZATION: Aggressive code & resource shrinking
             // ============================================
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            
+            // Enable R8 full mode for better optimization
+            crunchPngs true
+            
+            // Compress native libraries
+            packagingOptions {
+                jniLibs {
+                    useLegacyPackaging false
+                }
+            }
         }
+        
+        debug {
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+
+    // ============================================
+    // OPTIMIZATION: Split APKs to reduce size
+    // ============================================
+    splits {
+        // Split by ABI (CPU architecture)
+        abi {
+            enable true
+            reset()
+            include 'armeabi-v7a', 'arm64-v8a', 'x86_64'
+            universalApk true  // Also build universal APK
+        }
+        
+        // Split by screen density
+        density {
+            enable true
+            exclude "ldpi", "tvdpi"
+        }
+        
+        // Split by language
+        language {
+            enable true
+            supportMultipleLanguagesPerApk true
+        }
+    }
+
+    // ============================================
+    // OPTIMIZATION: Remove unused resources
+    // ============================================
+    lint {
+        checkReleaseBuilds true
+        disable 'InvalidPackage'
+        textReport true
+        textOutput "stdout"
     }
 }
 
