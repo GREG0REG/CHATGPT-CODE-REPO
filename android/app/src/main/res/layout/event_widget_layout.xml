@@ -2,57 +2,83 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/widget_background_fallback">
+    android:layout_height="match_parent">
 
-    <!-- Background layer: either a theme-color gradient bitmap or a
-         user-picked gallery image with a baked-in dark overlay. -->
+    <!-- Background layer -->
     <ImageView
         android:id="@+id/widget_background"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:scaleType="centerCrop"
-        android:contentDescription="@null" />
+        android:scaleType="centerCrop" />
 
-    <!-- Pulse animation overlay (visible when urgent) -->
-    <ImageView
+    <!-- Dark overlay for text readability -->
+    <View
+        android:id="@+id/widget_dark_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#40000000" />
+
+    <!-- Left urgency accent bar -->
+    <View
+        android:id="@+id/widget_urgency_bar"
+        android:layout_width="4dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:background="#4CAF50" />
+
+    <!-- Pulse glow overlay (visible when urgent) -->
+    <View
         android:id="@+id/widget_pulse_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@drawable/widget_pulse_animation"
-        android:visibility="gone"
-        android:contentDescription="@null" />
+        android:visibility="gone" />
 
+    <!-- Content container -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:gravity="center_vertical"
-        android:padding="12dp">
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
 
+        <!-- Event title -->
         <TextView
             android:id="@+id/widget_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Event Title"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end"
-            android:textColor="#FFFFFF" />
+            android:textColor="#FFFFFF"
+            android:shadowColor="#80000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="2" />
 
+        <!-- Countdown - LARGE and bold -->
         <TextView
             android:id="@+id/widget_countdown"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Countdown"
-            android:textSize="16sp"
-            android:maxLines="2"
+            android:layout_marginTop="2dp"
+            android:text="3 days left"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:maxLines="1"
             android:ellipsize="end"
-            android:textColor="#FFFFFF" />
+            android:textColor="#FFFFFF"
+            android:shadowColor="#80000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="3" />
 
-        <!-- SESSION 3: Interactive Progress Bar with percentage -->
+        <!-- Progress bar container -->
         <LinearLayout
             android:id="@+id/widget_progress_container"
             android:layout_width="match_parent"
@@ -62,21 +88,25 @@
             android:gravity="center_vertical"
             android:visibility="gone">
 
-            <!-- Progress track background -->
-            <ImageView
-                android:id="@+id/widget_progress_track"
+            <!-- Progress track -->
+            <FrameLayout
                 android:layout_width="0dp"
-                android:layout_height="8dp"
-                android:layout_weight="1"
-                android:background="@drawable/widget_progress_track"
-                android:contentDescription="@null" />
+                android:layout_height="6dp"
+                android:layout_weight="1">
 
-            <!-- Progress fill (bitmap set dynamically) -->
-            <ImageView
-                android:id="@+id/widget_progress_fill"
-                android:layout_width="wrap_content"
-                android:layout_height="8dp"
-                android:contentDescription="@null" />
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="#30FFFFFF"
+                    android:layout_gravity="center" />
+
+                <View
+                    android:id="@+id/widget_progress_fill"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:background="#FFFFFF"
+                    android:layout_gravity="start" />
+            </FrameLayout>
 
             <TextView
                 android:id="@+id/widget_progress_text"
@@ -84,10 +114,13 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:text="0%"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:textStyle="bold"
-                android:textColor="#FFFFFF" />
-
+                android:textColor="#FFFFFF"
+                android:shadowColor="#80000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="2" />
         </LinearLayout>
 
     </LinearLayout>
