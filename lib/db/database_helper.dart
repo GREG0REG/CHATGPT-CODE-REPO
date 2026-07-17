@@ -1,9 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
-import '../models/custom_reminder.dart';
 import '../models/event.dart';
-import '../models/notification_history.dart';
 
 /// Local-only SQLite storage for events. No network, no cloud sync.
 class DatabaseHelper {
@@ -25,94 +23,65 @@ class DatabaseHelper {
       path,
       version: 2,
       onCreate: (db, version) async {
-        await _createV1Tables(db);
-        await _createV2Tables(db);
+        await _createTables(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
-          await _upgradeToV2(db);
+          await _migrateV1ToV2(db);
         }
       },
     );
   }
 
-  Future<void> _createV1Tables(Database db) async {
-    await db.execute('''
+  Future<void> _createTables(Database db) async {
+    await db.execute("""
       CREATE TABLE events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         dateMillis INTEGER NOT NULL,
         startTimeMillis INTEGER,
         deadlineMillis INTEGER,
-        notes TEXT
+        notes TEXT,
+        recurrence INTEGER DEFAULT 0,
+        recurrenceInterval INTEGER DEFAULT 1,
+        yearlyUseSpecificDates INTEGER DEFAULT 0,
+        yearlySpecificDatesJson TEXT,
+        excludedDatesJson TEXT
       )
-    ''');
-  }
-
-  // ============================================
-  // SESSION 4 & 5: v2 tables
-  // ============================================
-  Future<void> _createV2Tables(Database db) async {
-    await db.execute('''
-      ALTER TABLE events ADD COLUMN recurrence TEXT DEFAULT 'none'
-    ''');
-
-    await db.execute('''
+    """);
+    await db.execute("""
       CREATE TABLE custom_reminders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         eventId INTEGER NOT NULL,
         minutesBefore INTEGER NOT NULL,
-        type TEXT NOT NULL,
-        soundUri TEXT,
-        isEnabled INTEGER NOT NULL DEFAULT 1,
-        FOREIGN KEY (eventId) REFERENCES events(id) ON DELETE CASCADE
+        type TEXT DEFAULT 'notification',
+        soundUri TEXT
       )
-    ''');
-
-    await db.execute('''
+    """);
+    await db.execute("""
       CREATE TABLE notification_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        eventId INTEGER,
-        eventTitle TEXT NOT NULL,
-        reminderType TEXT NOT NULL,
-        sentAtMillis INTEGER NOT NULL,
-        wasSnoozed INTEGER NOT NULL DEFAULT 0
-      )
-    ''');
-  }
-
-  Future<void> _upgradeToV2(Database db) async {
-    await db.execute('''
-      ALTER TABLE events ADD COLUMN recurrence TEXT DEFAULT 'none'
-    ''');
-
-    await db.execute('''
-      CREATE TABLE custom_reminders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         eventId INTEGER NOT NULL,
-        minutesBefore INTEGER NOT NULL,
-        type TEXT NOT NULL,
-        soundUri TEXT,
-        isEnabled INTEGER NOT NULL DEFAULT 1,
-        FOREIGN KEY (eventId) REFERENCES events(id) ON DELETE CASCADE
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE notification_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        eventId INTEGER,
         eventTitle TEXT NOT NULL,
         reminderType TEXT NOT NULL,
-        sentAtMillis INTEGER NOT NULL,
-        wasSnoozed INTEGER NOT NULL DEFAULT 0
+        sentAtMillis INTEGER NOT NULL
       )
-    ''');
+    """);
   }
 
-  // ============================================
-  // Existing event methods (preserved)
-  // ============================================
+  Future<void> _migrateV1ToV2(Database db) async {
+    await db.execute(
+        'ALTER TABLE events ADD COLUMN recurrence INTEGER DEFAULT 0');
+    await db.execute(
+        'ALTER TABLE events ADD COLUMN recurrenceInterval INTEGER DEFAULT 1');
+    await db.execute(
+        'ALTER TABLE events ADD COLUMN yearlyUseSpecificDates INTEGER DEFAULT 0');
+    await db.execute(
+        'ALTER TABLE events ADD COLUMN yearlySpecificDatesJson TEXT');
+    await db.execute(
+        'ALTER TABLE events ADD COLUMN excludedDatesJson TEXT');
+  }
+
   Future<int> insertEvent(Event event) async {
     final db = await database;
     return db.insert('events', event.toMap()..remove('id'));
@@ -130,10 +99,10 @@ class DatabaseHelper {
 
   Future<int> deleteEvent(int id) async {
     final db = await database;
+    await db.delete('custom_reminders', where: 'eventId = ?', whereArgs: [id]);
     return db.delete('events', where: 'id = ?', whereArgs: [id]);
   }
 
-  /// Returns all events sorted by date, nearest first.
   Future<List<Event>> getAllEventsSorted() async {
     final db = await database;
     final rows = await db.query('events', orderBy: 'dateMillis ASC');
@@ -147,20 +116,17 @@ class DatabaseHelper {
     return Event.fromMap(rows.first);
   }
 
-  /// Wipes all events and replaces them with [events]. Used for JSON import.
   Future<void> replaceAllEvents(List<Event> events) async {
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete('events');
+      await txn.delete('custom_reminders');
       for (final e in events) {
         await txn.insert('events', e.toMap()..remove('id'));
       }
     });
   }
 
-  // ============================================
-  // SESSION 4: Custom Reminder CRUD
-  // ============================================
   Future<int> insertCustomReminder(CustomReminder reminder) async {
     final db = await database;
     return db.insert('custom_reminders', reminder.toMap()..remove('id'));
@@ -187,25 +153,17 @@ class DatabaseHelper {
       'custom_reminders',
       where: 'eventId = ?',
       whereArgs: [eventId],
-      orderBy: 'minutesBefore DESC',
     );
     return rows.map((r) => CustomReminder.fromMap(r)).toList();
   }
 
-  Future<void> deleteCustomRemindersForEvent(int eventId) async {
+  Future<int> insertNotificationHistory(NotificationHistory history) async {
     final db = await database;
-    await db.delete('custom_reminders', where: 'eventId = ?', whereArgs: [eventId]);
+    return db.insert('notification_history', history.toMap()..remove('id'));
   }
 
-  // ============================================
-  // SESSION 4: Notification History
-  // ============================================
-  Future<int> insertNotificationHistory(NotificationHistory entry) async {
-    final db = await database;
-    return db.insert('notification_history', entry.toMap()..remove('id'));
-  }
-
-  Future<List<NotificationHistory>> getNotificationHistory({int limit = 50}) async {
+  Future<List<NotificationHistory>> getNotificationHistory(
+      {int limit = 20}) async {
     final db = await database;
     final rows = await db.query(
       'notification_history',
@@ -220,9 +178,6 @@ class DatabaseHelper {
     await db.delete('notification_history');
   }
 
-  // ============================================
-  // SESSION 9: Maintenance
-  // ============================================
   Future<void> vacuum() async {
     final db = await database;
     await db.execute('VACUUM');
