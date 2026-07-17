@@ -289,7 +289,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         use24HourFormat: _use24Hour,
                         onTap: () => _openAddEdit(existing: group.parent),
                         onDelete: () => _deleteEvent(group.parent),
-                        childOccurrences: isExpanded ? group.children : null,
+                        // FIX: Always pass children so the expand arrow is visible when collapsed.
+                        childOccurrences: group.children,
                         onExpandToggle: hasChildren
                             ? () => _toggleExpand(group.parent.id!)
                             : null,
