@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 
 /// A single countdown event.
-///
-/// Only ONE of [startTimeMillis] / [deadlineMillis] is required to be set;
-/// an event may have a start time only, a deadline only, or both.
 class Event {
   final int? id;
   final String title;
-  final int dateMillis; // midnight of the event's date (local)
-  final int? startTimeMillis; // full timestamp, or null if not set
-  final int? deadlineMillis; // full timestamp, or null if not set
+  final int dateMillis;
+  final int? startTimeMillis;
+  final int? deadlineMillis;
   final String? notes;
-  final RecurrenceType recurrence; // SESSION 5
+  final RecurrenceType recurrence;
+  final int recurrenceInterval; // 1-30 days, 1-12 weeks, etc.
+  final String? specificDates; // comma-separated millis for yearly specific dates
 
   Event({
     this.id,
@@ -21,25 +20,22 @@ class Event {
     this.deadlineMillis,
     this.notes,
     this.recurrence = RecurrenceType.none,
+    this.recurrenceInterval = 1,
+    this.specificDates,
   });
 
-  /// The timestamp used for sorting / "which event is next" purposes.
   int get primarySortMillis {
     if (startTimeMillis != null) return startTimeMillis!;
     if (deadlineMillis != null) return deadlineMillis!;
     return dateMillis;
   }
 
-  /// The final relevant timestamp for this event.
   int get finalMillis {
     if (deadlineMillis != null) return deadlineMillis!;
     if (startTimeMillis != null) return startTimeMillis!;
     return dateMillis;
   }
 
-  // ============================================
-  // SESSION 2: URGENCY COLOR
-  // ============================================
   Color getUrgencyColor(DateTime now) {
     final nowMillis = now.millisecondsSinceEpoch;
     final target = deadlineMillis ?? startTimeMillis ?? dateMillis;
@@ -75,18 +71,65 @@ class Event {
     }
   }
 
-  // ============================================
-  // SESSION 5: Recurrence helpers
-  // ============================================
   bool get isRecurring => recurrence != RecurrenceType.none;
 
-  /// Generates the next occurrence of this event based on its recurrence.
-  /// Returns null if not recurring.
+  bool get isYearlySpecificDates => recurrence == RecurrenceType.yearly && specificDates != null && specificDates!.isNotEmpty;
+
+  /// Returns the next specific date from the list that is in the future.
+  int? _nextSpecificDate(DateTime now) {
+    if (specificDates == null || specificDates!.isEmpty) return null;
+    final nowMillis = now.millisecondsSinceEpoch;
+    final dates = specificDates!.split(',').map(int.parse).toList()..sort();
+    for (final d in dates) {
+      if (d > nowMillis) return d;
+    }
+    // All passed, return first date of next year
+    return null;
+  }
+
+  /// Generates the next occurrence of this event.
   Event? generateNextOccurrence() {
     if (!isRecurring) return null;
 
     final base = DateTime.fromMillisecondsSinceEpoch(dateMillis);
-    final nextDate = _nextDate(base, recurrence);
+    DateTime nextDate;
+
+    switch (recurrence) {
+      case RecurrenceType.daily:
+        nextDate = base.add(Duration(days: recurrenceInterval));
+        break;
+      case RecurrenceType.weekly:
+        nextDate = base.add(Duration(days: recurrenceInterval * 7));
+        break;
+      case RecurrenceType.monthly:
+        nextDate = DateTime(base.year, base.month + recurrenceInterval, base.day);
+        // Handle month-end overflow
+        if (nextDate.day != base.day) {
+          nextDate = DateTime(base.year, base.month + recurrenceInterval + 1, 0);
+        }
+        break;
+      case RecurrenceType.yearly:
+        if (isYearlySpecificDates) {
+          final nextSpecific = _nextSpecificDate(DateTime.now());
+          if (nextSpecific != null) {
+            nextDate = DateTime.fromMillisecondsSinceEpoch(nextSpecific);
+          } else {
+            // All specific dates passed for this year, move to next year
+            final firstDate = DateTime.fromMillisecondsSinceEpoch(
+              int.parse(specificDates!.split(',').first),
+            );
+            nextDate = DateTime(firstDate.year + 1, firstDate.month, firstDate.day);
+          }
+        } else {
+          nextDate = DateTime(base.year + recurrenceInterval, base.month, base.day);
+          if (nextDate.month != base.month) {
+            nextDate = DateTime(base.year + recurrenceInterval, base.month + 1, 0);
+          }
+        }
+        break;
+      case RecurrenceType.none:
+        return null;
+    }
 
     int? nextStart;
     if (startTimeMillis != null) {
@@ -109,30 +152,9 @@ class Event {
       deadlineMillis: nextDeadline,
       notes: notes,
       recurrence: recurrence,
+      recurrenceInterval: recurrenceInterval,
+      specificDates: specificDates,
     );
-  }
-
-  static DateTime _nextDate(DateTime current, RecurrenceType type) {
-    switch (type) {
-      case RecurrenceType.daily:
-        return current.add(const Duration(days: 1));
-      case RecurrenceType.weekly:
-        return current.add(const Duration(days: 7));
-      case RecurrenceType.monthly:
-        var next = DateTime(current.year, current.month + 1, current.day);
-        if (next.day != current.day) {
-          next = DateTime(current.year, current.month + 2, 0);
-        }
-        return next;
-      case RecurrenceType.yearly:
-        var next = DateTime(current.year + 1, current.month, current.day);
-        if (next.month != current.month) {
-          next = DateTime(current.year + 1, current.month + 1, 0);
-        }
-        return next;
-      case RecurrenceType.none:
-        return current;
-    }
   }
 
   Event copyWith({
@@ -145,6 +167,9 @@ class Event {
     bool clearDeadline = false,
     String? notes,
     RecurrenceType? recurrence,
+    int? recurrenceInterval,
+    String? specificDates,
+    bool clearSpecificDates = false,
   }) {
     return Event(
       id: id ?? this.id,
@@ -156,6 +181,8 @@ class Event {
           clearDeadline ? null : (deadlineMillis ?? this.deadlineMillis),
       notes: notes ?? this.notes,
       recurrence: recurrence ?? this.recurrence,
+      recurrenceInterval: recurrenceInterval ?? this.recurrenceInterval,
+      specificDates: clearSpecificDates ? null : (specificDates ?? this.specificDates),
     );
   }
 
@@ -168,6 +195,8 @@ class Event {
       'deadlineMillis': deadlineMillis,
       'notes': notes,
       'recurrence': recurrence.name,
+      'recurrenceInterval': recurrenceInterval,
+      'specificDates': specificDates,
     };
   }
 
@@ -182,6 +211,8 @@ class Event {
       recurrence: RecurrenceType.values.byName(
         (map['recurrence'] as String?) ?? 'none',
       ),
+      recurrenceInterval: map['recurrenceInterval'] as int? ?? 1,
+      specificDates: map['specificDates'] as String?,
     );
   }
 
