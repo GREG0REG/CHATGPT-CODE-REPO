@@ -7,6 +7,7 @@ import 'db/database_helper.dart';
 import 'services/export_import_service.dart';
 
 import 'screens/home_screen.dart';
+import 'screens/home_screen.dart' show _HomeScreenState;
 import 'screens/widget_settings_screen.dart';
 import 'services/backup_service.dart';
 import 'services/battery_service.dart';
