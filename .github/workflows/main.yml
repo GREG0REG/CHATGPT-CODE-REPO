@@ -61,19 +61,14 @@ jobs:
           echo "Keystore found successfully."
 
       # 6. Configure release signing by modifying build.gradle dynamically
-      # This is safer than sed-replacing debug config
       - name: Configure release signing
         run: |
-          # Ensure the signingConfigs block exists and is referenced
-          # We use a Python script to safely inject the signing config
           python3 -c "
           import re
           with open('android/app/build.gradle', 'r') as f:
               content = f.read()
           
-          # Check if signingConfig is already set to release
           if 'signingConfig signingConfigs.release' not in content:
-              # Replace the debug signing config with release
               content = content.replace(
                   'signingConfig signingConfigs.debug', 
                   'signingConfig signingConfigs.release'
@@ -85,7 +80,7 @@ jobs:
               print('build.gradle already configured for release signing.')
           "
 
-      # 7. Build the APK
+      # 7. Build the APK (DEBUG for testing widget)
       - name: Build Debug APK
         run: flutter build apk --debug
 
@@ -93,5 +88,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
