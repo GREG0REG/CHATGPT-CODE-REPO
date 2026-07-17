@@ -10,38 +10,86 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.24.0'
-          channel: 'stable'
-      
+
+      # 1. Setup Java with built-in Gradle caching
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      
-      - run: flutter pub get
-      
+          cache: 'gradle'
+
+      # 2. Setup Flutter with built-in package caching
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      # 3. Cache the Android Signing Keystore
+      - name: Cache Android Keystore
+        id: cache-keystore
+        uses: actions/cache@v4
+        with:
+          path: |
+            android/app/release-key.jks
+            android/key.properties
+          key: android-keystore-v1
+
+      # 4. Generate Keystore ONLY if it wasn't found in the cache
       - name: Generate signing keystore
+        if: steps.cache-keystore.outputs.cache-hit != 'true'
         run: |
           mkdir -p android/app
-          keytool -genkey -v -keystore android/app/release-key.jks -storepass releasepass -alias release -keypass releasepass -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Event Countdown,O=Personal,C=US"
+          keytool -genkey -v -keystore android/app/release-key.jks \
+            -storepass releasepass -alias release -keypass releasepass \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Event Countdown,O=Personal,C=US"
+          
           echo "storePassword=releasepass" > android/key.properties
           echo "keyPassword=releasepass" >> android/key.properties
           echo "keyAlias=release" >> android/key.properties
           echo "storeFile=release-key.jks" >> android/key.properties
-      
+
+      # 5. Verify keystore exists before building (Debugging step)
+      - name: Verify Keystore Exists
+        run: |
+          if [ ! -f android/app/release-key.jks ]; then
+            echo "ERROR: Keystore file not found!"
+            exit 1
+          fi
+          echo "Keystore found successfully."
+
+      # 6. Configure release signing by modifying build.gradle dynamically
+      # This is safer than sed-replacing debug config
       - name: Configure release signing
         run: |
-          sed -i 's/signingConfig signingConfigs.debug/signingConfig signingConfigs.release/' android/app/build.gradle
-      
-      # ============================================
-      # RELEASE BUILD: Smaller APK with optimizations
-      # ============================================
-      - run: flutter build apk --release
-      
+          # Ensure the signingConfigs block exists and is referenced
+          # We use a Python script to safely inject the signing config
+          python3 -c "
+          import re
+          with open('android/app/build.gradle', 'r') as f:
+              content = f.read()
+          
+          # Check if signingConfig is already set to release
+          if 'signingConfig signingConfigs.release' not in content:
+              # Replace the debug signing config with release
+              content = content.replace(
+                  'signingConfig signingConfigs.debug', 
+                  'signingConfig signingConfigs.release'
+              )
+              with open('android/app/build.gradle', 'w') as f:
+                  f.write(content)
+              print('Updated build.gradle to use release signing.')
+          else:
+              print('build.gradle already configured for release signing.')
+          "
+
+      # 7. Build the APK
+      - name: Build Release APK
+        run: flutter build apk --release
+
+      # 8. Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
