@@ -10,21 +10,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.24.0'
-          channel: 'stable'
-      
+
+      # 1. Setup Java with built-in Gradle caching
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      
-      - run: flutter pub get
-      
+          cache: 'gradle' # <--- NEW: Caches Android build files
+
+      # 2. Setup Flutter with built-in package caching
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true # <--- NEW: Caches Flutter packages
+
+      # 3. Cache the Android Signing Keystore
+      - name: Cache Android Keystore
+        id: cache-keystore
+        uses: actions/cache@v4
+        with:
+          path: |
+            android/app/release-key.jks
+            android/key.properties
+          key: android-keystore-v1
+
+      # 4. Generate Keystore ONLY if it wasn't found in the cache
       - name: Generate signing keystore
+        if: steps.cache-keystore.outputs.cache-hit != 'true'
         run: |
           mkdir -p android/app
           keytool -genkey -v -keystore android/app/release-key.jks -storepass releasepass -alias release -keypass releasepass -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Event Countdown,O=Personal,C=US"
@@ -32,16 +46,15 @@ jobs:
           echo "keyPassword=releasepass" >> android/key.properties
           echo "keyAlias=release" >> android/key.properties
           echo "storeFile=release-key.jks" >> android/key.properties
-      
+
       - name: Configure release signing
         run: |
           sed -i 's/signingConfig signingConfigs.debug/signingConfig signingConfigs.release/' android/app/build.gradle
-      
-      # ============================================
-      # RELEASE BUILD: Smaller APK with optimizations
-      # ============================================
-      - run: flutter build apk --release
-      
+
+      # 5. Build the APK (flutter build automatically runs pub get)
+      - name: Build Release APK
+        run: flutter build apk --release
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
