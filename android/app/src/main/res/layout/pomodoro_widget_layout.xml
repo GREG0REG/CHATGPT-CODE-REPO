@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/pomodoro_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="16dp"
+    android:background="@drawable/widget_background_fallback">
+
+    <TextView
+        android:id="@+id/pomodoro_widget_subject"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Ready to Focus"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/pomodoro_widget_timer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Tap to start"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:fontFamily="sans-serif-light" />
+
+    <TextView
+        android:id="@+id/pomodoro_widget_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Focus"
+        android:textSize="12sp"
+        android:textColor="#CCFFFFFF" />
+
+</LinearLayout>
