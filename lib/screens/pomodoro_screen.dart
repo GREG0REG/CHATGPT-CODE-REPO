@@ -1,11 +1,18 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+
 import '../database_helper.dart';
 import '../main.dart';
 import '../models/event.dart';
+import '../models/study_subject.dart';
+import '../services/focus_settings_service.dart';
 import '../services/pomodoro_service.dart';
+import '../services/widget_service.dart';
 import '../theme/app_themes.dart';
+import '../WIDGET/subject_picker_sheet.dart';
+import 'focus_settings_sheet.dart';
 
 class PomodoroScreen extends StatefulWidget {
   const PomodoroScreen({super.key});
@@ -21,9 +28,20 @@ class _PomodoroScreenState extends State<PomodoroScreen>
 
   PomodoroPreset _selectedPreset = PomodoroPreset.classic;
   String? _selectedSubject;
+  StudySubject? _selectedStudySubject;
   int? _selectedEventId;
-  List<String> _subjects = [];
-  bool _loadingSubjects = true;
+
+  // Custom duration sliders (only when Custom preset + idle)
+  int _customFocus = 25;
+  int _customShortBreak = 5;
+  int _customLongBreak = 15;
+  int _customSessions = 4;
+
+  // Daily goal progress
+  int _dailyGoalMinutes = 120;
+  int _todayMinutes = 0;
+
+  bool _loading = true;
 
   @override
   void initState() {
@@ -36,39 +54,232 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
 
-    _loadSubjects();
+    _loadSettings();
 
     // Listen to service changes
     _service.phaseNotifier.addListener(_onServiceUpdate);
     _service.remainingSecondsNotifier.addListener(_onServiceUpdate);
+    _service.completedSessionsNotifier.addListener(_onServiceUpdate);
   }
 
   void _onServiceUpdate() {
     if (mounted) setState(() {});
+    _checkSessionNote();
+    _updateWakelock();
+    _updateDailyProgress();
+    WidgetService.refreshPomodoroWidget();
   }
 
-  Future<void> _loadSubjects() async {
-    final events = await DatabaseHelper.instance.getAllEventsSorted();
-    final set = <String>{};
-    for (final e in events) {
-      if (e.subjectTag != null && e.subjectTag!.trim().isNotEmpty) {
-        set.add(e.subjectTag!.trim());
-      }
+  Future<void> _loadSettings() async {
+    final fs = FocusSettingsService.instance;
+    final presetName = await fs.getDefaultPreset();
+    final customFocus = await fs.getCustomFocusMinutes();
+    final customShort = await fs.getCustomShortBreakMinutes();
+    final customLong = await fs.getCustomLongBreakMinutes();
+    final customSess = await fs.getCustomSessionsBeforeLongBreak();
+    final goalMin = await fs.getDailyGoalMinutes();
+
+    // Restore last subject
+    final lastName = await fs.getLastSubjectName();
+    StudySubject? lastSubject;
+    if (lastName != null) {
+      final subjects = await DatabaseHelper.instance.getAllStudySubjects();
+      lastSubject = subjects.where((s) => s.name == lastName).firstOrNull;
     }
-    if (mounted) {
-      setState(() {
-        _subjects = set.toList()..sort();
-        _loadingSubjects = false;
+
+    _selectedPreset = PomodoroPreset.all.firstWhere(
+      (p) => p.name.toLowerCase() == presetName.toLowerCase(),
+      orElse: () => PomodoroPreset.classic,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _customFocus = customFocus;
+      _customShortBreak = customShort;
+      _customLongBreak = customLong;
+      _customSessions = customSess;
+      _dailyGoalMinutes = goalMin;
+      _selectedSubject = lastName;
+      _selectedStudySubject = lastSubject;
+      _loading = false;
+    });
+
+    _updateDailyProgress();
+    _updateWakelock();
+  }
+
+  Future<void> _updateDailyProgress() async {
+    final today = await DatabaseHelper.instance.getTodayStudyMinutes();
+    if (mounted) setState(() => _todayMinutes = today);
+  }
+
+  void _updateWakelock() {
+    final isRunning = _service.isRunning;
+    if (isRunning) {
+      FocusSettingsService.instance.getKeepScreenAwake().then((keepAwake) {
+        if (keepAwake) WakelockPlus.enable();
       });
+    } else {
+      WakelockPlus.disable();
     }
   }
 
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    _service.phaseNotifier.removeListener(_onServiceUpdate);
-    _service.remainingSecondsNotifier.removeListener(_onServiceUpdate);
-    super.dispose();
+  void _checkSessionNote() {
+    if (_service.pendingSessionNoteId != null && mounted) {
+      _showSessionNoteSheet(_service.pendingSessionNoteId!);
+    }
+  }
+
+  Future<void> _showSessionNoteSheet(int sessionId) async {
+    final controller = TextEditingController();
+    final note = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Theme.of(ctx).colorScheme.outlineVariant,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Session Note',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(ctx).colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'What did you accomplish in this focus session?',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(ctx).colorScheme.outline,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      hintText: 'e.g. Solved 5 calculus problems...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    autofocus: true,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Skip'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+                          child: const Text('Save'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    controller.dispose();
+    _service.dismissSessionNote();
+
+    if (note != null && note.isNotEmpty) {
+      await DatabaseHelper.instance.updateSessionNote(sessionId, note);
+    }
+  }
+
+  Future<void> _openSubjectPicker() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SubjectPickerSheet(
+        selectedSubjectName: _selectedSubject,
+        onSubjectSelected: (name) {
+          setState(() {
+            _selectedSubject = name;
+            if (name != null) {
+              DatabaseHelper.instance.getAllStudySubjects().then((subjects) {
+                final match = subjects.where((s) => s.name == name).firstOrNull;
+                setState(() => _selectedStudySubject = match);
+              });
+            } else {
+              _selectedStudySubject = null;
+            }
+          });
+        },
+      ),
+    );
+  }
+
+  Future<void> _openFocusSettings() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => const FocusSettingsSheet(),
+    );
+    // Reload settings after sheet closes
+    await _loadSettings();
+  }
+
+  Future<void> _handleStart() async {
+    HapticFeedback.mediumImpact();
+    PomodoroPreset preset = _selectedPreset;
+    if (_selectedPreset.name == 'Custom') {
+      preset = PomodoroPreset(
+        name: 'Custom',
+        focusMinutes: _customFocus,
+        shortBreakMinutes: _customShortBreak,
+        longBreakMinutes: _customLongBreak,
+        sessionsBeforeLongBreak: _customSessions,
+      );
+    }
+    await _service.start(
+      preset: preset,
+      subjectTag: _selectedSubject,
+      eventId: _selectedEventId,
+    );
   }
 
   Color _phaseColor(BuildContext context) {
@@ -108,13 +319,14 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     return (_service.remainingSeconds / total).clamp(0.0, 1.0);
   }
 
-  Future<void> _handleStart() async {
-    HapticFeedback.mediumImpact();
-    await _service.start(
-      preset: _selectedPreset,
-      subjectTag: _selectedSubject,
-      eventId: _selectedEventId,
-    );
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    _service.phaseNotifier.removeListener(_onServiceUpdate);
+    _service.remainingSecondsNotifier.removeListener(_onServiceUpdate);
+    _service.completedSessionsNotifier.removeListener(_onServiceUpdate);
+    WakelockPlus.disable();
+    super.dispose();
   }
 
   @override
@@ -140,6 +352,12 @@ class _PomodoroScreenState extends State<PomodoroScreen>
           ),
         ),
         actions: [
+          // Settings gear
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _openFocusSettings,
+            tooltip: 'Focus settings',
+          ),
           if (_service.completedFocusSessions > 0)
             Padding(
               padding: const EdgeInsets.only(right: 16),
@@ -184,7 +402,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
             children: [
               const SizedBox(height: 12),
 
-              // ── Subject Selector ──
+              // ── Subject Selector (tappable card) ──
               if (_service.phase == PomodoroPhase.idle) ...[
                 _buildSubjectSelector(scheme),
                 const SizedBox(height: 16),
@@ -222,8 +440,61 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                 const SizedBox(height: 16),
               ],
 
+              // ── Daily Goal Progress ──
+              if (_service.phase == PomodoroPhase.idle || _service.phase == PomodoroPhase.paused) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Daily Goal',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.outline,
+                            ),
+                          ),
+                          Text(
+                            '$_todayMinutes / $_dailyGoalMinutes min',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: _dailyGoalMinutes > 0
+                              ? (_todayMinutes / _dailyGoalMinutes).clamp(0.0, 1.0)
+                              : 0.0,
+                          minHeight: 6,
+                          backgroundColor: scheme.outlineVariant.withOpacity(0.3),
+                          valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               // ── Preset Pills (only when idle) ──
               if (_service.phase == PomodoroPhase.idle) _buildPresets(scheme),
+
+              // ── Custom Duration Sliders (Custom preset + idle) ──
+              if (_service.phase == PomodoroPhase.idle &&
+                  _selectedPreset.name == 'Custom') ...[
+                const SizedBox(height: 12),
+                _buildCustomSliders(scheme),
+              ],
 
               const Spacer(),
 
@@ -255,40 +526,48 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   }
 
   Widget _buildSubjectSelector(ColorScheme scheme) {
-    if (_loadingSubjects) {
-      return const SizedBox(
-        height: 48,
-        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      );
-    }
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest.withOpacity(0.5),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: scheme.outlineVariant.withOpacity(0.3)),
-        ),
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            isExpanded: true,
-            value: _selectedSubject,
-            hint: const Text('Select subject (optional)'),
-            icon: const Icon(Icons.expand_more),
-            borderRadius: BorderRadius.circular(12),
-            items: [
-              const DropdownMenuItem<String>(
-                value: null,
-                child: Text('General Study'),
+      child: InkWell(
+        onTap: _openSubjectPicker,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: scheme.outlineVariant.withOpacity(0.3),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: _selectedStudySubject?.color ?? scheme.primary,
+                  shape: BoxShape.circle,
+                ),
               ),
-              ..._subjects.map((s) => DropdownMenuItem(
-                    value: s,
-                    child: Text(s),
-                  )),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _selectedSubject ?? 'Select subject (optional)',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: _selectedSubject != null
+                        ? scheme.onSurface
+                        : scheme.outline,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.expand_more,
+                color: scheme.outline,
+                size: 20,
+              ),
             ],
-            onChanged: (v) => setState(() => _selectedSubject = v),
           ),
         ),
       ),
@@ -329,6 +608,75 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     );
   }
 
+  Widget _buildCustomSliders(ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Card(
+        elevation: 0,
+        color: scheme.surfaceContainerHighest.withOpacity(0.4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: scheme.outlineVariant.withOpacity(0.2)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Custom Durations',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: scheme.primary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _sliderRow('Focus', _customFocus, 5, 120, 'min',
+                  (v) => setState(() => _customFocus = v)),
+              _sliderRow('Short break', _customShortBreak, 1, 30, 'min',
+                  (v) => setState(() => _customShortBreak = v)),
+              _sliderRow('Long break', _customLongBreak, 5, 60, 'min',
+                  (v) => setState(() => _customLongBreak = v)),
+              _sliderRow('Sessions', _customSessions, 1, 8, '',
+                  (v) => setState(() => _customSessions = v)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sliderRow(String label, int value, int min, int max, String suffix,
+      ValueChanged<int> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 13)),
+            Text(
+              '$value $suffix'.trim(),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          value: value.toDouble(),
+          min: min.toDouble(),
+          max: max.toDouble(),
+          divisions: max - min,
+          onChanged: (v) => onChanged(v.round()),
+        ),
+      ],
+    );
+  }
+
   Widget _buildTimerDisplay(ColorScheme scheme) {
     final isRunning = _service.isRunning;
     final progress = _progressValue();
@@ -357,7 +705,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                     value: 1.0,
                     strokeWidth: 8,
                     backgroundColor: scheme.outlineVariant.withOpacity(0.2),
-                    valueColor: AlwaysStoppedAnimation(Colors.transparent),
+                    valueColor: const AlwaysStoppedAnimation(Colors.transparent),
                   ),
                 ),
                 // Progress ring
