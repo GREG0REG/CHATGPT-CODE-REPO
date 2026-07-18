@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.widget.RemoteViews
+import android.widget.ProgressBar
 
 class EventCountdownWidgetProvider : AppWidgetProvider() {
     companion object {
@@ -15,6 +16,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         private const val KEY_COUNTDOWN = "countdown_text"
         private const val KEY_BG_COLOR = "widget_bg_color"
         private const val KEY_TEXT_COLOR = "widget_text_color"
+        private const val KEY_PROGRESS = "widget_progress_percent"
 
         fun parseColorOrDefault(colorStr: String?, defaultColor: Int): Int {
             return try {
@@ -31,20 +33,29 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             title: String,
             countdown: String,
             bgColorStr: String?,
-            textColorStr: String?
+            textColorStr: String?,
+            progressPercent: Int = 65
         ) {
             val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
 
             views.setTextViewText(R.id.widget_title, title)
             views.setTextViewText(R.id.widget_countdown, countdown)
 
-            val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#2196F3"))
+            // Update progress ring
+            views.setProgressBar(R.id.widget_progress_ring, 100, progressPercent.coerceIn(0, 100), false)
+
+            // Parse theme colors with fallback to beautiful gradient
+            val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#00BFA5"))
             val textColor = parseColorOrDefault(textColorStr, Color.WHITE)
 
+            // Apply glassmorphism background with theme color tint
             views.setInt(R.id.widget_root, "setBackgroundColor", themeColor)
+            
+            // Text colors with shadow for readability
             views.setTextColor(R.id.widget_title, textColor)
             views.setTextColor(R.id.widget_countdown, textColor)
 
+            // Launch intent
             val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
             val pendingIntent = PendingIntent.getActivity(
                 context,
@@ -69,9 +80,10 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         val countdown = prefs.getString(KEY_COUNTDOWN, "") ?: ""
         val bgColorStr = prefs.getString(KEY_BG_COLOR, null)
         val textColorStr = prefs.getString(KEY_TEXT_COLOR, null)
+        val progressPercent = prefs.getInt(KEY_PROGRESS, 65)
 
         for (widgetId in appWidgetIds) {
-            updateWidgetDirectly(context, appWidgetManager, widgetId, title, countdown, bgColorStr, textColorStr)
+            updateWidgetDirectly(context, appWidgetManager, widgetId, title, countdown, bgColorStr, textColorStr, progressPercent)
         }
     }
 }
@@ -83,6 +95,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         private const val KEY_TIMER = "pomodoro_timer_text"
         private const val KEY_STATUS = "pomodoro_status"
         private const val KEY_BG_COLOR = "pomodoro_bg_color"
+        private const val KEY_PROGRESS = "pomodoro_progress_percent"
 
         fun parseColorOrDefault(colorStr: String?, defaultColor: Int): Int {
             return try {
@@ -99,7 +112,8 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             subject: String,
             timerText: String,
             status: String,
-            bgColorStr: String?
+            bgColorStr: String?,
+            progressPercent: Int = 45
         ) {
             try {
                 val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
@@ -108,7 +122,10 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.pomodoro_widget_timer, timerText)
                 views.setTextViewText(R.id.pomodoro_widget_status, status)
 
-                val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#2196F3"))
+                // Update progress ring
+                views.setProgressBar(R.id.pomodoro_progress_ring, 100, progressPercent.coerceIn(0, 100), false)
+
+                val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#00BFA5"))
                 views.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", themeColor)
 
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
@@ -141,9 +158,10 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             val timerText = prefs.getString(KEY_TIMER, "Tap to start") ?: "Tap to start"
             val status = prefs.getString(KEY_STATUS, "Focus") ?: "Focus"
             val bgColorStr = prefs.getString(KEY_BG_COLOR, null)
+            val progressPercent = prefs.getInt(KEY_PROGRESS, 45)
 
             for (widgetId in appWidgetIds) {
-                updateWidgetDirectly(context, appWidgetManager, widgetId, subject, timerText, status, bgColorStr)
+                updateWidgetDirectly(context, appWidgetManager, widgetId, subject, timerText, status, bgColorStr, progressPercent)
             }
         } catch (e: Exception) {
             android.util.Log.e("PomodoroWidget", "onUpdate failed", e)
