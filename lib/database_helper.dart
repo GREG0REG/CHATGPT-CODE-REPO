@@ -4,6 +4,11 @@ import 'package:path/path.dart';
 import 'models/event.dart';
 import 'models/custom_reminder.dart';
 import 'models/notification_history.dart';
+import 'models/study_session.dart';
+import 'models/subtask.dart';
+import 'models/flashcard.dart';
+import 'models/study_schedule.dart';
+import 'models/daily_goal.dart';
 
 class DatabaseHelper {
   DatabaseHelper._internal();
@@ -22,7 +27,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -36,11 +41,15 @@ class DatabaseHelper {
         if (oldVersion < 4) {
           await _migrateV3ToV4(db);
         }
+        if (oldVersion < 5) {
+          await _migrateV4ToV5(db);
+        }
       },
     );
   }
 
   Future<void> _createTables(Database db) async {
+    // ---- EXISTING TABLES (UNCHANGED) ----
     await db.execute("""
       CREATE TABLE events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,8 +88,65 @@ class DatabaseHelper {
         sentAtMillis INTEGER NOT NULL
       )
     """);
+
+    // ---- NEW: STUDY SUITE TABLES ----
+    await db.execute("""
+      CREATE TABLE study_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eventId INTEGER,
+        subjectTag TEXT,
+        durationMinutes INTEGER NOT NULL,
+        completedAtMillis INTEGER NOT NULL,
+        sessionType TEXT DEFAULT 'pomodoro'
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE subtasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eventId INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        isCompleted INTEGER DEFAULT 0,
+        orderIndex INTEGER DEFAULT 0
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE flashcards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subjectTag TEXT NOT NULL,
+        frontText TEXT NOT NULL,
+        backText TEXT NOT NULL,
+        boxLevel INTEGER DEFAULT 1,
+        lastReviewedMillis INTEGER,
+        nextReviewMillis INTEGER
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE study_schedules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eventId INTEGER,
+        subjectTag TEXT,
+        suggestedDateMillis INTEGER NOT NULL,
+        suggestedDurationMinutes INTEGER DEFAULT 25,
+        isCompleted INTEGER DEFAULT 0,
+        isAccepted INTEGER DEFAULT 0
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE daily_goals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dateMillis INTEGER NOT NULL UNIQUE,
+        targetMinutes INTEGER DEFAULT 120,
+        targetPomodoros INTEGER DEFAULT 4,
+        achievedMinutes INTEGER DEFAULT 0,
+        achievedPomodoros INTEGER DEFAULT 0,
+        streakCount INTEGER DEFAULT 0
+      )
+    """);
   }
 
+  // ============================================
+  // EXISTING MIGRATIONS (PRESERVED EXACTLY)
+  // ============================================
   Future<void> _migrateV1ToV2(Database db) async {
     await db.execute('ALTER TABLE events ADD COLUMN recurrence INTEGER DEFAULT 0');
     await db.execute('ALTER TABLE events ADD COLUMN recurrenceInterval INTEGER DEFAULT 1');
@@ -93,7 +159,6 @@ class DatabaseHelper {
     await db.execute('ALTER TABLE custom_reminders ADD COLUMN isEnabled INTEGER DEFAULT 1');
   }
 
-  // NEW: Migration for Student Study Pack columns
   Future<void> _migrateV3ToV4(Database db) async {
     await db.execute('ALTER TABLE events ADD COLUMN iconName TEXT');
     await db.execute('ALTER TABLE events ADD COLUMN priority INTEGER DEFAULT 2');
@@ -101,6 +166,65 @@ class DatabaseHelper {
     await db.execute('ALTER TABLE events ADD COLUMN isCompleted INTEGER DEFAULT 0');
   }
 
+  // NEW: v4 -> v5 migration (creates study suite tables)
+  Future<void> _migrateV4ToV5(Database db) async {
+    await db.execute("""
+      CREATE TABLE study_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eventId INTEGER,
+        subjectTag TEXT,
+        durationMinutes INTEGER NOT NULL,
+        completedAtMillis INTEGER NOT NULL,
+        sessionType TEXT DEFAULT 'pomodoro'
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE subtasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eventId INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        isCompleted INTEGER DEFAULT 0,
+        orderIndex INTEGER DEFAULT 0
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE flashcards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subjectTag TEXT NOT NULL,
+        frontText TEXT NOT NULL,
+        backText TEXT NOT NULL,
+        boxLevel INTEGER DEFAULT 1,
+        lastReviewedMillis INTEGER,
+        nextReviewMillis INTEGER
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE study_schedules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        eventId INTEGER,
+        subjectTag TEXT,
+        suggestedDateMillis INTEGER NOT NULL,
+        suggestedDurationMinutes INTEGER DEFAULT 25,
+        isCompleted INTEGER DEFAULT 0,
+        isAccepted INTEGER DEFAULT 0
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE daily_goals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dateMillis INTEGER NOT NULL UNIQUE,
+        targetMinutes INTEGER DEFAULT 120,
+        targetPomodoros INTEGER DEFAULT 4,
+        achievedMinutes INTEGER DEFAULT 0,
+        achievedPomodoros INTEGER DEFAULT 0,
+        streakCount INTEGER DEFAULT 0
+      )
+    """);
+  }
+
+  // ============================================
+  // EXISTING EVENT CRUD (UNCHANGED)
+  // ============================================
   Future<int> insertEvent(Event event) async {
     final db = await database;
     return db.insert('events', event.toMap()..remove('id'));
@@ -113,6 +237,9 @@ class DatabaseHelper {
 
   Future<int> deleteEvent(int id) async {
     final db = await database;
+    // Cascade: clean up subtasks and schedules tied to this event
+    await db.delete('subtasks', where: 'eventId = ?', whereArgs: [id]);
+    await db.delete('study_schedules', where: 'eventId = ?', whereArgs: [id]);
     await db.delete('custom_reminders', where: 'eventId = ?', whereArgs: [id]);
     return db.delete('events', where: 'id = ?', whereArgs: [id]);
   }
@@ -135,12 +262,17 @@ class DatabaseHelper {
     await db.transaction((txn) async {
       await txn.delete('events');
       await txn.delete('custom_reminders');
+      await txn.delete('subtasks');
+      await txn.delete('study_schedules');
       for (final e in events) {
         await txn.insert('events', e.toMap()..remove('id'));
       }
     });
   }
 
+  // ============================================
+  // EXISTING CUSTOM REMINDER CRUD (UNCHANGED)
+  // ============================================
   Future<int> insertCustomReminder(CustomReminder reminder) async {
     final db = await database;
     return db.insert('custom_reminders', reminder.toMap()..remove('id'));
@@ -162,6 +294,9 @@ class DatabaseHelper {
     return rows.map((r) => CustomReminder.fromMap(r)).toList();
   }
 
+  // ============================================
+  // EXISTING NOTIFICATION HISTORY CRUD (UNCHANGED)
+  // ============================================
   Future<int> insertNotificationHistory(NotificationHistory history) async {
     final db = await database;
     return db.insert('notification_history', history.toMap()..remove('id'));
@@ -176,6 +311,305 @@ class DatabaseHelper {
   Future<void> clearNotificationHistory() async {
     final db = await database;
     await db.delete('notification_history');
+  }
+
+  // ============================================
+  // NEW: STUDY SESSION CRUD
+  // ============================================
+  Future<int> insertStudySession(StudySession session) async {
+    final db = await database;
+    return db.insert('study_sessions', session.toMap()..remove('id'));
+  }
+
+  Future<List<StudySession>> getStudySessions({int limit = 100}) async {
+    final db = await database;
+    final rows = await db.query('study_sessions', orderBy: 'completedAtMillis DESC', limit: limit);
+    return rows.map((r) => StudySession.fromMap(r)).toList();
+  }
+
+  Future<List<StudySession>> getStudySessionsForSubject(String subject) async {
+    final db = await database;
+    final rows = await db.query(
+      'study_sessions',
+      where: 'subjectTag = ?',
+      whereArgs: [subject],
+      orderBy: 'completedAtMillis DESC',
+    );
+    return rows.map((r) => StudySession.fromMap(r)).toList();
+  }
+
+  Future<List<StudySession>> getStudySessionsForDateRange(int startMillis, int endMillis) async {
+    final db = await database;
+    final rows = await db.query(
+      'study_sessions',
+      where: 'completedAtMillis >= ? AND completedAtMillis < ?',
+      whereArgs: [startMillis, endMillis],
+      orderBy: 'completedAtMillis DESC',
+    );
+    return rows.map((r) => StudySession.fromMap(r)).toList();
+  }
+
+  Future<int> getTodayStudyMinutes() async {
+    final db = await database;
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final endOfDay = startOfDay + const Duration(days: 1).inMilliseconds;
+    final result = await db.rawQuery("""
+      SELECT COALESCE(SUM(durationMinutes), 0) as total
+      FROM study_sessions
+      WHERE completedAtMillis >= ? AND completedAtMillis < ?
+    """, [startOfDay, endOfDay]);
+    return (result.first['total'] as int?) ?? 0;
+  }
+
+  Future<int> deleteStudySession(int id) async {
+    final db = await database;
+    return db.delete('study_sessions', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ============================================
+  // NEW: SUBTASK CRUD
+  // ============================================
+  Future<int> insertSubtask(Subtask subtask) async {
+    final db = await database;
+    return db.insert('subtasks', subtask.toMap()..remove('id'));
+  }
+
+  Future<int> updateSubtask(Subtask subtask) async {
+    final db = await database;
+    return db.update('subtasks', subtask.toMap(), where: 'id = ?', whereArgs: [subtask.id]);
+  }
+
+  Future<int> deleteSubtask(int id) async {
+    final db = await database;
+    return db.delete('subtasks', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Subtask>> getSubtasksForEvent(int eventId) async {
+    final db = await database;
+    final rows = await db.query(
+      'subtasks',
+      where: 'eventId = ?',
+      whereArgs: [eventId],
+      orderBy: 'orderIndex ASC',
+    );
+    return rows.map((r) => Subtask.fromMap(r)).toList();
+  }
+
+  Future<void> toggleSubtaskComplete(int id, bool completed) async {
+    final db = await database;
+    await db.update(
+      'subtasks',
+      {'isCompleted': completed ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<Map<String, int>> getSubtaskCompletionCount(int eventId) async {
+    final db = await database;
+    final totalResult = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM subtasks WHERE eventId = ?',
+      [eventId],
+    );
+    final completedResult = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM subtasks WHERE eventId = ? AND isCompleted = 1',
+      [eventId],
+    );
+    return {
+      'total': (totalResult.first['count'] as int?) ?? 0,
+      'completed': (completedResult.first['count'] as int?) ?? 0,
+    };
+  }
+
+  // ============================================
+  // NEW: FLASHCARD CRUD
+  // ============================================
+  Future<int> insertFlashcard(Flashcard card) async {
+    final db = await database;
+    return db.insert('flashcards', card.toMap()..remove('id'));
+  }
+
+  Future<int> updateFlashcard(Flashcard card) async {
+    final db = await database;
+    return db.update('flashcards', card.toMap(), where: 'id = ?', whereArgs: [card.id]);
+  }
+
+  Future<int> deleteFlashcard(int id) async {
+    final db = await database;
+    return db.delete('flashcards', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Flashcard>> getFlashcards({int limit = 100}) async {
+    final db = await database;
+    final rows = await db.query('flashcards', limit: limit);
+    return rows.map((r) => Flashcard.fromMap(r)).toList();
+  }
+
+  Future<List<Flashcard>> getFlashcardsBySubject(String subject) async {
+    final db = await database;
+    final rows = await db.query(
+      'flashcards',
+      where: 'subjectTag = ?',
+      whereArgs: [subject],
+    );
+    return rows.map((r) => Flashcard.fromMap(r)).toList();
+  }
+
+  Future<List<Flashcard>> getFlashcardsDueForReview(int beforeMillis) async {
+    final db = await database;
+    final rows = await db.query(
+      'flashcards',
+      where: 'nextReviewMillis IS NULL OR nextReviewMillis <= ?',
+      whereArgs: [beforeMillis],
+      orderBy: 'nextReviewMillis ASC',
+    );
+    return rows.map((r) => Flashcard.fromMap(r)).toList();
+  }
+
+  Future<void> updateFlashcardReview(int id, int boxLevel, int nextReviewMillis) async {
+    final db = await database;
+    await db.update(
+      'flashcards',
+      {
+        'boxLevel': boxLevel.clamp(1, 5),
+        'lastReviewedMillis': DateTime.now().millisecondsSinceEpoch,
+        'nextReviewMillis': nextReviewMillis,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // ============================================
+  // NEW: STUDY SCHEDULE CRUD
+  // ============================================
+  Future<int> insertStudySchedule(StudySchedule schedule) async {
+    final db = await database;
+    return db.insert('study_schedules', schedule.toMap()..remove('id'));
+  }
+
+  Future<int> updateStudySchedule(StudySchedule schedule) async {
+    final db = await database;
+    return db.update('study_schedules', schedule.toMap(), where: 'id = ?', whereArgs: [schedule.id]);
+  }
+
+  Future<int> deleteStudySchedule(int id) async {
+    final db = await database;
+    return db.delete('study_schedules', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<StudySchedule>> getStudySchedules({int limit = 100}) async {
+    final db = await database;
+    final rows = await db.query('study_schedules', orderBy: 'suggestedDateMillis ASC', limit: limit);
+    return rows.map((r) => StudySchedule.fromMap(r)).toList();
+  }
+
+  Future<List<StudySchedule>> getStudySchedulesForDate(int dateMillis) async {
+    final db = await database;
+    final endOfDay = dateMillis + const Duration(days: 1).inMilliseconds;
+    final rows = await db.query(
+      'study_schedules',
+      where: 'suggestedDateMillis >= ? AND suggestedDateMillis < ?',
+      whereArgs: [dateMillis, endOfDay],
+      orderBy: 'suggestedDateMillis ASC',
+    );
+    return rows.map((r) => StudySchedule.fromMap(r)).toList();
+  }
+
+  Future<List<StudySchedule>> getPendingStudySchedules() async {
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rows = await db.query(
+      'study_schedules',
+      where: 'isCompleted = 0 AND suggestedDateMillis >= ?',
+      whereArgs: [now],
+      orderBy: 'suggestedDateMillis ASC',
+    );
+    return rows.map((r) => StudySchedule.fromMap(r)).toList();
+  }
+
+  // ============================================
+  // NEW: DAILY GOAL CRUD
+  // ============================================
+  Future<int> insertOrUpdateDailyGoal(DailyGoal goal) async {
+    final db = await database;
+    final existing = await getDailyGoalForDate(goal.dateMillis);
+    if (existing != null) {
+      return db.update(
+        'daily_goals',
+        goal.toMap()..remove('id'),
+        where: 'dateMillis = ?',
+        whereArgs: [goal.dateMillis],
+      );
+    }
+    return db.insert('daily_goals', goal.toMap()..remove('id'));
+  }
+
+  Future<DailyGoal?> getDailyGoalForDate(int dateMillis) async {
+    final db = await database;
+    final rows = await db.query(
+      'daily_goals',
+      where: 'dateMillis = ?',
+      whereArgs: [dateMillis],
+    );
+    if (rows.isEmpty) return null;
+    return DailyGoal.fromMap(rows.first);
+  }
+
+  Future<DailyGoal> getTodayDailyGoal() async {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final existing = await getDailyGoalForDate(startOfDay);
+    if (existing != null) return existing;
+    return DailyGoal(dateMillis: startOfDay);
+  }
+
+  Future<void> addAchievedMinutes(int dateMillis, int minutes) async {
+    final db = await database;
+    final goal = await getDailyGoalForDate(dateMillis);
+    if (goal != null) {
+      await db.update(
+        'daily_goals',
+        {'achievedMinutes': goal.achievedMinutes + minutes},
+        where: 'dateMillis = ?',
+        whereArgs: [dateMillis],
+      );
+    } else {
+      await insertOrUpdateDailyGoal(DailyGoal(
+        dateMillis: dateMillis,
+        achievedMinutes: minutes,
+      ));
+    }
+  }
+
+  Future<void> addAchievedPomodoro(int dateMillis) async {
+    final db = await database;
+    final goal = await getDailyGoalForDate(dateMillis);
+    if (goal != null) {
+      await db.update(
+        'daily_goals',
+        {'achievedPomodoros': goal.achievedPomodoros + 1},
+        where: 'dateMillis = ?',
+        whereArgs: [dateMillis],
+      );
+    } else {
+      await insertOrUpdateDailyGoal(DailyGoal(
+        dateMillis: dateMillis,
+        achievedPomodoros: 1,
+      ));
+    }
+  }
+
+  Future<int> getLatestStreak() async {
+    final db = await database;
+    final rows = await db.query(
+      'daily_goals',
+      orderBy: 'dateMillis DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return 0;
+    return DailyGoal.fromMap(rows.first).streakCount;
   }
 
   Future<void> vacuum() async {
