@@ -58,12 +58,20 @@ class _EventCardState extends State<EventCard> {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
+
+    // FIX: If parent recurring event is past, show countdown to nearest child
+    final isPastParent = widget.event.isRecurring &&
+        widget.childOccurrences != null &&
+        widget.childOccurrences!.isNotEmpty &&
+        widget.event.finalMillis <= now.millisecondsSinceEpoch;
+
+    final displayEvent = isPastParent ? widget.childOccurrences!.first : widget.event;
+
     final result = CountdownService.buildCountdownText(
-      widget.event, now, smartFormatEnabled: widget.smartFormatEnabled,
+      displayEvent, now, smartFormatEnabled: widget.smartFormatEnabled,
     );
 
     final subtitleParts = <String>[];
-    // FIX: Always show date for ALL events
     if (widget.event.startTimeMillis != null) {
       subtitleParts.add('Starts: ${_formatDateTime(widget.event.startTimeMillis!)}');
     } else {
@@ -73,7 +81,7 @@ class _EventCardState extends State<EventCard> {
       subtitleParts.add('Deadline: ${_formatDateTime(widget.event.deadlineMillis!)}');
     }
 
-    final urgencyColor = widget.event.getUrgencyColor(now);
+    final urgencyColor = displayEvent.getUrgencyColor(now);
     final isRecurringParent = widget.event.isRecurring && widget.event.id != null && widget.event.id! > 0;
     final hasChildren = widget.childOccurrences != null && widget.childOccurrences!.isNotEmpty;
 
@@ -100,17 +108,7 @@ class _EventCardState extends State<EventCard> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Center(
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Icon(Icons.event, color: urgencyColor, size: 22),
-                            if (widget.event.isRecurring)
-                              const Positioned(
-                                bottom: 0, right: 0,
-                                child: Icon(Icons.sync, size: 14, color: Colors.blue),
-                              ),
-                          ],
-                        ),
+                        child: Icon(Icons.event, color: urgencyColor, size: 22),
                       ),
                     ),
                   ),
@@ -151,6 +149,18 @@ class _EventCardState extends State<EventCard> {
                     ),
                   ),
                   const SizedBox(width: 4),
+                  // FIX: Recurrence icon moved to action side
+                  if (widget.event.isRecurring)
+                    Container(
+                      width: 28,
+                      height: 48,
+                      alignment: Alignment.center,
+                      child: Icon(
+                        Icons.sync,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
                   // Expand button for recurring events
                   if (isRecurringParent && hasChildren)
                     Material(
