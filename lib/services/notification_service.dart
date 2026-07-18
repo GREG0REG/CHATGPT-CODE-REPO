@@ -115,7 +115,6 @@ Future<void> _scheduleAt({
     visibility: NotificationVisibility.public,
     autoCancel: false,
     playSound: true,
-    sound: RawResourceAndroidNotificationSound('alarm'),
     icon: '@mipmap/ic_launcher',
   );
   
