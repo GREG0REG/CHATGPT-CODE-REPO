@@ -5,9 +5,8 @@ import '../models/event.dart';
 class RecurrenceService {
   RecurrenceService._();
   
-  // INCREASED: From 3 to 1000 - allows unlimited occurrences within 2-year window
   static const int _maxOccurrencesPerEvent = 1000;
-  static const int _maxLookaheadDays = 730; // 2 years
+  static const int _maxLookaheadDays = 730;
 
   static List<Event> expandEvents(List<Event> rawEvents, DateTime now) {
     final result = <Event>[];
@@ -20,7 +19,6 @@ class RecurrenceService {
       }
 
       final virtuals = _generateVirtualOccurrences(event, now, cutoff);
-      // Keep the parent event so HomeScreen has a header card
       result.add(event);
       result.addAll(virtuals);
     }
@@ -123,7 +121,6 @@ class RecurrenceService {
     var current = DateTime(baseDate.year, baseDate.month, baseDate.day);
     final nowDate = DateTime(now.year, now.month, now.day);
 
-    // Move to first future occurrence
     while (current.isBefore(nowDate)) {
       current = current.add(Duration(days: intervalDays));
     }
@@ -157,7 +154,6 @@ class RecurrenceService {
     final nowYearMonth = now.year * 12 + now.month;
     var currentYearMonth = currentYear * 12 + currentMonth;
 
-    // Move to first future occurrence
     while (currentYearMonth < nowYearMonth) {
       currentMonth += intervalMonths;
       while (currentMonth > 12) {
@@ -204,7 +200,6 @@ class RecurrenceService {
     final baseDate = DateTime.fromMillisecondsSinceEpoch(event.dateMillis);
     var currentYear = baseDate.year;
 
-    // Move to first future occurrence
     while (currentYear < now.year) {
       currentYear += intervalYears;
     }
@@ -238,7 +233,6 @@ class RecurrenceService {
     final specificDates = event.yearlySpecificDates;
     var currentYear = now.year;
 
-    // Generate candidates for current year only
     final candidatesThisYear = <_OccurrenceCandidate>[];
     for (final sd in specificDates) {
       final dt = sd.toDateTime(currentYear);
@@ -249,7 +243,6 @@ class RecurrenceService {
     }
     candidatesThisYear.sort((a, b) => a.date.compareTo(b.date));
 
-    // Add occurrences from current year
     for (final cand in candidatesThisYear) {
       if (virtuals.length >= maxCount) break;
       final occurrenceMillis = cand.date.millisecondsSinceEpoch;
@@ -263,8 +256,6 @@ class RecurrenceService {
         ));
       }
     }
-
-    // FIX: Removed next-year generation so only selected dates for current year appear
 
     return virtuals;
   }
@@ -303,6 +294,7 @@ class RecurrenceService {
       ).millisecondsSinceEpoch;
     }
 
+    // FIX: Preserve student study pack fields so child occurrences keep icon/color/subject
     return Event(
       id: -event.id!,
       title: event.title,
@@ -313,6 +305,10 @@ class RecurrenceService {
       recurrence: RecurrenceType.none,
       recurrenceInterval: 1,
       yearlyUseSpecificDates: false,
+      iconName: event.iconName,
+      priority: event.priority,
+      subjectTag: event.subjectTag,
+      isCompleted: event.isCompleted,
     );
   }
 
