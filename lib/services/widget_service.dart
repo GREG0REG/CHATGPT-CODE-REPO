@@ -8,13 +8,32 @@ import '../services/countdown_service.dart';
 import '../services/settings_service.dart';
 import '../theme/app_themes.dart';
 
-/// Updates the Android home screen widgets via SharedPreferences + MethodChannel.
+/// Updates the Android home screen widgets with beautiful circular progress.
 class WidgetService {
   WidgetService._();
   static final WidgetService instance = WidgetService._();
 
   static const MethodChannel _channel =
       MethodChannel('com.example.event_countdown/widget');
+
+  /// Calculate progress percentage for the circular ring (0-100)
+  static int _calculateProgress(Event event, DateTime now) {
+    try {
+      final startMillis = event.startTimeMillis ?? event.dateMillis;
+      final endMillis = event.deadlineMillis ?? event.dateMillis;
+      
+      if (startMillis == endMillis) return 65; // Default for date-only events
+      
+      final total = endMillis - startMillis;
+      final elapsed = now.millisecondsSinceEpoch - startMillis;
+      
+      if (total <= 0) return 0;
+      final progress = ((elapsed / total) * 100).round();
+      return progress.clamp(0, 100);
+    } catch (e) {
+      return 65;
+    }
+  }
 
   /// Refresh the Event Countdown widget with the next upcoming event.
   static Future<void> refreshWidget() async {
@@ -25,6 +44,7 @@ class WidgetService {
 
       String title = 'No upcoming events';
       String countdown = '';
+      int progressPercent = 65;
 
       final activeEvent = CountdownService.getActiveEvent(events, now);
       if (activeEvent != null) {
@@ -35,15 +55,31 @@ class WidgetService {
           smartFormatEnabled: smartFormat,
         );
         countdown = result.text;
+        progressPercent = _calculateProgress(activeEvent, now);
       }
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('event_title', title);
       await prefs.setString('countdown_text', countdown);
+      await prefs.setInt('widget_progress_percent', progressPercent);
+
+      // Get theme color for the widget background
+      final theme = await SettingsService.instance.getSelectedTheme();
+      final Color themeColor;
+      if (theme == AppThemeOption.customHex) {
+        themeColor = await SettingsService.instance.getCustomColor() ??
+            const Color(0xFF00BFA5);
+      } else {
+        themeColor = AppThemes.primaryColorFor(theme);
+      }
+      final bgColorHex = '#${themeColor.value.toRadixString(16).substring(2).toUpperCase()}';
 
       await _channel.invokeMethod('updateWidget', {
         'title': title,
         'countdown': countdown,
+        'bgColor': bgColorHex,
+        'textColor': '#FFFFFF',
+        'progressPercent': progressPercent,
       });
     } catch (e) {
       debugPrint('Widget refresh error: $e');
@@ -58,29 +94,36 @@ class WidgetService {
       final timerText = prefs.getString('pomodoro_timer_text') ?? 'Tap to start';
       final status = prefs.getString('pomodoro_status') ?? 'Focus';
 
-      // Resolve theme color so the widget background matches the app theme
-      String? bgColorHex;
-      try {
-        final theme = await SettingsService.instance.getSelectedTheme();
-        final Color color;
-        if (theme == AppThemeOption.customHex) {
-          color = await SettingsService.instance.getCustomColor() ??
-              const Color(0xFF2196F3);
-        } else {
-          color = AppThemes.colorFor(theme);
-        }
-        bgColorHex =
-            '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
-        await prefs.setString('pomodoro_bg_color', bgColorHex);
-      } catch (_) {
-        // Fallback: let Kotlin use its default
+      // Calculate pomodoro progress (25 min = 1500 seconds)
+      final parts = timerText.split(':');
+      int progressPercent = 45;
+      if (parts.length == 2) {
+        final minutes = int.tryParse(parts[0]) ?? 25;
+        final seconds = int.tryParse(parts[1]) ?? 0;
+        final totalSeconds = minutes * 60 + seconds;
+        progressPercent = ((totalSeconds / 1500) * 100).round().clamp(0, 100);
       }
+
+      // Resolve theme color
+      final theme = await SettingsService.instance.getSelectedTheme();
+      final Color themeColor;
+      if (theme == AppThemeOption.customHex) {
+        themeColor = await SettingsService.instance.getCustomColor() ??
+            const Color(0xFF00BFA5);
+      } else {
+        themeColor = AppThemes.primaryColorFor(theme);
+      }
+      final bgColorHex = '#${themeColor.value.toRadixString(16).substring(2).toUpperCase()}';
+
+      await prefs.setString('pomodoro_bg_color', bgColorHex);
+      await prefs.setInt('pomodoro_progress_percent', progressPercent);
 
       await _channel.invokeMethod('updatePomodoroWidget', {
         'subject': subject,
         'timerText': timerText,
         'status': status,
-        if (bgColorHex != null) 'bgColor': bgColorHex,
+        'bgColor': bgColorHex,
+        'progressPercent': progressPercent,
       });
     } catch (e) {
       debugPrint('Pomodoro widget refresh error: $e');
