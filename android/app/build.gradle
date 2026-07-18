@@ -39,8 +39,9 @@ android {
 
     defaultConfig {
         applicationId "com.example.event_countdown"
-        minSdkVersion (flutter.minSdkVersion ?: 21)
-        targetSdkVersion (flutter.targetSdkVersion ?: 35)
+        // FIX: Hardcoded to avoid flutter property resolution issues in CI
+        minSdkVersion 21
+        targetSdkVersion 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true
