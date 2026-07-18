@@ -238,7 +238,7 @@ class RecurrenceService {
     final specificDates = event.yearlySpecificDates;
     var currentYear = now.year;
 
-    // Generate candidates for current year
+    // Generate candidates for current year only
     final candidatesThisYear = <_OccurrenceCandidate>[];
     for (final sd in specificDates) {
       final dt = sd.toDateTime(currentYear);
@@ -264,30 +264,7 @@ class RecurrenceService {
       }
     }
 
-    // If we need more, generate from next year
-    if (virtuals.length < maxCount) {
-      final nextYear = currentYear + 1;
-      final candidatesNextYear = specificDates.map((sd) {
-        return _OccurrenceCandidate(sd.toDateTime(nextYear), sd);
-      }).toList();
-      candidatesNextYear.sort((a, b) => a.date.compareTo(b.date));
-
-      for (final cand in candidatesNextYear) {
-        if (virtuals.length >= maxCount) break;
-        if (cand.date.isAfter(cutoff)) break;
-
-        final occurrenceMillis = cand.date.millisecondsSinceEpoch;
-        if (!excluded.contains(occurrenceMillis)) {
-          virtuals.add(_buildVirtualEvent(
-            event,
-            cand.date,
-            occurrenceMillis,
-            customStartTime: cand.specificDate.customStartTimeMillis,
-            customDeadline: cand.specificDate.customDeadlineMillis,
-          ));
-        }
-      }
-    }
+    // FIX: Removed next-year generation so only selected dates for current year appear
 
     return virtuals;
   }
