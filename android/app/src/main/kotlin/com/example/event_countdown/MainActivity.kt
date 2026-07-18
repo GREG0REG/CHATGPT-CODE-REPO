@@ -23,6 +23,7 @@ class MainActivity : FlutterActivity() {
                     val countdown = call.argument<String>("countdown") ?: ""
                     val bgColorStr = call.argument<String>("bgColor")
                     val textColorStr = call.argument<String>("textColor")
+                    val progressPercent = call.argument<Int>("progressPercent") ?: 65
 
                     for (widgetId in appWidgetIds) {
                         EventCountdownWidgetProvider.updateWidgetDirectly(
@@ -32,7 +33,8 @@ class MainActivity : FlutterActivity() {
                             title,
                             countdown,
                             bgColorStr,
-                            textColorStr
+                            textColorStr,
+                            progressPercent
                         )
                     }
 
@@ -47,6 +49,7 @@ class MainActivity : FlutterActivity() {
                     val timerText = call.argument<String>("timerText") ?: "Tap to start"
                     val status = call.argument<String>("status") ?: "Focus"
                     val bgColorStr = call.argument<String>("bgColor")
+                    val progressPercent = call.argument<Int>("progressPercent") ?: 45
 
                     for (widgetId in appWidgetIds) {
                         PomodoroWidgetProvider.updateWidgetDirectly(
@@ -56,7 +59,8 @@ class MainActivity : FlutterActivity() {
                             subject,
                             timerText,
                             status,
-                            bgColorStr
+                            bgColorStr,
+                            progressPercent
                         )
                     }
 
