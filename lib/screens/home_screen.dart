@@ -9,6 +9,7 @@ import '../services/notification_service.dart';
 import '../services/recurrence_service.dart';
 import '../services/settings_service.dart';
 import '../services/widget_service.dart';
+import '../theme/app_themes.dart';
 import '../event_card.dart';
 import 'add_edit_event_screen.dart';
 import 'settings_screen.dart';
@@ -43,12 +44,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _loadAll();
-    // OPTIMIZED: Only rebuild UI every 60s, don't query database
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 60),
-      (_) {
-        if (mounted) setState(() {});
-      },
+      (_) { if (mounted) setState(() {}); },
     );
   }
 
@@ -58,17 +56,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  void pauseRefresh() {
-    _refreshTimer?.cancel();
-  }
+  void pauseRefresh() => _refreshTimer?.cancel();
 
   void resumeRefresh() {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 60),
-      (_) {
-        if (mounted) setState(() {});
-      },
+      (_) { if (mounted) setState(() {}); },
     );
     _loadEventsOnly();
   }
@@ -86,7 +80,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final expanded = RecurrenceService.expandEvents(rawEvents, now);
 
     if (!mounted) return;
-
     setState(() {
       _events = expanded;
       _smartFormat = smart;
@@ -116,7 +109,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _openAddEdit({Event? existing}) async {
     Event? eventToEdit = existing;
-
     if (existing != null && existing.id != null && existing.id! < 0) {
       final parentId = -existing.id!;
       final parent = await DatabaseHelper.instance.getEvent(parentId);
@@ -124,9 +116,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         final choice = await showDialog<_EditChoice>(
           context: context,
           builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             title: const Text('Recurring Event'),
-            content:
-                const Text('This is a recurring event. What would you like to edit?'),
+            content: const Text('This is a recurring event. What would you like to edit?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, _EditChoice.series),
@@ -139,9 +131,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ],
           ),
         );
-
         if (choice == null) return;
-
         if (choice == _EditChoice.series) {
           eventToEdit = parent;
         } else {
@@ -156,10 +146,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-          builder: (_) => AddEditEventScreen(existing: eventToEdit)),
+      MaterialPageRoute(builder: (_) => AddEditEventScreen(existing: eventToEdit)),
     );
-
     if (result == true) await _loadAll();
   }
 
@@ -172,6 +160,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final choice = await showDialog<_DeleteChoice>(
         context: context,
         builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           title: const Text('Delete Recurring Event'),
           content: Text('Delete "${event.title}"?'),
           actions: [
@@ -192,7 +181,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
 
       if (choice == null) return;
-
       HapticFeedback.mediumImpact();
 
       if (choice == _DeleteChoice.series) {
@@ -208,14 +196,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         excluded.add(event.dateMillis);
         final updated = parent.copyWith(excludedDatesJson: jsonEncode(excluded));
         await DatabaseHelper.instance.updateEvent(updated);
-
         setState(() {
           _events.removeWhere((e) =>
               e.id == event.id ||
               (e.id != null && e.id! < 0 && e.dateMillis == event.dateMillis));
         });
       }
-
       await WidgetService.refreshWidget();
       return;
     }
@@ -223,6 +209,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('Delete event?'),
         content: Text('Delete "${event.title}"? This cannot be undone.'),
         actions: [
@@ -237,7 +224,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
 
     if (confirm != true) return;
-
     HapticFeedback.mediumImpact();
 
     if (event.id != null) {
@@ -268,7 +254,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     for (final event in nonRecurring) {
       groups.add(_EventGroup(parent: event, children: []));
     }
-
     for (final event in parentEvents) {
       final children = parentMap[event.id] ?? [];
       groups.add(_EventGroup(parent: event, children: children));
@@ -295,6 +280,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final groups = _buildGroups(_events);
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -317,12 +303,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               : RefreshIndicator(
                   onRefresh: _loadAll,
                   child: ListView.builder(
+                    padding: const EdgeInsets.only(top: 8, bottom: 80),
                     itemCount: groups.length,
                     itemBuilder: (context, index) {
                       final group = groups[index];
                       final isRecurringParent = group.parent.isRecurring &&
-                          group.parent.id != null &&
-                          group.parent.id! > 0;
+                          group.parent.id != null && group.parent.id! > 0;
                       final hasChildren = group.children.isNotEmpty;
                       final isExpanded =
                           isRecurringParent && _expandedParents.contains(group.parent.id);
@@ -351,58 +337,62 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildEmptyState() {
+    final cs = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.calendar_today_outlined,
-              size: 64,
-              color: Theme.of(context).colorScheme.outline,
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [cs.primary.withOpacity(0.3), cs.secondary.withOpacity(0.3)],
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.calendar_today_outlined,
+                size: 36,
+                color: cs.primary,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Text(
               'No events yet!',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
+              style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 8),
             Text(
               'Tap + to add your first event.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: Theme.of(context).colorScheme.outline,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: cs.outline,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(16),
+              padding: const EdgeInsets.all(20),
+              decoration: AppThemes.glassmorphism(
+                context: context,
+                opacity: 0.08,
+                borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
                 children: [
-                  Icon(
-                    Icons.format_quote,
-                    color: Theme.of(context).colorScheme.primary,
-                    size: 24,
-                  ),
-                  const SizedBox(height: 8),
+                  Icon(Icons.format_quote, color: cs.primary, size: 24),
+                  const SizedBox(height: 12),
                   Text(
                     _randomQuote(),
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,
                       fontStyle: FontStyle.italic,
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      color: cs.onSurface.withOpacity(0.7),
+                      height: 1.5,
                     ),
                   ),
                 ],
@@ -416,12 +406,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 }
 
 enum _EditChoice { series, occurrence }
-
 enum _DeleteChoice { series, skip }
 
 class _EventGroup {
   final Event parent;
   final List<Event> children;
-
   _EventGroup({required this.parent, required this.children});
 }
