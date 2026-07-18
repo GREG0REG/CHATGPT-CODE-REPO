@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database_helper.dart';
+import '../main.dart';
 import '../models/event.dart';
 import '../services/pomodoro_service.dart';
 import '../theme/app_themes.dart';
