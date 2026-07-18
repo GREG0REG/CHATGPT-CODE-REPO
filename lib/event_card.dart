@@ -5,6 +5,7 @@ import 'database_helper.dart';
 import 'models/event.dart';
 import 'models/subtask.dart';
 import 'services/countdown_service.dart';
+import 'theme/app_themes.dart';
 
 class EventCard extends StatefulWidget {
   final Event event;
@@ -49,9 +50,7 @@ class _EventCardState extends State<EventCard> {
     try {
       final list = await DatabaseHelper.instance.getSubtasksForEvent(id);
       if (mounted) setState(() => _subtasks = list);
-    } catch (_) {
-      // Non-critical — silently ignore
-    }
+    } catch (_) {}
   }
 
   String _formatDateTime(int millis) {
@@ -97,7 +96,7 @@ class _EventCardState extends State<EventCard> {
         const SizedBox(width: 8),
         Expanded(
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: total == 0 ? 0 : done / total,
               minHeight: 4,
@@ -107,6 +106,32 @@ class _EventCardState extends State<EventCard> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Build a mini circular progress indicator for the card
+  Widget _buildCircularProgress(double progress, Color color) {
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CircularProgressIndicator(
+            value: 1.0,
+            strokeWidth: 3,
+            backgroundColor: color.withOpacity(0.12),
+            valueColor: const AlwaysStoppedAnimation(Colors.transparent),
+          ),
+          CircularProgressIndicator(
+            value: progress,
+            strokeWidth: 3,
+            backgroundColor: Colors.transparent,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+            strokeCap: StrokeCap.round,
+          ),
+        ],
+      ),
     );
   }
 
@@ -141,6 +166,20 @@ class _EventCardState extends State<EventCard> {
     final isRecurringParent = widget.event.isRecurring && widget.event.id != null && widget.event.id! > 0;
     final hasChildren = widget.childOccurrences != null && widget.childOccurrences!.isNotEmpty;
 
+    // Calculate progress for the circular indicator
+    double progressValue = 0.0;
+    if (!isCompleted && displayEvent.deadlineMillis != null && displayEvent.startTimeMillis != null) {
+      final total = displayEvent.deadlineMillis! - displayEvent.startTimeMillis!;
+      final elapsed = now.millisecondsSinceEpoch - displayEvent.startTimeMillis!;
+      if (total > 0) {
+        progressValue = (elapsed / total).clamp(0.0, 1.0);
+      }
+    } else {
+      progressValue = isCompleted ? 1.0 : 0.65;
+    }
+
+    final cs = Theme.of(context).colorScheme;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -148,206 +187,177 @@ class _EventCardState extends State<EventCard> {
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: InkWell(
             onTap: widget.onTap,
-            borderRadius: BorderRadius.circular(16),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 32,
-                    height: 48,
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      icon: Icon(
-                        isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                        color: isCompleted ? Colors.green : Theme.of(context).colorScheme.outline,
-                        size: 22,
-                      ),
-                      onPressed: widget.onComplete != null
-                          ? () => widget.onComplete!(!isCompleted)
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Hero(
-                    tag: 'event_avatar_${widget.event.id}',
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: urgencyColor.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Center(
-                            child: Icon(
-                              isCompleted ? Icons.check : widget.event.iconData,
-                              color: urgencyColor,
-                              size: 22,
-                            ),
-                          ),
-                        ),
-                        if (!isCompleted && widget.event.priority > 0)
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: widget.event.priorityColor,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Hero(
-                          tag: 'event_title_${widget.event.id}',
-                          child: Material(
-                            color: Colors.transparent,
-                            child: Text(
-                              widget.event.title,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                decoration: isCompleted ? TextDecoration.lineThrough : null,
-                                color: isCompleted ? Colors.grey : null,
-                              ),
-                              maxLines: 1, overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                        if (widget.event.subjectTag != null && widget.event.subjectTag!.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              widget.event.subjectTag!,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Theme.of(context).colorScheme.onPrimaryContainer,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: isCompleted
+                    ? null
+                    : LinearGradient(
+                        colors: [
+                          cs.primary.withOpacity(0.03),
+                          cs.secondary.withOpacity(0.03),
                         ],
-                        if (subtitleParts.isNotEmpty) ...[
-                          const SizedBox(height: 2),
+                      ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Circular progress indicator
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: _buildCircularProgress(
+                        progressValue,
+                        isCompleted ? Colors.grey : cs.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Title
                           Text(
-                            subtitleParts.join(' • '),
+                            widget.event.title,
                             style: TextStyle(
-                              fontSize: 12,
-                              color: isCompleted
-                                  ? Colors.grey
-                                  : Theme.of(context).colorScheme.outline,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              decoration: isCompleted ? TextDecoration.lineThrough : null,
+                              color: isCompleted ? Colors.grey : null,
                             ),
                             maxLines: 1, overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                        const SizedBox(height: 4),
-                        Text(
-                          isCompleted ? 'Completed' : result.text,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: isCompleted
-                                ? Colors.grey
-                                : Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                        if (_subtasks.isNotEmpty) ...[
+                          if (widget.event.subjectTag != null && widget.event.subjectTag!.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [cs.primary.withOpacity(0.12), cs.secondary.withOpacity(0.12)],
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                widget.event.subjectTag!,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: cs.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (subtitleParts.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              subtitleParts.join(' • '),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isCompleted
+                                    ? Colors.grey
+                                    : cs.outline,
+                              ),
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                           const SizedBox(height: 6),
-                          _buildSubtaskRow(),
+                          Text(
+                            isCompleted ? 'Completed' : result.text,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: isCompleted
+                                  ? Colors.grey
+                                  : cs.primary,
+                            ),
+                          ),
+                          if (_subtasks.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            _buildSubtaskRow(),
+                          ],
                         ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  if (widget.event.isRecurring)
-                    Container(
-                      width: 28,
-                      height: 48,
-                      alignment: Alignment.center,
-                      child: Icon(
-                        Icons.sync,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
-                  if (isRecurringParent && hasChildren)
+
+                    const SizedBox(width: 6),
+
+                    // Action buttons
+                    if (widget.event.isRecurring)
+                      Container(
+                        width: 28,
+                        height: 48,
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Icons.sync,
+                          size: 16,
+                          color: cs.primary,
+                        ),
+                      ),
+                    if (isRecurringParent && hasChildren)
+                      Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(24),
+                        child: InkWell(
+                          onTap: widget.onExpandToggle,
+                          borderRadius: BorderRadius.circular(24),
+                          child: Container(
+                            width: 40, height: 48, alignment: Alignment.center,
+                            child: AnimatedRotation(
+                              turns: widget.isExpanded ? 0.5 : 0,
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(Icons.expand_more,
+                                color: cs.primary, size: 24),
+                            ),
+                          ),
+                        ),
+                      ),
                     Material(
                       color: Colors.transparent,
                       borderRadius: BorderRadius.circular(24),
                       child: InkWell(
-                        onTap: widget.onExpandToggle,
+                        onTap: () => _shareEvent(context),
                         borderRadius: BorderRadius.circular(24),
                         child: Container(
-                          width: 40, height: 48, alignment: Alignment.center,
-                          child: AnimatedRotation(
-                            turns: widget.isExpanded ? 0.5 : 0,
-                            duration: const Duration(milliseconds: 200),
-                            child: Icon(Icons.expand_more,
-                              color: Theme.of(context).colorScheme.primary, size: 24),
-                          ),
+                          width: 36, height: 48, alignment: Alignment.center,
+                          child: Icon(Icons.share,
+                            color: cs.primary.withOpacity(0.6), size: 18),
                         ),
                       ),
                     ),
-                  Material(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(24),
-                    child: InkWell(
-                      onTap: () => _shareEvent(context),
+                    Material(
+                      color: Colors.transparent,
                       borderRadius: BorderRadius.circular(24),
-                      child: Container(
-                        width: 40, height: 48, alignment: Alignment.center,
-                        child: Icon(Icons.share,
-                          color: Theme.of(context).colorScheme.primary, size: 20),
+                      child: InkWell(
+                        onTap: widget.onDelete,
+                        borderRadius: BorderRadius.circular(24),
+                        child: Container(
+                          width: 36, height: 48, alignment: Alignment.center,
+                          child: Icon(Icons.delete_outline,
+                            color: cs.error.withOpacity(0.6), size: 20),
+                        ),
                       ),
                     ),
-                  ),
-                  Material(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(24),
-                    child: InkWell(
-                      onTap: widget.onDelete,
-                      borderRadius: BorderRadius.circular(24),
-                      child: Container(
-                        width: 40, height: 48, alignment: Alignment.center,
-                        child: Icon(Icons.delete_outline,
-                          color: Theme.of(context).colorScheme.error, size: 22),
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
+        // Expanded child occurrences
         if (widget.isExpanded && hasChildren)
           Padding(
             padding: const EdgeInsets.only(left: 24, right: 12, bottom: 8),
             child: Container(
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(12),
+                color: cs.surfaceContainerHighest.withOpacity(0.4),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.5),
+                  color: cs.outlineVariant.withOpacity(0.3),
                 ),
               ),
               child: Column(
@@ -380,13 +390,12 @@ class _EventCardState extends State<EventCard> {
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                     subtitle: childSubtitle.isNotEmpty
                         ? Text(childSubtitle.join(' • '),
-                            style: TextStyle(fontSize: 11,
-                              color: Theme.of(context).colorScheme.outline))
+                            style: TextStyle(fontSize: 11, color: cs.outline))
                         : null,
                     trailing: Text(
                       childResult.text,
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.primary),
+                        color: cs.primary),
                     ),
                   );
                 }).toList(),
