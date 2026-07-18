@@ -1,41 +1,79 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/pomodoro_widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:padding="12dp"
-    android:background="#2196F3">
+    android:background="@drawable/widget_glass_background">
 
-    <TextView
-        android:id="@+id/pomodoro_widget_subject"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Ready to Focus"
-        android:textSize="12sp"
-        android:textStyle="bold"
-        android:textColor="#FFFFFF"
-        android:maxLines="1"
-        android:ellipsize="end" />
+    <!-- Circular progress ring -->
+    <ProgressBar
+        android:id="@+id/pomodoro_progress_ring"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:indeterminate="false"
+        android:max="100"
+        android:progress="45"
+        android:progressDrawable="@drawable/widget_circular_progress_teal"
+        android:rotation="-90" />
 
-    <TextView
-        android:id="@+id/pomodoro_widget_timer"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="25:00"
-        android:textSize="32sp"
-        android:textStyle="bold"
-        android:textColor="#FFFFFF" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="16dp">
 
-    <TextView
-        android:id="@+id/pomodoro_widget_status"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="Focus"
-        android:textSize="11sp"
-        android:textColor="#FFFFFF" />
+        <TextView
+            android:id="@+id/pomodoro_widget_subject"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:maxLines="1"
+            android:shadowColor="#40000000"
+            android:shadowDx="0"
+            android:shadowDy="2"
+            android:shadowRadius="4"
+            android:text="Biology"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:alpha="0.85" />
 
-</LinearLayout>
+        <TextView
+            android:id="@+id/pomodoro_widget_timer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="sans-serif-light"
+            android:gravity="center"
+            android:shadowColor="#60000000"
+            android:shadowDx="0"
+            android:shadowDy="2"
+            android:shadowRadius="6"
+            android:text="25:00"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/pomodoro_widget_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="sans-serif"
+            android:gravity="center"
+            android:shadowColor="#40000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="3"
+            android:text="Focus"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:alpha="0.75" />
+
+    </LinearLayout>
+
+</FrameLayout>
