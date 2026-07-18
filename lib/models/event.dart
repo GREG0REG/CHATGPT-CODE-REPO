@@ -50,6 +50,46 @@ class YearlySpecificDate {
 }
 
 // ============================================
+// EVENT ICONS FOR STUDENTS
+// ============================================
+class EventIcons {
+  EventIcons._();
+
+  static const Map<String, IconData> icons = {
+    'event': Icons.event,
+    'school': Icons.school,
+    'book': Icons.book,
+    'menu_book': Icons.menu_book,
+    'calculate': Icons.calculate,
+    'science': Icons.science,
+    'biotech': Icons.biotech,
+    'computer': Icons.computer,
+    'code': Icons.code,
+    'edit_note': Icons.edit_note,
+    'assignment': Icons.assignment,
+    'quiz': Icons.quiz,
+    'emoji_events': Icons.emoji_events,
+    'sports': Icons.sports,
+    'music_note': Icons.music_note,
+    'palette': Icons.palette,
+    'translate': Icons.translate,
+    'public': Icons.public,
+    'psychology': Icons.psychology,
+    'history_edu': Icons.history_edu,
+    'self_improvement': Icons.self_improvement,
+    'alarm': Icons.alarm,
+    'timer': Icons.timer,
+    'group': Icons.group,
+    'presentation': Icons.present_to_all,
+    'work': Icons.work,
+  };
+
+  static IconData? getIcon(String? name) => icons[name] ?? Icons.event;
+
+  static String? getDefaultIconName() => 'event';
+}
+
+// ============================================
 // MAIN EVENT MODEL
 // ============================================
 class Event {
@@ -60,12 +100,18 @@ class Event {
   final int? deadlineMillis;
   final String? notes;
 
-  // --- Recurrence fields (NEW) ---
+  // --- Recurrence fields ---
   final RecurrenceType recurrence;
-  final int recurrenceInterval; // 1-50, default 1
-  final bool yearlyUseSpecificDates; // only for yearly
-  final String? yearlySpecificDatesJson; // JSON list of YearlySpecificDate
-  final String? excludedDatesJson; // JSON list of excluded timestamps
+  final int recurrenceInterval;
+  final bool yearlyUseSpecificDates;
+  final String? yearlySpecificDatesJson;
+  final String? excludedDatesJson;
+
+  // --- Student Study Pack fields (NEW) ---
+  final String? iconName;
+  final int priority; // 0=none, 1=low, 2=normal, 3=high, 4=urgent
+  final String? subjectTag;
+  final bool isCompleted;
 
   const Event({
     this.id,
@@ -79,6 +125,10 @@ class Event {
     this.yearlyUseSpecificDates = false,
     this.yearlySpecificDatesJson,
     this.excludedDatesJson,
+    this.iconName,
+    this.priority = 2, // default normal
+    this.subjectTag,
+    this.isCompleted = false,
   });
 
   // --- Computed properties ---
@@ -126,6 +176,8 @@ class Event {
   // URGENCY COLOR (unchanged)
   // ============================================
   Color getUrgencyColor(DateTime now) {
+    if (isCompleted) return Colors.grey;
+
     final nowMillis = now.millisecondsSinceEpoch;
     final target = deadlineMillis ?? startTimeMillis ?? dateMillis;
     final diff = Duration(milliseconds: target - nowMillis);
@@ -141,8 +193,45 @@ class Event {
     }
   }
 
+  // ============================================
+  // PRIORITY COLOR & LABEL
+  // ============================================
+  Color get priorityColor {
+    switch (priority) {
+      case 1:
+        return Colors.blue;
+      case 2:
+        return Colors.green;
+      case 3:
+        return Colors.orange;
+      case 4:
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String get priorityLabel {
+    switch (priority) {
+      case 1:
+        return 'Low';
+      case 2:
+        return 'Normal';
+      case 3:
+        return 'High';
+      case 4:
+        return 'Urgent';
+      default:
+        return 'None';
+    }
+  }
+
+  IconData get iconData => EventIcons.getIcon(iconName);
+
   /// Convenience: returns the countdown text string for this event at [now].
   String getCountdownText(DateTime now, {required bool smartFormatEnabled}) {
+    if (isCompleted) return 'Completed';
+
     final diff = Duration(
       milliseconds: finalMillis - now.millisecondsSinceEpoch,
     );
@@ -180,6 +269,12 @@ class Event {
     bool clearYearlySpecificDates = false,
     String? excludedDatesJson,
     bool clearExcludedDates = false,
+    String? iconName,
+    bool clearIconName = false,
+    int? priority,
+    String? subjectTag,
+    bool clearSubjectTag = false,
+    bool? isCompleted,
   }) {
     return Event(
       id: id ?? this.id,
@@ -202,6 +297,10 @@ class Event {
       excludedDatesJson: clearExcludedDates
           ? null
           : (excludedDatesJson ?? this.excludedDatesJson),
+      iconName: clearIconName ? null : (iconName ?? this.iconName),
+      priority: priority ?? this.priority,
+      subjectTag: clearSubjectTag ? null : (subjectTag ?? this.subjectTag),
+      isCompleted: isCompleted ?? this.isCompleted,
     );
   }
 
@@ -218,6 +317,10 @@ class Event {
       'yearlyUseSpecificDates': yearlyUseSpecificDates ? 1 : 0,
       'yearlySpecificDatesJson': yearlySpecificDatesJson,
       'excludedDatesJson': excludedDatesJson,
+      'iconName': iconName,
+      'priority': priority,
+      'subjectTag': subjectTag,
+      'isCompleted': isCompleted ? 1 : 0,
     };
   }
 
@@ -237,6 +340,10 @@ class Event {
       yearlyUseSpecificDates: (map['yearlyUseSpecificDates'] as int?) == 1,
       yearlySpecificDatesJson: map['yearlySpecificDatesJson'] as String?,
       excludedDatesJson: map['excludedDatesJson'] as String?,
+      iconName: map['iconName'] as String?,
+      priority: (map['priority'] as int?)?.clamp(0, 4) ?? 2,
+      subjectTag: map['subjectTag'] as String?,
+      isCompleted: (map['isCompleted'] as int? ?? 0) == 1,
     );
   }
 
