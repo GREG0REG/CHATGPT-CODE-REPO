@@ -101,25 +101,31 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             status: String,
             bgColorStr: String?
         ) {
-            val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
+            try {
+                val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
 
-            views.setTextViewText(R.id.pomodoro_widget_subject, subject)
-            views.setTextViewText(R.id.pomodoro_widget_timer, timerText)
-            views.setTextViewText(R.id.pomodoro_widget_status, status)
+                views.setTextViewText(R.id.pomodoro_widget_subject, subject)
+                views.setTextViewText(R.id.pomodoro_widget_timer, timerText)
+                views.setTextViewText(R.id.pomodoro_widget_status, status)
 
-            val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#2196F3"))
-            views.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", themeColor)
+                val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#2196F3"))
+                views.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", themeColor)
 
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            val pendingIntent = PendingIntent.getActivity(
-                context,
-                0,
-                launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.pomodoro_widget_root, pendingIntent)
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                if (launchIntent != null) {
+                    val pendingIntent = PendingIntent.getActivity(
+                        context,
+                        0,
+                        launchIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    views.setOnClickPendingIntent(R.id.pomodoro_widget_root, pendingIntent)
+                }
 
-            appWidgetManager.updateAppWidget(widgetId, views)
+                appWidgetManager.updateAppWidget(widgetId, views)
+            } catch (e: Exception) {
+                android.util.Log.e("PomodoroWidget", "Update failed", e)
+            }
         }
     }
 
@@ -128,15 +134,19 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-        val subject = prefs.getString(KEY_SUBJECT, "Ready to Focus") ?: "Ready to Focus"
-        val timerText = prefs.getString(KEY_TIMER, "Tap to start") ?: "Tap to start"
-        val status = prefs.getString(KEY_STATUS, "Focus") ?: "Focus"
-        val bgColorStr = prefs.getString(KEY_BG_COLOR, null)
+            val subject = prefs.getString(KEY_SUBJECT, "Ready to Focus") ?: "Ready to Focus"
+            val timerText = prefs.getString(KEY_TIMER, "Tap to start") ?: "Tap to start"
+            val status = prefs.getString(KEY_STATUS, "Focus") ?: "Focus"
+            val bgColorStr = prefs.getString(KEY_BG_COLOR, null)
 
-        for (widgetId in appWidgetIds) {
-            updateWidgetDirectly(context, appWidgetManager, widgetId, subject, timerText, status, bgColorStr)
+            for (widgetId in appWidgetIds) {
+                updateWidgetDirectly(context, appWidgetManager, widgetId, subject, timerText, status, bgColorStr)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("PomodoroWidget", "onUpdate failed", e)
         }
     }
 }
