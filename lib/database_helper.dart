@@ -28,7 +28,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -47,6 +47,9 @@ class DatabaseHelper {
         }
         if (oldVersion < 6) {
           await _migrateV5ToV6(db);
+        }
+        if (oldVersion < 7) {
+          await _migrateV6ToV7(db);
         }
       },
     );
@@ -101,7 +104,8 @@ class DatabaseHelper {
         subjectTag TEXT,
         durationMinutes INTEGER NOT NULL,
         completedAtMillis INTEGER NOT NULL,
-        sessionType TEXT DEFAULT 'pomodoro'
+        sessionType TEXT DEFAULT 'pomodoro',
+        notes TEXT
       )
     """);
     await db.execute("""
@@ -147,7 +151,7 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- NEW: STUDY SUBJECTS (v6) ----
+    // ---- STUDY SUBJECTS (v6) ----
     await db.execute("""
       CREATE TABLE study_subjects (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -236,7 +240,7 @@ class DatabaseHelper {
     """);
   }
 
-  // NEW: v5 -> v6 migration (study subjects)
+  // v5 -> v6 migration (study subjects)
   Future<void> _migrateV5ToV6(Database db) async {
     await db.execute("""
       CREATE TABLE study_subjects (
@@ -247,6 +251,11 @@ class DatabaseHelper {
         createdAtMillis INTEGER NOT NULL
       )
     """);
+  }
+
+  // v6 -> v7 migration (session notes)
+  Future<void> _migrateV6ToV7(Database db) async {
+    await db.execute('ALTER TABLE study_sessions ADD COLUMN notes TEXT');
   }
 
   // ============================================
@@ -391,6 +400,17 @@ class DatabaseHelper {
   Future<int> deleteStudySession(int id) async {
     final db = await database;
     return db.delete('study_sessions', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // NEW: Update session note
+  Future<void> updateSessionNote(int id, String note) async {
+    final db = await database;
+    await db.update(
+      'study_sessions',
+      {'notes': note},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   // ============================================
@@ -644,7 +664,7 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // NEW: STUDY SUBJECT CRUD
+  // STUDY SUBJECT CRUD
   // ============================================
   Future<int> insertStudySubject(StudySubject subject) async {
     final db = await database;
