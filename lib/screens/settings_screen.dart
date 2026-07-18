@@ -24,11 +24,11 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _smartFormat = false;
   bool _use24Hour = true;
-  AppThemeOption _theme = AppThemeOption.defaultBlue;
+  AppThemeOption _theme = AppThemeOption.auroraBorealis;
   WidgetBackgroundType _bgType = WidgetBackgroundType.themeColor;
   String? _imagePath;
   ThemeMode _themeMode = ThemeMode.system;
-  Color _customColor = Colors.blue;
+  Color _customColor = const Color(0xFF00BFA5);
   bool _highContrast = false;
   bool _widgetProgressBar = false;
   bool _widgetPulseAnimation = false;
@@ -72,7 +72,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _bgType = bgType;
       _imagePath = imagePath;
       _themeMode = mode;
-      _customColor = custom ?? Colors.blue;
+      _customColor = custom ?? const Color(0xFF00BFA5);
       _highContrast = hc;
       _widgetProgressBar = progressBar;
       _widgetPulseAnimation = pulseAnim;
@@ -244,6 +244,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('Import events?'),
         content: Text(
             'Import ${result.files.single.name}?\nThis will replace ALL current events. This cannot be undone.'),
@@ -332,8 +333,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   final isSelected = _theme == info.option;
                   return RadioListTile<AppThemeOption>(
                     title: Row(children: [
-                      Icon(info.icon, color: info.color, size: 20),
-                      const SizedBox(width: 8),
+                      Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: info.gradientColors),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
                       Text(info.label)
                     ]),
                     secondary: isSelected
