@@ -21,6 +21,10 @@ class WidgetService {
   
   static const MethodChannel _channel = MethodChannel('com.example.event_countdown/widget');
 
+  static String _colorToHex(Color color) {
+    return '#${color.value.toRadixString(16).padLeft(8, '0')}';
+  }
+
   static Future<void> refreshWidget() async {
     developer.log('WIDGET: Starting refreshWidget()', name: 'WidgetService');
     
@@ -66,14 +70,19 @@ class WidgetService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kTitle, title);
     await prefs.setString(_kCountdown, countdownText);
-    await prefs.setString(_kBgColor, themeColor.value.toString());
-    await prefs.setString(_kTextColor, textColor.value.toString());
+    await prefs.setString(_kBgColor, _colorToHex(themeColor));
+    await prefs.setString(_kTextColor, _colorToHex(textColor));
     
     developer.log('WIDGET: Saved to SharedPreferences', name: 'WidgetService');
 
-    // Force widget update via platform channel
+    // Send data directly to Android so it updates right now
     try {
-      await _channel.invokeMethod('updateWidget');
+      await _channel.invokeMethod('updateWidget', {
+        'title': title,
+        'countdown': countdownText,
+        'bgColor': _colorToHex(themeColor),
+        'textColor': _colorToHex(textColor),
+      });
       developer.log('WIDGET: Platform channel update triggered', name: 'WidgetService');
     } catch (e) {
       developer.log('WIDGET: Platform channel failed: $e', name: 'WidgetService');
