@@ -5,9 +5,12 @@ import 'package:workmanager/workmanager.dart';
 import 'database_helper.dart';
 import 'services/export_import_service.dart';
 import 'screens/home_screen.dart';
+import 'screens/main_screen.dart';
 import 'screens/widget_settings_screen.dart';
+import 'screens/stats_screen.dart';
 import 'services/backup_service.dart';
 import 'services/notification_service.dart';
+import 'services/pomodoro_service.dart';
 import 'services/settings_service.dart';
 import 'services/widget_service.dart';
 import 'theme/app_themes.dart';
@@ -20,6 +23,7 @@ void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     if (task == kWidgetRefreshTaskName) {
       await WidgetService.refreshWidget();
+      await WidgetService.refreshPomodoroWidget();
     } else if (task == kBackupTaskName) {
       return Future.value(await BackupService.executeBackup());
     }
@@ -30,6 +34,7 @@ void callbackDispatcher() {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService.instance.init();
+  await PomodoroService.instance.init();
 
   await Workmanager().initialize(
     callbackDispatcher,
@@ -46,9 +51,9 @@ Future<void> main() async {
 
   await BackupService.registerWeeklyBackup();
   
-  // CRITICAL: Refresh widget with current data
   try {
     await WidgetService.refreshWidget();
+    await WidgetService.refreshPomodoroWidget();
   } catch (e) {
     debugPrint('Widget refresh error: $e');
   }
@@ -87,8 +92,8 @@ class EventCountdownAppState extends State<EventCountdownApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Refresh widget when app comes to foreground
       WidgetService.refreshWidget();
+      WidgetService.refreshPomodoroWidget();
     }
   }
 
@@ -147,6 +152,7 @@ class EventCountdownAppState extends State<EventCountdownApp>
         final events = await DatabaseHelper.instance.getAllEventsSorted();
         await NotificationService.instance.rescheduleAll(events);
         await WidgetService.refreshWidget();
+        await WidgetService.refreshPomodoroWidget();
 
         if (mounted) {
           ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
@@ -207,9 +213,10 @@ class EventCountdownAppState extends State<EventCountdownApp>
                 _theme == AppThemeOption.materialYou ? darkDynamic : null,
             highContrast: _highContrast,
           ),
-          home: const HomeScreen(),
+          home: const MainScreen(),
           routes: {
             '/widget_settings': (context) => const WidgetSettingsScreen(),
+            '/stats': (context) => const StatsScreen(),
           },
         );
       },
