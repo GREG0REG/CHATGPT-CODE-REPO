@@ -62,7 +62,6 @@ class _EventCardState extends State<EventCard> {
     final now = DateTime.now();
     final isCompleted = widget.event.isCompleted;
 
-    // If parent recurring event is past (and not completed), show countdown to nearest child
     final isPastParent = widget.event.isRecurring &&
         !isCompleted &&
         widget.childOccurrences != null &&
@@ -102,7 +101,6 @@ class _EventCardState extends State<EventCard> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Completion toggle
                   SizedBox(
                     width: 32,
                     height: 48,
@@ -119,7 +117,6 @@ class _EventCardState extends State<EventCard> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  // Avatar with custom icon + priority dot
                   Hero(
                     tag: 'event_avatar_${widget.event.id}',
                     child: Stack(
@@ -161,7 +158,7 @@ class _EventCardState extends State<EventCard> {
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxis.min,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Hero(
                           tag: 'event_title_${widget.event.id}',
@@ -225,7 +222,6 @@ class _EventCardState extends State<EventCard> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  // Recurrence icon moved to action side
                   if (widget.event.isRecurring)
                     Container(
                       width: 28,
@@ -237,7 +233,6 @@ class _EventCardState extends State<EventCard> {
                         color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
-                  // Expand button for recurring events
                   if (isRecurringParent && hasChildren)
                     Material(
                       color: Colors.transparent,
@@ -287,7 +282,6 @@ class _EventCardState extends State<EventCard> {
             ),
           ),
         ),
-        // Expanded child occurrences
         if (widget.isExpanded && hasChildren)
           Padding(
             padding: const EdgeInsets.only(left: 24, right: 12, bottom: 8),
