@@ -1,33 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-/// Expanded theme options for Session 2.
-/// Existing names preserved for backward compatibility with SharedPreferences.
+/// Redesigned theme options — 5 beautiful presets + Material You + Custom
 enum AppThemeOption {
-  defaultBlue,
-  sunsetOrange, // Now a true gradient: orange → purple
-  forestGreen, // Now a true gradient: green → lime
-  oceanTeal, // Now a true gradient: teal → blue
-  midnightPurple,
-  amoledBlack, // NEW: Pitch black #000000
-  customHex, // NEW: User-defined color
-  materialYou, // NEW: Android 12+ dynamic colors
+  auroraBorealis,      // Teal → Purple gradient (matches your image)
+  sunsetGlow,          // Orange → Pink gradient
+  midnightOcean,       // Deep blue → Cyan
+  emeraldForest,       // Green → Lime
+  roseQuartz,          // Pink → Rose
+  materialYou,         // Android 12+ dynamic
+  customHex,           // User-defined
 }
 
 class AppThemeInfo {
   final AppThemeOption option;
   final String label;
-  final Color color; // Primary/seed color
-  final bool isGradient;
-  final List<Color>? gradientColors;
+  final Color primaryColor;
+  final List<Color> gradientColors;
   final IconData icon;
+  final Color accentColor;
 
   const AppThemeInfo({
     required this.option,
     required this.label,
-    required this.color,
-    this.isGradient = false,
-    this.gradientColors,
+    required this.primaryColor,
+    required this.gradientColors,
     required this.icon,
+    required this.accentColor,
   });
 }
 
@@ -36,58 +35,60 @@ class AppThemes {
 
   static const List<AppThemeInfo> all = [
     AppThemeInfo(
-      option: AppThemeOption.defaultBlue,
-      label: 'Default Blue',
-      color: Color(0xFF2196F3),
-      icon: Icons.color_lens,
+      option: AppThemeOption.auroraBorealis,
+      label: 'Aurora Borealis',
+      primaryColor: Color(0xFF00BFA5),
+      gradientColors: [Color(0xFF00BFA5), Color(0xFF7C4DFF)],
+      icon: Icons.north,
+      accentColor: Color(0xFF7C4DFF),
     ),
     AppThemeInfo(
-      option: AppThemeOption.sunsetOrange,
-      label: 'Sunset Gradient',
-      color: Color(0xFFFF5722),
-      isGradient: true,
-      gradientColors: [Color(0xFFFF9800), Color(0xFF9C27B0)],
+      option: AppThemeOption.sunsetGlow,
+      label: 'Sunset Glow',
+      primaryColor: Color(0xFFFF6D00),
+      gradientColors: [Color(0xFFFF6D00), Color(0xFFFF4081)],
       icon: Icons.wb_twilight,
+      accentColor: Color(0xFFFF4081),
     ),
     AppThemeInfo(
-      option: AppThemeOption.forestGreen,
-      label: 'Forest Gradient',
-      color: Color(0xFF4CAF50),
-      isGradient: true,
-      gradientColors: [Color(0xFF4CAF50), Color(0xFFCDDC39)],
-      icon: Icons.forest,
-    ),
-    AppThemeInfo(
-      option: AppThemeOption.oceanTeal,
-      label: 'Ocean Gradient',
-      color: Color(0xFF009688),
-      isGradient: true,
-      gradientColors: [Color(0xFF009688), Color(0xFF2196F3)],
+      option: AppThemeOption.midnightOcean,
+      label: 'Midnight Ocean',
+      primaryColor: Color(0xFF1565C0),
+      gradientColors: [Color(0xFF1565C0), Color(0xFF00E5FF)],
       icon: Icons.water,
+      accentColor: Color(0xFF00E5FF),
     ),
     AppThemeInfo(
-      option: AppThemeOption.midnightPurple,
-      label: 'Midnight Purple',
-      color: Color(0xFF673AB7),
-      icon: Icons.nightlight_round,
+      option: AppThemeOption.emeraldForest,
+      label: 'Emerald Forest',
+      primaryColor: Color(0xFF2E7D32),
+      gradientColors: [Color(0xFF2E7D32), Color(0xFF76FF03)],
+      icon: Icons.forest,
+      accentColor: Color(0xFF76FF03),
     ),
     AppThemeInfo(
-      option: AppThemeOption.amoledBlack,
-      label: 'AMOLED Black',
-      color: Color(0xFF000000),
-      icon: Icons.dark_mode,
-    ),
-    AppThemeInfo(
-      option: AppThemeOption.customHex,
-      label: 'Custom Color',
-      color: Color(0xFF2196F3), // Fallback
-      icon: Icons.colorize,
+      option: AppThemeOption.roseQuartz,
+      label: 'Rose Quartz',
+      primaryColor: Color(0xFFE91E63),
+      gradientColors: [Color(0xFFE91E63), Color(0xFFFF80AB)],
+      icon: Icons.diamond,
+      accentColor: Color(0xFFFF80AB),
     ),
     AppThemeInfo(
       option: AppThemeOption.materialYou,
       label: 'Material You',
-      color: Color(0xFF2196F3), // Fallback
+      primaryColor: Color(0xFF2196F3),
+      gradientColors: [Color(0xFF2196F3), Color(0xFF03A9F4)],
       icon: Icons.auto_awesome,
+      accentColor: Color(0xFF03A9F4),
+    ),
+    AppThemeInfo(
+      option: AppThemeOption.customHex,
+      label: 'Custom Color',
+      primaryColor: Color(0xFF2196F3),
+      gradientColors: [Color(0xFF2196F3), Color(0xFF64B5F6)],
+      icon: Icons.colorize,
+      accentColor: Color(0xFF64B5F6),
     ),
   ];
 
@@ -98,19 +99,18 @@ class AppThemes {
     );
   }
 
-  static Color colorFor(AppThemeOption option) => infoFor(option).color;
-
+  static Color primaryColorFor(AppThemeOption option) => infoFor(option).primaryColor;
+  static List<Color> gradientColorsFor(AppThemeOption option) => infoFor(option).gradientColors;
+  static Color accentColorFor(AppThemeOption option) => infoFor(option).accentColor;
   static String nameOf(AppThemeOption option) => option.name;
 
   static AppThemeOption fromName(String? name) {
     return all
         .map((t) => t.option)
-        .firstWhere((o) => o.name == name, orElse: () => AppThemeOption.defaultBlue);
+        .firstWhere((o) => o.name == name, orElse: () => AppThemeOption.auroraBorealis);
   }
 
-  /// Build theme data. For light/dark mode support, [brightness] should be
-  /// provided. [customColor] is required when [option] is [customHex].
-  /// [dynamicScheme] is used when [option] is [materialYou].
+  /// Build complete ThemeData for light or dark mode
   static ThemeData buildTheme(
     AppThemeOption option, {
     Brightness brightness = Brightness.light,
@@ -119,10 +119,11 @@ class AppThemes {
     bool highContrast = false,
   }) {
     final isDark = brightness == Brightness.dark;
-
-    // Determine base color scheme
+    final info = infoFor(option);
+    
     ColorScheme colorScheme;
     Color primaryColor;
+    List<Color> gradientColors = info.gradientColors;
 
     switch (option) {
       case AppThemeOption.materialYou:
@@ -133,44 +134,28 @@ class AppThemes {
       case AppThemeOption.customHex:
         final seed = customColor ?? Colors.blue;
         primaryColor = seed;
-        colorScheme = ColorScheme.fromSeed(
-          seedColor: seed,
-          brightness: brightness,
-        );
+        colorScheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
+        gradientColors = [seed, seed.withOpacity(0.7)];
         break;
 
-      case AppThemeOption.amoledBlack:
-        colorScheme = _amoledScheme(isDark);
-        primaryColor = colorScheme.primary;
-        break;
-
-      case AppThemeOption.sunsetOrange:
-      case AppThemeOption.forestGreen:
-      case AppThemeOption.oceanTeal:
-        final info = infoFor(option);
-        primaryColor = info.color;
+      case AppThemeOption.auroraBorealis:
+      case AppThemeOption.sunsetGlow:
+      case AppThemeOption.midnightOcean:
+      case AppThemeOption.emeraldForest:
+      case AppThemeOption.roseQuartz:
+        primaryColor = info.primaryColor;
         colorScheme = ColorScheme.fromSeed(
-          seedColor: info.color,
+          seedColor: info.primaryColor,
           brightness: brightness,
         ).copyWith(
-          primary: isDark ? info.color.withOpacity(0.9) : info.color,
-          secondary: isDark
-              ? info.gradientColors?.last.withOpacity(0.9)
-              : info.gradientColors?.last,
-        );
-        break;
-
-      case AppThemeOption.defaultBlue:
-      case AppThemeOption.midnightPurple:
-        primaryColor = colorFor(option);
-        colorScheme = ColorScheme.fromSeed(
-          seedColor: primaryColor,
-          brightness: brightness,
+          primary: isDark ? info.primaryColor.withOpacity(0.9) : info.primaryColor,
+          secondary: isDark ? info.accentColor.withOpacity(0.9) : info.accentColor,
+          tertiary: info.gradientColors.length > 1 ? info.gradientColors[1] : info.primaryColor,
         );
         break;
     }
 
-    // Apply high contrast if enabled
+    // High contrast override
     if (highContrast) {
       colorScheme = colorScheme.copyWith(
         surface: isDark ? Colors.black : Colors.white,
@@ -178,110 +163,212 @@ class AppThemes {
       );
     }
 
-    // AMOLED-specific overrides
-    final scaffoldBg = option == AppThemeOption.amoledBlack && isDark
-        ? Colors.black
-        : colorScheme.surface;
-
-    final cardColor = option == AppThemeOption.amoledBlack && isDark
-        ? const Color(0xFF0A0A0A)
-        : colorScheme.surfaceContainerHighest;
-
-    final cardElevation = option == AppThemeOption.amoledBlack && isDark ? 0.0 : 1.0;
-
-    final dividerColor = option == AppThemeOption.amoledBlack && isDark
-        ? Colors.grey.shade900
-        : colorScheme.outlineVariant;
+    final surfaceColor = isDark ? const Color(0xFF0F0F1B) : const Color(0xFFF8F9FE);
+    final cardColor = isDark ? const Color(0xFF1A1A2E) : Colors.white;
+    final scaffoldBg = isDark ? const Color(0xFF0F0F1B) : const Color(0xFFF0F2F8);
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
       brightness: brightness,
       scaffoldBackgroundColor: scaffoldBg,
+      
+      // ── Cards with glassmorphism feel ──
       cardTheme: CardTheme(
-        elevation: cardElevation,
+        elevation: isDark ? 0 : 2,
         color: cardColor,
+        shadowColor: primaryColor.withOpacity(0.15),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: option == AppThemeOption.amoledBlack && isDark
-              ? BorderSide(color: Colors.grey.shade900, width: 1)
+          borderRadius: BorderRadius.circular(20),
+          side: isDark
+              ? BorderSide(color: Colors.white.withOpacity(0.06), width: 1)
               : BorderSide.none,
         ),
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       ),
+      
+      // ── AppBar ──
       appBarTheme: AppBarTheme(
         centerTitle: true,
         elevation: 0,
-        backgroundColor: option == AppThemeOption.amoledBlack && isDark
-            ? Colors.black
-            : colorScheme.surface,
+        scrolledUnderElevation: 0,
+        backgroundColor: scaffoldBg,
         foregroundColor: colorScheme.onSurface,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        ),
       ),
+      
+      // ── FAB ──
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: colorScheme.primaryContainer,
-        foregroundColor: colorScheme.onPrimaryContainer,
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
+      
+      // ── List Tiles ──
       listTileTheme: ListTileThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       ),
-      dividerTheme: DividerThemeData(color: dividerColor),
+      
+      // ── Dividers ──
+      dividerTheme: DividerThemeData(
+        color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+        thickness: 1,
+        indent: 16,
+        endIndent: 16,
+      ),
+      
+      // ── SnackBar ──
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: isDark ? const Color(0xFF2A2A3E) : const Color(0xFF323232),
       ),
+      
+      // ── Bottom Navigation ──
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+        selectedItemColor: primaryColor,
+        unselectedItemColor: isDark ? Colors.white38 : Colors.black38,
+        elevation: 8,
+        type: BottomNavigationBarType.fixed,
+      ),
+      
+      // ── Dialogs ──
+      dialogTheme: DialogTheme(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: cardColor,
+      ),
+      
+      // ── Bottom Sheets ──
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: cardColor,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
+      
+      // ── Input Decoration ──
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: primaryColor, width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+      
+      // ── Switches & Sliders ──
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return primaryColor;
+          return isDark ? Colors.white54 : Colors.black38;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return primaryColor.withOpacity(0.3);
+          return isDark ? Colors.white12 : Colors.black12;
+        }),
+      ),
+      
+      sliderTheme: SliderThemeData(
+        activeTrackColor: primaryColor,
+        thumbColor: primaryColor,
+        inactiveTrackColor: isDark ? Colors.white12 : Colors.black12,
+        overlayColor: primaryColor.withOpacity(0.12),
+        trackHeight: 4,
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+      ),
+      
+      // ── Page Transitions ──
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
           TargetPlatform.android: CupertinoPageTransitionsBuilder(),
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
         },
       ),
+      
+      // ── Typography ──
+      textTheme: _buildTextTheme(colorScheme.onSurface, isDark),
+    );
+  }
+
+  static TextTheme _buildTextTheme(Color onSurface, bool isDark) {
+    final baseColor = onSurface;
+    return TextTheme(
+      displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: baseColor, letterSpacing: -0.5),
+      displayMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: baseColor, letterSpacing: -0.5),
+      displaySmall: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: baseColor),
+      headlineLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: baseColor),
+      headlineMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: baseColor),
+      headlineSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: baseColor),
+      titleLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: baseColor),
+      titleMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: baseColor),
+      titleSmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: baseColor.withOpacity(0.7)),
+      bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.normal, color: baseColor),
+      bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.normal, color: baseColor),
+      bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.normal, color: baseColor.withOpacity(0.7)),
+      labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: baseColor),
+      labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: baseColor.withOpacity(0.7)),
+      labelSmall: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: baseColor.withOpacity(0.5)),
     );
   }
 
   static ColorScheme _defaultScheme(Brightness brightness) {
-    return ColorScheme.fromSeed(seedColor: Colors.blue, brightness: brightness);
+    return ColorScheme.fromSeed(seedColor: const Color(0xFF00BFA5), brightness: brightness);
   }
 
-  static ColorScheme _amoledScheme(bool isDark) {
-    if (!isDark) {
-      return _defaultScheme(Brightness.light);
-    }
-    return const ColorScheme.dark(
-      primary: Color(0xFF90CAF9),
-      onPrimary: Colors.black,
-      primaryContainer: Color(0xFF1565C0),
-      onPrimaryContainer: Colors.white,
-      secondary: Color(0xFF80CBC4),
-      onSecondary: Colors.black,
-      secondaryContainer: Color(0xFF00695C),
-      onSecondaryContainer: Colors.white,
-      surface: Colors.black,
-      onSurface: Colors.white,
-      surfaceContainerHighest: Color(0xFF0A0A0A),
-      onSurfaceVariant: Colors.white70,
-      outline: Colors.grey,
-      outlineVariant: Color(0xFF1A1A1A),
-      error: Color(0xFFEF5350),
-      onError: Colors.black,
-      errorContainer: Color(0xFFB71C1C),
-      onErrorContainer: Colors.white,
-      brightness: Brightness.dark,
-    );
-  }
-
-  /// Auto-contrast: white text on dark backgrounds, black text on light ones.
+  /// Auto-contrast text color for any background
   static Color autoContrastColor(Color background) {
     final luminance = background.computeLuminance();
     return luminance > 0.5 ? Colors.black : Colors.white;
   }
 
-  /// Get gradient colors for the current theme option.
-  static List<Color>? gradientColorsFor(AppThemeOption option) {
-    final info = infoFor(option);
-    return info.gradientColors;
+  /// Get glassmorphism decoration for widgets
+  static BoxDecoration glassmorphism({
+    required BuildContext context,
+    double opacity = 0.15,
+    double blurRadius = 20,
+    BorderRadius? borderRadius,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return BoxDecoration(
+      color: isDark ? Colors.white.withOpacity(opacity) : Colors.white.withOpacity(opacity + 0.4),
+      borderRadius: borderRadius ?? BorderRadius.circular(20),
+      border: Border.all(
+        color: isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.5),
+        width: 1,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+          blurRadius: blurRadius,
+          spreadRadius: 0,
+          offset: const Offset(0, 8),
+        ),
+      ],
+    );
   }
 
-  /// Check if the option is a gradient theme.
-  static bool isGradient(AppThemeOption option) {
-    return infoFor(option).isGradient;
+  /// Get circular progress gradient for the current theme
+  static Gradient circularProgressGradient(AppThemeOption option, {bool isDark = false}) {
+    final colors = gradientColorsFor(option);
+    return SweepGradient(
+      colors: colors,
+      startAngle: 0,
+      endAngle: 3.14159 * 2,
+    );
   }
 }
