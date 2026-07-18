@@ -22,7 +22,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -32,6 +32,9 @@ class DatabaseHelper {
         }
         if (oldVersion < 3) {
           await _migrateV2ToV3(db);
+        }
+        if (oldVersion < 4) {
+          await _migrateV3ToV4(db);
         }
       },
     );
@@ -50,7 +53,11 @@ class DatabaseHelper {
         recurrenceInterval INTEGER DEFAULT 1,
         yearlyUseSpecificDates INTEGER DEFAULT 0,
         yearlySpecificDatesJson TEXT,
-        excludedDatesJson TEXT
+        excludedDatesJson TEXT,
+        iconName TEXT,
+        priority INTEGER DEFAULT 2,
+        subjectTag TEXT,
+        isCompleted INTEGER DEFAULT 0
       )
     """);
     await db.execute("""
@@ -84,6 +91,14 @@ class DatabaseHelper {
 
   Future<void> _migrateV2ToV3(Database db) async {
     await db.execute('ALTER TABLE custom_reminders ADD COLUMN isEnabled INTEGER DEFAULT 1');
+  }
+
+  // NEW: Migration for Student Study Pack columns
+  Future<void> _migrateV3ToV4(Database db) async {
+    await db.execute('ALTER TABLE events ADD COLUMN iconName TEXT');
+    await db.execute('ALTER TABLE events ADD COLUMN priority INTEGER DEFAULT 2');
+    await db.execute('ALTER TABLE events ADD COLUMN subjectTag TEXT');
+    await db.execute('ALTER TABLE events ADD COLUMN isCompleted INTEGER DEFAULT 0');
   }
 
   Future<int> insertEvent(Event event) async {
