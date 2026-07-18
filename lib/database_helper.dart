@@ -9,6 +9,7 @@ import 'models/subtask.dart';
 import 'models/flashcard.dart';
 import 'models/study_schedule.dart';
 import 'models/daily_goal.dart';
+import 'models/study_subject.dart';
 
 class DatabaseHelper {
   DatabaseHelper._internal();
@@ -27,7 +28,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -43,6 +44,9 @@ class DatabaseHelper {
         }
         if (oldVersion < 5) {
           await _migrateV4ToV5(db);
+        }
+        if (oldVersion < 6) {
+          await _migrateV5ToV6(db);
         }
       },
     );
@@ -89,7 +93,7 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- NEW: STUDY SUITE TABLES ----
+    // ---- STUDY SUITE TABLES ----
     await db.execute("""
       CREATE TABLE study_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -142,6 +146,17 @@ class DatabaseHelper {
         streakCount INTEGER DEFAULT 0
       )
     """);
+
+    // ---- NEW: STUDY SUBJECTS (v6) ----
+    await db.execute("""
+      CREATE TABLE study_subjects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        colorHex TEXT DEFAULT '#2196F3',
+        totalFocusMinutes INTEGER DEFAULT 0,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
   }
 
   // ============================================
@@ -166,7 +181,6 @@ class DatabaseHelper {
     await db.execute('ALTER TABLE events ADD COLUMN isCompleted INTEGER DEFAULT 0');
   }
 
-  // NEW: v4 -> v5 migration (creates study suite tables)
   Future<void> _migrateV4ToV5(Database db) async {
     await db.execute("""
       CREATE TABLE study_sessions (
@@ -222,6 +236,19 @@ class DatabaseHelper {
     """);
   }
 
+  // NEW: v5 -> v6 migration (study subjects)
+  Future<void> _migrateV5ToV6(Database db) async {
+    await db.execute("""
+      CREATE TABLE study_subjects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        colorHex TEXT DEFAULT '#2196F3',
+        totalFocusMinutes INTEGER DEFAULT 0,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+  }
+
   // ============================================
   // EXISTING EVENT CRUD (UNCHANGED)
   // ============================================
@@ -237,7 +264,6 @@ class DatabaseHelper {
 
   Future<int> deleteEvent(int id) async {
     final db = await database;
-    // Cascade: clean up subtasks and schedules tied to this event
     await db.delete('subtasks', where: 'eventId = ?', whereArgs: [id]);
     await db.delete('study_schedules', where: 'eventId = ?', whereArgs: [id]);
     await db.delete('custom_reminders', where: 'eventId = ?', whereArgs: [id]);
@@ -314,7 +340,7 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // NEW: STUDY SESSION CRUD
+  // EXISTING STUDY SESSION CRUD (UNCHANGED)
   // ============================================
   Future<int> insertStudySession(StudySession session) async {
     final db = await database;
@@ -368,7 +394,7 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // NEW: SUBTASK CRUD
+  // EXISTING SUBTASK CRUD (UNCHANGED)
   // ============================================
   Future<int> insertSubtask(Subtask subtask) async {
     final db = await database;
@@ -423,7 +449,7 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // NEW: FLASHCARD CRUD
+  // EXISTING FLASHCARD CRUD (UNCHANGED)
   // ============================================
   Future<int> insertFlashcard(Flashcard card) async {
     final db = await database;
@@ -482,7 +508,7 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // NEW: STUDY SCHEDULE CRUD
+  // EXISTING STUDY SCHEDULE CRUD (UNCHANGED)
   // ============================================
   Future<int> insertStudySchedule(StudySchedule schedule) async {
     final db = await database;
@@ -530,7 +556,7 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // NEW: DAILY GOAL CRUD
+  // EXISTING DAILY GOAL CRUD (UNCHANGED)
   // ============================================
   Future<int> insertOrUpdateDailyGoal(DailyGoal goal) async {
     final db = await database;
@@ -615,5 +641,52 @@ class DatabaseHelper {
   Future<void> vacuum() async {
     final db = await database;
     await db.execute('VACUUM');
+  }
+
+  // ============================================
+  // NEW: STUDY SUBJECT CRUD
+  // ============================================
+  Future<int> insertStudySubject(StudySubject subject) async {
+    final db = await database;
+    return db.insert('study_subjects', subject.toMap()..remove('id'));
+  }
+
+  Future<int> updateStudySubject(StudySubject subject) async {
+    final db = await database;
+    return db.update('study_subjects', subject.toMap(), where: 'id = ?', whereArgs: [subject.id]);
+  }
+
+  Future<int> deleteStudySubject(int id) async {
+    final db = await database;
+    return db.delete('study_subjects', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<StudySubject>> getAllStudySubjects() async {
+    final db = await database;
+    final rows = await db.query('study_subjects', orderBy: 'name ASC');
+    return rows.map((r) => StudySubject.fromMap(r)).toList();
+  }
+
+  Future<StudySubject?> getStudySubject(int id) async {
+    final db = await database;
+    final rows = await db.query('study_subjects', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return StudySubject.fromMap(rows.first);
+  }
+
+  Future<StudySubject?> getStudySubjectByName(String name) async {
+    final db = await database;
+    final rows = await db.query('study_subjects', where: 'name = ?', whereArgs: [name]);
+    if (rows.isEmpty) return null;
+    return StudySubject.fromMap(rows.first);
+  }
+
+  Future<void> addSubjectFocusMinutes(int id, int minutes) async {
+    final db = await database;
+    await db.rawUpdate("""
+      UPDATE study_subjects
+      SET totalFocusMinutes = totalFocusMinutes + ?
+      WHERE id = ?
+    """, [minutes, id]);
   }
 }
