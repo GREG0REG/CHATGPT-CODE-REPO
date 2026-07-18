@@ -26,6 +26,11 @@ dependencies:
   fl_chart: ^0.68.0
   wakelock_plus: ^1.2.10
 
+# FIX: package_info_plus 9.0.1 uses Kotlin 2.2 which breaks the build.
+# Force the older 8.1.0 which uses Kotlin 1.9 and is fully compatible.
+dependency_overrides:
+  package_info_plus: '8.1.0'
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
