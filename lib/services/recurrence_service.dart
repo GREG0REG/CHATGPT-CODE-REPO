@@ -2,9 +2,6 @@ import 'dart:math';
 
 import '../models/event.dart';
 
-import 'dart:math';
-import '../models/event.dart';
-
 class RecurrenceService {
   RecurrenceService._();
   
@@ -269,7 +266,7 @@ class RecurrenceService {
 
     // If we need more, generate from next year
     if (virtuals.length < maxCount) {
-      final nextYear = currentYear + 1;
+      val nextYear = currentYear + 1;
       final candidatesNextYear = specificDates.map((sd) {
         return _OccurrenceCandidate(sd.toDateTime(nextYear), sd);
       }).toList();
