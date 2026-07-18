@@ -2,7 +2,6 @@ package com.example.event_countdown
 
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
-import android.content.Intent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -19,10 +18,24 @@ class MainActivity : FlutterActivity() {
                 val componentName = ComponentName(this, EventCountdownWidgetProvider::class.java)
                 val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
                 
-                val intent = Intent(this, EventCountdownWidgetProvider::class.java)
-                intent.action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
-                intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, appWidgetIds)
-                sendBroadcast(intent)
+                // Get the data Flutter just sent us
+                val title = call.argument<String>("title") ?: "No upcoming events"
+                val countdown = call.argument<String>("countdown") ?: ""
+                val bgColorStr = call.argument<String>("bgColor")
+                val textColorStr = call.argument<String>("textColor")
+                
+                // Update every widget instance immediately
+                for (widgetId in appWidgetIds) {
+                    EventCountdownWidgetProvider.updateWidgetDirectly(
+                        this,
+                        appWidgetManager,
+                        widgetId,
+                        title,
+                        countdown,
+                        bgColorStr,
+                        textColorStr
+                    )
+                }
                 
                 result.success(null)
             } else {
