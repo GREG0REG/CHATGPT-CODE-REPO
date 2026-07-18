@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'database_helper.dart';
 import 'models/event.dart';
+import 'models/subtask.dart';
 import 'services/countdown_service.dart';
 
 class EventCard extends StatefulWidget {
@@ -33,6 +35,25 @@ class EventCard extends StatefulWidget {
 }
 
 class _EventCardState extends State<EventCard> {
+  List<Subtask> _subtasks = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSubtasks();
+  }
+
+  Future<void> _loadSubtasks() async {
+    final id = widget.event.id;
+    if (id == null || id <= 0) return;
+    try {
+      final list = await DatabaseHelper.instance.getSubtasksForEvent(id);
+      if (mounted) setState(() => _subtasks = list);
+    } catch (_) {
+      // Non-critical — silently ignore
+    }
+  }
+
   String _formatDateTime(int millis) {
     final dt = DateTime.fromMillisecondsSinceEpoch(millis);
     final datePart = '${dt.month}/${dt.day}/${dt.year}';
@@ -55,6 +76,38 @@ class _EventCardState extends State<EventCard> {
       widget.event, now, smartFormatEnabled: widget.smartFormatEnabled,
     );
     await Share.share('${widget.event.title}\n${result.text}', subject: widget.event.title);
+  }
+
+  Widget _buildSubtaskRow() {
+    final done = _subtasks.where((s) => s.isCompleted).length;
+    final total = _subtasks.length;
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(Icons.checklist, size: 14, color: cs.primary),
+        const SizedBox(width: 6),
+        Text(
+          '$done/$total',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: cs.primary,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: total == 0 ? 0 : done / total,
+              minHeight: 4,
+              backgroundColor: cs.primary.withOpacity(0.15),
+              valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -218,6 +271,10 @@ class _EventCardState extends State<EventCard> {
                                 : Theme.of(context).colorScheme.primary,
                           ),
                         ),
+                        if (_subtasks.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          _buildSubtaskRow(),
+                        ],
                       ],
                     ),
                   ),
