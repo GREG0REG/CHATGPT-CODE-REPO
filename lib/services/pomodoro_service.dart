@@ -8,6 +8,7 @@ import '../database_helper.dart';
 import '../models/study_session.dart';
 import 'settings_service.dart';
 import 'focus_settings_service.dart';
+import 'widget_service.dart';
 
 /// Session presets for the Pomodoro timer.
 class PomodoroPreset {
@@ -142,6 +143,46 @@ class PomodoroService extends ChangeNotifier {
     );
   }
 
+  // ── Widget Sync ──
+  /// Writes current timer state to SharedPreferences and triggers a native
+  /// widget update so the home-screen widget shows live data.
+  Future<void> _syncWidgetState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      String subject = _subjectTag ?? 'Ready to Focus';
+      String timerText = formattedTime;
+      String status;
+
+      switch (_phase) {
+        case PomodoroPhase.focusing:
+          status = 'Focus';
+          break;
+        case PomodoroPhase.shortBreak:
+          status = 'Short Break';
+          break;
+        case PomodoroPhase.longBreak:
+          status = 'Long Break';
+          break;
+        case PomodoroPhase.paused:
+          status = 'Paused';
+          break;
+        case PomodoroPhase.idle:
+          status = 'Ready to Focus';
+          timerText = 'Tap to start';
+          break;
+      }
+
+      await prefs.setString('pomodoro_subject', subject);
+      await prefs.setString('pomodoro_timer_text', timerText);
+      await prefs.setString('pomodoro_status', status);
+
+      await WidgetService.refreshPomodoroWidget();
+    } catch (e) {
+      debugPrint('Pomodoro widget sync error: $e');
+    }
+  }
+
   // ── Persistence ──
   Future<void> _saveState() async {
     final p = await SharedPreferences.getInstance();
@@ -185,7 +226,10 @@ class PomodoroService extends ChangeNotifier {
     final phaseName = p.getString('pomodoro_phase');
     final presetName = p.getString('pomodoro_preset_name');
 
-    if (phaseName == null || presetName == null) return;
+    if (phaseName == null || presetName == null) {
+      await _syncWidgetState();
+      return;
+    }
 
     _preset = PomodoroPreset.all.firstWhere(
       (c) => c.name == presetName,
@@ -235,6 +279,7 @@ class PomodoroService extends ChangeNotifier {
       _remainingSeconds = p.getInt('pomodoro_remaining_seconds') ?? 0;
       _syncNotifiers();
       notifyListeners();
+      await _syncWidgetState();
       return;
     }
 
@@ -242,12 +287,14 @@ class PomodoroService extends ChangeNotifier {
       _remainingSeconds = 0;
       _syncNotifiers();
       notifyListeners();
+      await _syncWidgetState();
       return;
     }
 
     final endMillis = p.getInt('pomodoro_end_time');
     if (endMillis == null || endMillis <= 0) {
       await _clearSavedState();
+      await _syncWidgetState();
       return;
     }
 
@@ -261,11 +308,13 @@ class PomodoroService extends ChangeNotifier {
     } else {
       // Expired while app was closed — clear stale state.
       await _clearSavedState();
+      await _syncWidgetState();
       return;
     }
 
     _syncNotifiers();
     notifyListeners();
+    await _syncWidgetState();
   }
 
   void _syncNotifiers() {
@@ -284,6 +333,7 @@ class PomodoroService extends ChangeNotifier {
         _remainingSeconds = _endTime!.difference(now).inSeconds;
         remainingSecondsNotifier.value = _remainingSeconds;
         notifyListeners();
+        _syncWidgetState();
       } else {
         _onTimerComplete();
       }
@@ -339,6 +389,7 @@ class PomodoroService extends ChangeNotifier {
     await _saveState();
     _syncNotifiers();
     notifyListeners();
+    await _syncWidgetState();
   }
 
   Future<void> resume() async {
@@ -350,6 +401,7 @@ class PomodoroService extends ChangeNotifier {
     await _saveState();
     _syncNotifiers();
     notifyListeners();
+    await _syncWidgetState();
   }
 
   Future<void> stop() async {
@@ -366,6 +418,7 @@ class PomodoroService extends ChangeNotifier {
     await _notifications.cancel(9999);
     _syncNotifiers();
     notifyListeners();
+    await _syncWidgetState();
   }
 
   Future<void> skipBreak() async {
@@ -387,6 +440,7 @@ class PomodoroService extends ChangeNotifier {
     _startTickTimer();
     _syncNotifiers();
     notifyListeners();
+    _syncWidgetState();
   }
 
   // ── Completion Handler ──
@@ -423,6 +477,7 @@ class PomodoroService extends ChangeNotifier {
         await _saveState();
         _syncNotifiers();
         notifyListeners();
+        await _syncWidgetState();
         return;
       }
     } else if (_phase == PomodoroPhase.shortBreak || _phase == PomodoroPhase.longBreak) {
