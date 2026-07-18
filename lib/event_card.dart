@@ -10,6 +10,7 @@ class EventCard extends StatefulWidget {
   final bool use24HourFormat;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+  final ValueChanged<bool>? onComplete;
   final List<Event>? childOccurrences;
   final VoidCallback? onExpandToggle;
   final bool isExpanded;
@@ -21,6 +22,7 @@ class EventCard extends StatefulWidget {
     required this.use24HourFormat,
     required this.onTap,
     required this.onDelete,
+    this.onComplete,
     this.childOccurrences,
     this.onExpandToggle,
     this.isExpanded = false,
@@ -58,9 +60,11 @@ class _EventCardState extends State<EventCard> {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
+    final isCompleted = widget.event.isCompleted;
 
-    // FIX: If parent recurring event is past, show countdown to nearest child
+    // If parent recurring event is past (and not completed), show countdown to nearest child
     final isPastParent = widget.event.isRecurring &&
+        !isCompleted &&
         widget.childOccurrences != null &&
         widget.childOccurrences!.isNotEmpty &&
         widget.event.finalMillis <= now.millisecondsSinceEpoch;
@@ -81,7 +85,7 @@ class _EventCardState extends State<EventCard> {
       subtitleParts.add('Deadline: ${_formatDateTime(widget.event.deadlineMillis!)}');
     }
 
-    final urgencyColor = displayEvent.getUrgencyColor(now);
+    final urgencyColor = isCompleted ? Colors.grey : displayEvent.getUrgencyColor(now);
     final isRecurringParent = widget.event.isRecurring && widget.event.id != null && widget.event.id! > 0;
     final hasChildren = widget.childOccurrences != null && widget.childOccurrences!.isNotEmpty;
 
@@ -98,25 +102,66 @@ class _EventCardState extends State<EventCard> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  // Completion toggle
+                  SizedBox(
+                    width: 32,
+                    height: 48,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+                        color: isCompleted ? Colors.green : Theme.of(context).colorScheme.outline,
+                        size: 22,
+                      ),
+                      onPressed: widget.onComplete != null
+                          ? () => widget.onComplete!(!isCompleted)
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  // Avatar with custom icon + priority dot
                   Hero(
                     tag: 'event_avatar_${widget.event.id}',
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: urgencyColor.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: Icon(Icons.event, color: urgencyColor, size: 22),
-                      ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: urgencyColor.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Center(
+                            child: Icon(
+                              isCompleted ? Icons.check : widget.event.iconData,
+                              color: urgencyColor,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                        if (!isCompleted && widget.event.priority > 0)
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: widget.event.priorityColor,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisSize: MainAxis.min,
                       children: [
                         Hero(
                           tag: 'event_title_${widget.event.id}',
@@ -124,32 +169,63 @@ class _EventCardState extends State<EventCard> {
                             color: Colors.transparent,
                             child: Text(
                               widget.event.title,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                color: isCompleted ? Colors.grey : null,
+                              ),
                               maxLines: 1, overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ),
+                        if (widget.event.subjectTag != null && widget.event.subjectTag!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              widget.event.subjectTag!,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
                         if (subtitleParts.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(
                             subtitleParts.join(' • '),
-                            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.outline),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isCompleted
+                                  ? Colors.grey
+                                  : Theme.of(context).colorScheme.outline,
+                            ),
                             maxLines: 1, overflow: TextOverflow.ellipsis,
                           ),
                         ],
                         const SizedBox(height: 4),
                         Text(
-                          result.text,
+                          isCompleted ? 'Completed' : result.text,
                           style: TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 14,
-                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: isCompleted
+                                ? Colors.grey
+                                : Theme.of(context).colorScheme.primary,
                           ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 4),
-                  // FIX: Recurrence icon moved to action side
+                  // Recurrence icon moved to action side
                   if (widget.event.isRecurring)
                     Container(
                       width: 28,
