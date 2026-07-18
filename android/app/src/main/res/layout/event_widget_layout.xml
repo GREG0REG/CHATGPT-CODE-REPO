@@ -1,33 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center_vertical"
-    android:padding="12dp"
-    android:background="#2196F3">
+    android:background="@drawable/widget_glass_background">
 
-    <TextView
-        android:id="@+id/widget_title"
+    <!-- Circular progress background ring -->
+    <ProgressBar
+        android:id="@+id/widget_progress_ring"
+        style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Event Title"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:textColor="#FFFFFF" />
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:indeterminate="false"
+        android:max="100"
+        android:progress="65"
+        android:progressDrawable="@drawable/widget_circular_progress"
+        android:rotation="-90" />
 
-    <TextView
-        android:id="@+id/widget_countdown"
+    <!-- Content centered inside the ring -->
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="Countdown"
-        android:textSize="16sp"
-        android:maxLines="2"
-        android:ellipsize="end"
-        android:textColor="#FFFFFF" />
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="16dp">
 
-</LinearLayout>
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:maxLines="1"
+            android:shadowColor="#40000000"
+            android:shadowDx="0"
+            android:shadowDy="2"
+            android:shadowRadius="4"
+            android:text="Event Title"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:alpha="0.9" />
+
+        <TextView
+            android:id="@+id/widget_countdown"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-light"
+            android:gravity="center"
+            android:maxLines="2"
+            android:shadowColor="#60000000"
+            android:shadowDx="0"
+            android:shadowDy="2"
+            android:shadowRadius="6"
+            android:text="2 hours\nleft"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:lineSpacingMultiplier="0.9" />
+
+    </LinearLayout>
+
+</FrameLayout>
