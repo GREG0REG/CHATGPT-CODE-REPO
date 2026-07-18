@@ -40,13 +40,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _loading = true;
   bool _busy = false;
 
-  // Pomodoro & Goals (new)
-  String _pomodoroPreset = 'classic';
-  int _dailyGoalMinutes = 120;
-  int _dailyGoalPomodoros = 4;
-  bool _autoStartBreak = false;
-  bool _timerSound = true;
-
   @override
   void initState() {
     super.initState();
@@ -70,13 +63,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final quietEndMin = await s.getQuietHoursEnd();
     final adaptRefresh = await s.getAdaptiveRefreshEnabled();
 
-    // Pomodoro (new)
-    final pomoPreset = await s.getPomodoroPreset();
-    final goalMin = await s.getDailyGoalMinutes();
-    final goalPomo = await s.getDailyGoalPomodoros();
-    final autoBreak = await s.getAutoStartBreak();
-    final tSound = await s.getTimerSoundEnabled();
-
     if (!mounted) return;
 
     setState(() {
@@ -95,12 +81,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TimeOfDay(hour: quietStartMin ~/ 60, minute: quietStartMin % 60);
       _quietEnd = TimeOfDay(hour: quietEndMin ~/ 60, minute: quietEndMin % 60);
       _adaptiveRefresh = adaptRefresh;
-      // Pomodoro
-      _pomodoroPreset = pomoPreset;
-      _dailyGoalMinutes = goalMin;
-      _dailyGoalPomodoros = goalPomo;
-      _autoStartBreak = autoBreak;
-      _timerSound = tSound;
       _loading = false;
     });
 
@@ -303,32 +283,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         action: SnackBarAction(label: 'OK', onPressed: () {}),
       ),
     );
-  }
-
-  // Pomodoro handlers (new)
-  Future<void> _setPomodoroPreset(String preset) async {
-    await SettingsService.instance.setPomodoroPreset(preset);
-    setState(() => _pomodoroPreset = preset);
-  }
-
-  Future<void> _setDailyGoalMinutes(int minutes) async {
-    await SettingsService.instance.setDailyGoalMinutes(minutes);
-    setState(() => _dailyGoalMinutes = minutes);
-  }
-
-  Future<void> _setDailyGoalPomodoros(int count) async {
-    await SettingsService.instance.setDailyGoalPomodoros(count);
-    setState(() => _dailyGoalPomodoros = count);
-  }
-
-  Future<void> _setAutoStartBreak(bool value) async {
-    await SettingsService.instance.setAutoStartBreak(value);
-    setState(() => _autoStartBreak = value);
-  }
-
-  Future<void> _setTimerSound(bool value) async {
-    await SettingsService.instance.setTimerSoundEnabled(value);
-    setState(() => _timerSound = value);
   }
 
   @override
@@ -566,96 +520,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _runVacuum,
                 ),
                 const Divider(),
-
-                // NEW: Pomodoro & Goals
-                const _SectionHeader('Pomodoro & Goals'),
-                ListTile(
-                  leading: const Icon(Icons.timer),
-                  title: const Text('Default Preset'),
-                  trailing: SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'classic', label: Text('Classic')),
-                      ButtonSegment(value: 'deepWork', label: Text('Deep')),
-                      ButtonSegment(value: 'examCrunch', label: Text('Exam')),
-                    ],
-                    selected: {_pomodoroPreset},
-                    onSelectionChanged: (selected) {
-                      if (selected.isNotEmpty) _setPomodoroPreset(selected.first);
-                    },
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ListTile(
-                  leading: const Icon(Icons.track_changes),
-                  title: const Text('Daily Goal'),
-                  subtitle: Text('$_dailyGoalMinutes min / $_dailyGoalPomodoros pomodoros'),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Text('Minutes: ', style: TextStyle(fontSize: 14)),
-                          Text(
-                            '$_dailyGoalMinutes',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Slider(
-                        value: _dailyGoalMinutes.toDouble(),
-                        min: 30,
-                        max: 300,
-                        divisions: 18,
-                        label: '$_dailyGoalMinutes',
-                        onChanged: (v) => _setDailyGoalMinutes(v.round()),
-                      ),
-                      Row(
-                        children: [
-                          const Text('Pomodoros: ', style: TextStyle(fontSize: 14)),
-                          Text(
-                            '$_dailyGoalPomodoros',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Slider(
-                        value: _dailyGoalPomodoros.toDouble(),
-                        min: 1,
-                        max: 12,
-                        divisions: 11,
-                        label: '$_dailyGoalPomodoros',
-                        onChanged: (v) => _setDailyGoalPomodoros(v.round()),
-                      ),
-                    ],
-                  ),
-                ),
-                SwitchListTile(
-                  secondary: const Icon(Icons.pause_circle_filled),
-                  title: const Text('Auto-start Break'),
-                  subtitle: const Text('Automatically begin break after focus ends'),
-                  value: _autoStartBreak,
-                  onChanged: _setAutoStartBreak,
-                ),
-                SwitchListTile(
-                  secondary: const Icon(Icons.volume_up),
-                  title: const Text('Timer Sound'),
-                  subtitle: const Text('Play sound when timer completes (respects quiet hours)'),
-                  value: _timerSound,
-                  onChanged: _setTimerSound,
-                ),
-                const Divider(),
-
                 const _SectionHeader('Backup'),
                 ListTile(
                   leading: const Icon(Icons.upload_file),
