@@ -9,33 +9,20 @@ rootProject.buildDir = '../build'
 
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+
+subprojects {
     project.evaluationDependsOn(':app')
-    
-    // FIX: Inject a mock "flutter" extension into every plugin subproject
-    // so that plugins referencing flutter.compileSdkVersion / flutter.namespace
-    // don't crash under AGP 8.3. We skip the :app module because the real
-    // Flutter Gradle plugin creates its own flutter extension there.
+}
+
+// FIX: Inject a mock "flutter" extension into every plugin subproject
+// BEFORE their build.gradle is evaluated. Plugins like package_info_plus
+// read flutter.compileSdkVersion, flutter.minSdkVersion, etc. If the
+// extension is missing, AGP 8.3 crashes. We create it early so they
+// self-configure correctly.
+subprojects {
     if (project.name != "app" && project.extensions.findByName("flutter") == null) {
         project.extensions.create("flutter", FlutterExtension)
-    }
-    
-    // FIX: Use plugins.withId — it fires immediately if the Android plugin
-    // is already applied, so we never hit the "already evaluated" error.
-    project.plugins.withId("com.android.application") {
-        project.android {
-            compileSdkVersion 35
-            if (namespace == null) {
-                namespace project.group
-            }
-        }
-    }
-    project.plugins.withId("com.android.library") {
-        project.android {
-            compileSdkVersion 35
-            if (namespace == null) {
-                namespace project.group
-            }
-        }
     }
 }
 
