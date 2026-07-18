@@ -6,11 +6,21 @@ allprojects {
 }
 
 rootProject.buildDir = '../build'
+
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
     
-    // FIX: Force compileSdkVersion and namespace on all plugin subprojects
-    // so AGP 8.3 doesn't fail on older dependencies like package_info_plus
+    // FIX: Inject a mock "flutter" extension into every plugin subproject
+    // so that plugins referencing flutter.compileSdkVersion / flutter.namespace
+    // don't crash under AGP 8.3. We skip the :app module because the real
+    // Flutter Gradle plugin creates its own flutter extension there.
+    if (project.name != "app" && project.extensions.findByName("flutter") == null) {
+        project.extensions.create("flutter", FlutterExtension)
+    }
+    
+    project.evaluationDependsOn(':app')
+    
+    // Also hard-code compileSdkVersion 35 after evaluation for safety
     afterEvaluate { project ->
         if (project.extensions.findByName("android") != null) {
             project.android {
@@ -22,8 +32,13 @@ subprojects {
         }
     }
 }
-subprojects {
-    project.evaluationDependsOn(':app')
+
+// Mock class that supplies the properties plugins expect
+class FlutterExtension {
+    int compileSdkVersion = 35
+    int minSdkVersion = 21
+    int targetSdkVersion = 35
+    String namespace = "com.example.placeholder"
 }
 
 tasks.register("clean", Delete) {
