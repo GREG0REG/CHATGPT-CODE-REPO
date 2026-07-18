@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../database_helper.dart';
 import '../models/study_session.dart';
 import 'settings_service.dart';
+import 'focus_settings_service.dart';
 
 /// Session presets for the Pomodoro timer.
 class PomodoroPreset {
@@ -78,6 +79,13 @@ class PomodoroService extends ChangeNotifier {
   String? _subjectTag;
   int? _linkedEventId;
 
+  // Break-pending state (when auto-start break is OFF)
+  bool _breakPending = false;
+  int _pendingBreakMinutes = 0;
+
+  // Session note prompt
+  int? _pendingSessionNoteId;
+
   Timer? _tickTimer;
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
   bool _notifInit = false;
@@ -94,6 +102,8 @@ class PomodoroService extends ChangeNotifier {
   int get completedFocusSessions => _completedFocusSessions;
   String? get subjectTag => _subjectTag;
   int? get linkedEventId => _linkedEventId;
+  bool get isBreakPending => _breakPending;
+  int? get pendingSessionNoteId => _pendingSessionNoteId;
 
   bool get isRunning =>
       _phase == PomodoroPhase.focusing ||
@@ -119,6 +129,19 @@ class PomodoroService extends ChangeNotifier {
     _notifInit = true;
   }
 
+  // ── Custom Preset Resolver ──
+  Future<PomodoroPreset> _resolvePreset(PomodoroPreset preset) async {
+    if (preset.name != 'Custom') return preset;
+    final fs = FocusSettingsService.instance;
+    return PomodoroPreset(
+      name: 'Custom',
+      focusMinutes: await fs.getCustomFocusMinutes(),
+      shortBreakMinutes: await fs.getCustomShortBreakMinutes(),
+      longBreakMinutes: await fs.getCustomLongBreakMinutes(),
+      sessionsBeforeLongBreak: await fs.getCustomSessionsBeforeLongBreak(),
+    );
+  }
+
   // ── Persistence ──
   Future<void> _saveState() async {
     final p = await SharedPreferences.getInstance();
@@ -134,6 +157,11 @@ class PomodoroService extends ChangeNotifier {
     await p.setString('pomodoro_preset_name', _preset.name);
     await p.setString('pomodoro_subject', _subjectTag ?? '');
     await p.setInt('pomodoro_event_id', _linkedEventId ?? -1);
+
+    // New fields
+    await p.setBool('pomodoro_break_pending', _breakPending);
+    await p.setInt('pomodoro_pending_break_minutes', _pendingBreakMinutes);
+    await p.setInt('pomodoro_pending_note_id', _pendingSessionNoteId ?? -1);
   }
 
   Future<void> _clearSavedState() async {
@@ -146,6 +174,10 @@ class PomodoroService extends ChangeNotifier {
     await p.remove('pomodoro_preset_name');
     await p.remove('pomodoro_subject');
     await p.remove('pomodoro_event_id');
+
+    await p.remove('pomodoro_break_pending');
+    await p.remove('pomodoro_pending_break_minutes');
+    await p.remove('pomodoro_pending_note_id');
   }
 
   Future<void> _restoreState() async {
@@ -159,12 +191,32 @@ class PomodoroService extends ChangeNotifier {
       (c) => c.name == presetName,
       orElse: () => PomodoroPreset.classic,
     );
+    _preset = await _resolvePreset(_preset);
 
     _completedFocusSessions = p.getInt('pomodoro_completed_sessions') ?? 0;
     _subjectTag = p.getString('pomodoro_subject');
     if (_subjectTag?.isEmpty ?? false) _subjectTag = null;
     final eid = p.getInt('pomodoro_event_id');
     _linkedEventId = (eid == null || eid < 0) ? null : eid;
+
+    // Restore break-pending state
+    _breakPending = p.getBool('pomodoro_break_pending') ?? false;
+    _pendingBreakMinutes = p.getInt('pomodoro_pending_break_minutes') ?? 0;
+    final noteId = p.getInt('pomodoro_pending_note_id');
+    _pendingSessionNoteId = (noteId == null || noteId < 0) ? null : noteId;
+
+    // Restore last subject from FocusSettingsService if none saved
+    if (_subjectTag == null || _subjectTag!.isEmpty) {
+      final lastId = await FocusSettingsService.instance.getLastSubjectId();
+      if (lastId != null) {
+        final subj = await DatabaseHelper.instance.getStudySubject(lastId);
+        if (subj != null) _subjectTag = subj.name;
+      }
+      if (_subjectTag == null) {
+        final lastName = await FocusSettingsService.instance.getLastSubjectName();
+        if (lastName != null && lastName.isNotEmpty) _subjectTag = lastName;
+      }
+    }
 
     final prev = p.getString('pomodoro_phase_before_pause');
     if (prev != null) {
@@ -181,6 +233,13 @@ class PomodoroService extends ChangeNotifier {
 
     if (_phase == PomodoroPhase.paused) {
       _remainingSeconds = p.getInt('pomodoro_remaining_seconds') ?? 0;
+      _syncNotifiers();
+      notifyListeners();
+      return;
+    }
+
+    if (_phase == PomodoroPhase.idle) {
+      _remainingSeconds = 0;
       _syncNotifiers();
       notifyListeners();
       return;
@@ -237,13 +296,37 @@ class PomodoroService extends ChangeNotifier {
     String? subjectTag,
     int? eventId,
   }) async {
-    _preset = preset;
+    _preset = await _resolvePreset(preset);
     _subjectTag = subjectTag;
     _linkedEventId = eventId;
     _completedFocusSessions = 0;
     _phaseBeforePause = null;
+    _breakPending = false;
+    _pendingBreakMinutes = 0;
+    _pendingSessionNoteId = null;
 
-    _transitionTo(PomodoroPhase.focusing, minutes: preset.focusMinutes);
+    // Persist last subject for next launch
+    if (subjectTag != null && subjectTag.isNotEmpty) {
+      await FocusSettingsService.instance.setLastSubjectName(subjectTag);
+      final subjects = await DatabaseHelper.instance.getAllStudySubjects();
+      final match = subjects.where((s) => s.name == subjectTag).firstOrNull;
+      if (match != null) {
+        await FocusSettingsService.instance.setLastSubjectId(match.id);
+      }
+    }
+
+    _transitionTo(PomodoroPhase.focusing, minutes: _preset.focusMinutes);
+    await _saveState();
+  }
+
+  Future<void> startBreak() async {
+    if (!_breakPending) return;
+    final isLongBreak = _pendingBreakMinutes == _preset.longBreakMinutes;
+    _breakPending = false;
+    _transitionTo(
+      isLongBreak ? PomodoroPhase.longBreak : PomodoroPhase.shortBreak,
+      minutes: _pendingBreakMinutes,
+    );
     await _saveState();
   }
 
@@ -276,6 +359,9 @@ class PomodoroService extends ChangeNotifier {
     _endTime = null;
     _remainingSeconds = 0;
     _completedFocusSessions = 0;
+    _breakPending = false;
+    _pendingBreakMinutes = 0;
+    _pendingSessionNoteId = null;
     await _clearSavedState();
     await _notifications.cancel(9999);
     _syncNotifiers();
@@ -287,6 +373,11 @@ class PomodoroService extends ChangeNotifier {
     _tickTimer?.cancel();
     _transitionTo(PomodoroPhase.focusing, minutes: _preset.focusMinutes);
     await _saveState();
+  }
+
+  void dismissSessionNote() {
+    _pendingSessionNoteId = null;
+    notifyListeners();
   }
 
   void _transitionTo(PomodoroPhase newPhase, {required int minutes}) {
@@ -304,16 +395,35 @@ class PomodoroService extends ChangeNotifier {
 
     if (_phase == PomodoroPhase.focusing) {
       _completedFocusSessions++;
-      await _logSession(_preset.focusMinutes);
-      await _notify(
-        'Focus Complete! 🎉',
-        'Take a break. Great job${subjectTag != null ? ' on $subjectTag' : ''}.',
-      );
+      final sessionId = await _logSession(_preset.focusMinutes);
 
-      if (_completedFocusSessions % _preset.sessionsBeforeLongBreak == 0) {
-        _transitionTo(PomodoroPhase.longBreak, minutes: _preset.longBreakMinutes);
+      final autoStart = await FocusSettingsService.instance.getAutoStartBreak();
+      final isLongBreak = _completedFocusSessions % _preset.sessionsBeforeLongBreak == 0;
+      final breakMinutes = isLongBreak ? _preset.longBreakMinutes : _preset.shortBreakMinutes;
+
+      if (autoStart) {
+        await _notify(
+          isLongBreak ? 'Long Break! ☕' : 'Short Break! 🍵',
+          'Take a ${breakMinutes}-minute break.',
+        );
+        _transitionTo(
+          isLongBreak ? PomodoroPhase.longBreak : PomodoroPhase.shortBreak,
+          minutes: breakMinutes,
+        );
       } else {
-        _transitionTo(PomodoroPhase.shortBreak, minutes: _preset.shortBreakMinutes);
+        _phase = PomodoroPhase.idle;
+        _breakPending = true;
+        _pendingBreakMinutes = breakMinutes;
+        _endTime = null;
+        _remainingSeconds = 0;
+        await _notify(
+          'Focus Complete! 🎉',
+          'Great job${subjectTag != null ? ' on $subjectTag' : ''}. Open the app to start your break.',
+        );
+        await _saveState();
+        _syncNotifiers();
+        notifyListeners();
+        return;
       }
     } else if (_phase == PomodoroPhase.shortBreak || _phase == PomodoroPhase.longBreak) {
       await _notify(
@@ -327,7 +437,7 @@ class PomodoroService extends ChangeNotifier {
   }
 
   // ── Database & Goals ──
-  Future<void> _logSession(int minutes) async {
+  Future<int> _logSession(int minutes) async {
     final session = StudySession(
       eventId: _linkedEventId,
       subjectTag: _subjectTag,
@@ -335,12 +445,28 @@ class PomodoroService extends ChangeNotifier {
       completedAtMillis: DateTime.now().millisecondsSinceEpoch,
       sessionType: _preset.name.toLowerCase().replaceAll(' ', '_'),
     );
-    await DatabaseHelper.instance.insertStudySession(session);
+    final id = await DatabaseHelper.instance.insertStudySession(session);
 
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
     await DatabaseHelper.instance.addAchievedMinutes(startOfDay, minutes);
     await DatabaseHelper.instance.addAchievedPomodoro(startOfDay);
+
+    // Update subject total focus time
+    if (_subjectTag != null && _subjectTag!.isNotEmpty) {
+      final subjects = await DatabaseHelper.instance.getAllStudySubjects();
+      final match = subjects.where((s) => s.name == _subjectTag).firstOrNull;
+      if (match != null && match.id != null) {
+        await DatabaseHelper.instance.addSubjectFocusMinutes(match.id!, minutes);
+      }
+    }
+
+    // Session notes prompt
+    if (await FocusSettingsService.instance.getSessionNotesEnabled()) {
+      _pendingSessionNoteId = id;
+    }
+
+    return id;
   }
 
   // ── Notifications ──
