@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +27,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _loading = true;
   Timer? _refreshTimer;
   final Set<int> _expandedParents = {};
+
+  final _studyQuotes = const [
+    'The future belongs to those who believe in the beauty of their dreams.',
+    'Success is the sum of small efforts, repeated day in and day out.',
+    'Don\'t watch the clock; do what it does. Keep going.',
+    'The only place where success comes before work is in the dictionary.',
+    'Your time is limited, don\'t waste it living someone else\'s life.',
+    'Education is the passport to the future.',
+    'Strive for progress, not perfection.',
+    'The expert in anything was once a beginner.',
+  ];
 
   @override
   void initState() {
@@ -81,6 +93,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _use24Hour = use24;
       _loading = false;
     });
+  }
+
+  Future<void> _toggleComplete(Event event, bool completed) async {
+    HapticFeedback.lightImpact();
+    final updated = event.copyWith(isCompleted: completed);
+    await DatabaseHelper.instance.updateEvent(updated);
+    await WidgetService.refreshWidget();
+    if (mounted) setState(() {});
+    await _loadEventsOnly();
   }
 
   void _toggleExpand(int parentId) {
@@ -266,6 +287,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return groups;
   }
 
+  String _randomQuote() {
+    final index = DateTime.now().millisecond % _studyQuotes.length;
+    return _studyQuotes[index];
+  }
+
   @override
   Widget build(BuildContext context) {
     final groups = _buildGroups(_events);
@@ -308,6 +334,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         use24HourFormat: _use24Hour,
                         onTap: () => _openAddEdit(existing: group.parent),
                         onDelete: () => _deleteEvent(group.parent),
+                        onComplete: (completed) => _toggleComplete(group.parent, completed),
                         childOccurrences: group.children,
                         onExpandToggle:
                             hasChildren ? () => _toggleExpand(group.parent.id!) : null,
@@ -352,6 +379,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               style: TextStyle(
                 fontSize: 16,
                 color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.format_quote,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 24,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _randomQuote(),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontStyle: FontStyle.italic,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
