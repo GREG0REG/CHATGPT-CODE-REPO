@@ -75,6 +75,9 @@ class EventCountdownAppState extends State<EventCountdownApp>
   Color? _customColor;
   bool _highContrast = false;
 
+  // PUBLIC GETTER so other screens can read the current theme
+  AppThemeOption get theme => _theme;
+
   @override
   void initState() {
     super.initState();
