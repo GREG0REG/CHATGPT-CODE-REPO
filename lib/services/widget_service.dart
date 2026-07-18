@@ -6,6 +6,7 @@ import '../database_helper.dart';
 import '../models/event.dart';
 import '../services/countdown_service.dart';
 import '../services/settings_service.dart';
+import '../theme/app_themes.dart';
 
 /// Updates the Android home screen widgets via SharedPreferences + MethodChannel.
 class WidgetService {
@@ -57,10 +58,29 @@ class WidgetService {
       final timerText = prefs.getString('pomodoro_timer_text') ?? 'Tap to start';
       final status = prefs.getString('pomodoro_status') ?? 'Focus';
 
+      // Resolve theme color so the widget background matches the app theme
+      String? bgColorHex;
+      try {
+        final theme = await SettingsService.instance.getSelectedTheme();
+        final Color color;
+        if (theme == AppThemeOption.customHex) {
+          color = await SettingsService.instance.getCustomColor() ??
+              const Color(0xFF2196F3);
+        } else {
+          color = AppThemes.colorFor(theme);
+        }
+        bgColorHex =
+            '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
+        await prefs.setString('pomodoro_bg_color', bgColorHex);
+      } catch (_) {
+        // Fallback: let Kotlin use its default
+      }
+
       await _channel.invokeMethod('updatePomodoroWidget', {
         'subject': subject,
         'timerText': timerText,
         'status': status,
+        if (bgColorHex != null) 'bgColor': bgColorHex,
       });
     } catch (e) {
       debugPrint('Pomodoro widget refresh error: $e');
