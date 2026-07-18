@@ -40,7 +40,8 @@ class WidgetService {
 
     Event? active;
     for (final e in expanded) {
-      if (e.finalMillis > now.millisecondsSinceEpoch) {
+      // FIX: Skip completed events so widget shows real upcoming work
+      if (!e.isCompleted && e.finalMillis > now.millisecondsSinceEpoch) {
         active = e;
         developer.log('WIDGET: Found active event: ${e.title}', name: 'WidgetService');
         break;
@@ -75,7 +76,6 @@ class WidgetService {
     
     developer.log('WIDGET: Saved to SharedPreferences', name: 'WidgetService');
 
-    // Send data directly to Android so it updates right now
     try {
       await _channel.invokeMethod('updateWidget', {
         'title': title,
