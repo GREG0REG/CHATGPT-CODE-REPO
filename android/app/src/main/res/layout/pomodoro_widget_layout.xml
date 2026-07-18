@@ -8,35 +8,57 @@
     android:padding="16dp"
     android:background="@drawable/widget_background_fallback">
 
-    <TextView
-        android:id="@+id/pomodoro_widget_subject"
+    <!-- Top: Subject name with icon -->
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Ready to Focus"
-        android:textSize="12sp"
-        android:textStyle="bold"
-        android:textColor="#FFFFFF"
-        android:maxLines="1"
-        android:ellipsize="end" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
 
+        <View
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:background="@drawable/widget_pulse_frame_2"
+            android:layout_marginEnd="6dp" />
+
+        <TextView
+            android:id="@+id/pomodoro_widget_subject"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Ready to Focus"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="#CCFFFFFF"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:letterSpacing="0.05" />
+    </LinearLayout>
+
+    <!-- Center: Large timer digits -->
     <TextView
         android:id="@+id/pomodoro_widget_timer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="Tap to start"
-        android:textSize="28sp"
+        android:layout_marginTop="2dp"
+        android:text="25:00"
+        android:textSize="36sp"
         android:textStyle="bold"
         android:textColor="#FFFFFF"
-        android:fontFamily="sans-serif-light" />
+        android:fontFamily="sans-serif-light"
+        android:letterSpacing="2"
+        android:includeFontPadding="false" />
 
+    <!-- Bottom: Status label -->
     <TextView
         android:id="@+id/pomodoro_widget_status"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="8dp"
         android:text="Focus"
-        android:textSize="12sp"
-        android:textColor="#CCFFFFFF" />
+        android:textSize="11sp"
+        android:textColor="#80FFFFFF"
+        android:letterSpacing="0.1"
+        android:textAllCaps="true" />
 
 </LinearLayout>
