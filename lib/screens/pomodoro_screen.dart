@@ -31,7 +31,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   StudySubject? _selectedStudySubject;
   int? _selectedEventId;
 
-  // Custom duration sliders (only when Custom preset + idle)
+  // Custom duration values (loaded from FocusSettings, no longer shown as sliders)
   int _customFocus = 25;
   int _customShortBreak = 5;
   int _customLongBreak = 15;
@@ -489,13 +489,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
               // ── Preset Pills (only when idle) ──
               if (_service.phase == PomodoroPhase.idle) _buildPresets(scheme),
 
-              // ── Custom Duration Sliders (Custom preset + idle) ──
-              if (_service.phase == PomodoroPhase.idle &&
-                  _selectedPreset.name == 'Custom') ...[
-                const SizedBox(height: 12),
-                _buildCustomSliders(scheme),
-              ],
-
               const Spacer(),
 
               // ── Timer Display ──
@@ -605,75 +598,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
           );
         }).toList(),
       ),
-    );
-  }
-
-  Widget _buildCustomSliders(ColorScheme scheme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Card(
-        elevation: 0,
-        color: scheme.surfaceContainerHighest.withOpacity(0.4),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: scheme.outlineVariant.withOpacity(0.2)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Custom Durations',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: scheme.primary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _sliderRow('Focus', _customFocus, 5, 120, 'min',
-                  (v) => setState(() => _customFocus = v)),
-              _sliderRow('Short break', _customShortBreak, 1, 30, 'min',
-                  (v) => setState(() => _customShortBreak = v)),
-              _sliderRow('Long break', _customLongBreak, 5, 60, 'min',
-                  (v) => setState(() => _customLongBreak = v)),
-              _sliderRow('Sessions', _customSessions, 1, 8, '',
-                  (v) => setState(() => _customSessions = v)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _sliderRow(String label, int value, int min, int max, String suffix,
-      ValueChanged<int> onChanged) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 13)),
-            Text(
-              '$value $suffix'.trim(),
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-          ],
-        ),
-        Slider(
-          value: value.toDouble(),
-          min: min.toDouble(),
-          max: max.toDouble(),
-          divisions: max - min,
-          onChanged: (v) => onChanged(v.round()),
-        ),
-      ],
     );
   }
 
