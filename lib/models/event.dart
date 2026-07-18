@@ -226,7 +226,8 @@ class Event {
     }
   }
 
-  IconData get iconData => EventIcons.getIcon(iconName);
+  // FIX: Added ?? Icons.event so it never returns null
+  IconData get iconData => EventIcons.getIcon(iconName) ?? Icons.event;
 
   /// Convenience: returns the countdown text string for this event at [now].
   String getCountdownText(DateTime now, {required bool smartFormatEnabled}) {
