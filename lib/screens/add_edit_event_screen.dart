@@ -24,6 +24,7 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _notesController = TextEditingController();
+  final _subjectController = TextEditingController();
 
   DateTime _date = DateTime.now();
   TimeOfDay? _startTime;
@@ -38,6 +39,11 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
   List<YearlySpecificDate> _yearlySpecificDates = [];
 
   List<CustomReminder> _customReminders = [];
+
+  // Student Study Pack
+  String? _iconName;
+  int _priority = 2;
+  bool _isCompleted = false;
 
   bool get _isEditing => widget.existing != null && widget.existing!.id != null && widget.existing!.id! > 0;
 
@@ -55,6 +61,10 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
       _recurrenceInterval = e.recurrenceInterval;
       _yearlyUseSpecificDates = e.yearlyUseSpecificDates;
       _yearlySpecificDates = List.from(e.yearlySpecificDates);
+      _iconName = e.iconName;
+      _priority = e.priority;
+      _subjectController.text = e.subjectTag ?? '';
+      _isCompleted = e.isCompleted;
       if (e.startTimeMillis != null) {
         final dt = DateTime.fromMillisecondsSinceEpoch(e.startTimeMillis!);
         _startTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
@@ -83,6 +93,7 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
   void dispose() {
     _titleController.dispose();
     _notesController.dispose();
+    _subjectController.dispose();
     super.dispose();
   }
 
@@ -210,7 +221,6 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
     });
   }
 
-  // FIX: Delete from DB first, then remove by ID
   Future<void> _deleteReminder(CustomReminder reminder) async {
     if (reminder.id != null) {
       await DatabaseHelper.instance.deleteCustomReminder(reminder.id!);
@@ -246,6 +256,10 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
         yearlySpecificDatesJson: _yearlySpecificDates.isNotEmpty
             ? jsonEncode(_yearlySpecificDates.map((d) => d.toJson()).toList())
             : null,
+        iconName: _iconName,
+        priority: _priority,
+        subjectTag: _subjectController.text.trim().isEmpty ? null : _subjectController.text.trim(),
+        isCompleted: _isCompleted,
       );
 
       int id;
@@ -289,6 +303,74 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
     }
   }
 
+  Widget _buildIconPicker() {
+    final icons = EventIcons.icons.entries.toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(0, 8, 0, 4),
+          child: Text('Icon', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: icons.map((entry) {
+            final isSelected = _iconName == entry.key;
+            return InkWell(
+              onTap: () => setState(() => _iconName = entry.key),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primaryContainer
+                      : Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                  border: isSelected
+                      ? Border.all(color: Theme.of(context).colorScheme.primary, width: 2)
+                      : null,
+                ),
+                child: Icon(
+                  entry.value,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                  size: 22,
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPrioritySelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(0, 8, 0, 4),
+          child: Text('Priority', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        ),
+        SegmentedButton<int>(
+          segments: const [
+            ButtonSegment(value: 1, label: Text('Low')),
+            ButtonSegment(value: 2, label: Text('Normal')),
+            ButtonSegment(value: 3, label: Text('High')),
+            ButtonSegment(value: 4, label: Text('Urgent')),
+          ],
+          selected: {_priority},
+          onSelectionChanged: (selected) {
+            if (selected.isNotEmpty) setState(() => _priority = selected.first);
+          },
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -330,6 +412,15 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
                   ),
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Title is required' : null,
                 ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _subjectController,
+              decoration: const InputDecoration(
+                labelText: 'Subject (e.g. Math, Physics, History)',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.bookmark_outline),
               ),
             ),
             const SizedBox(height: 16),
@@ -503,6 +594,24 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
               ),
             ),
             const SizedBox(height: 16),
+
+            _buildIconPicker(),
+            const SizedBox(height: 16),
+            _buildPrioritySelector(),
+
+            if (_isEditing) ...[
+              const SizedBox(height: 16),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Mark as completed'),
+                subtitle: const Text('Done with this assignment? It will be greyed out.'),
+                value: _isCompleted,
+                onChanged: (v) => setState(() => _isCompleted = v),
+              ),
+            ],
+
+            const Divider(),
+            const SizedBox(height: 8),
 
             const Padding(
               padding: EdgeInsets.fromLTRB(0, 8, 0, 4),
