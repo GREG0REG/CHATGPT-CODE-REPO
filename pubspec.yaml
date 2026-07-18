@@ -21,10 +21,11 @@ dependencies:
   file_picker: ^8.1.2
   share_plus: ^10.0.2
   dynamic_color: 1.7.0
-  battery_plus: ^6.0.0
+  # FIX: Pin to exact versions that use Kotlin 1.9, not 2.2
+  battery_plus: '6.0.0'
   cupertino_icons: ^1.0.8
   fl_chart: ^0.68.0
-  wakelock_plus: ^1.2.10
+  wakelock_plus: '1.2.10'
 
 # FIX: package_info_plus 9.0.1 uses Kotlin 2.2 which breaks the build.
 # Force the older 8.1.0 which uses Kotlin 1.9 and is fully compatible.
