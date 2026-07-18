@@ -24,6 +24,7 @@ dependencies:
   battery_plus: ^6.0.0
   cupertino_icons: ^1.0.8
   fl_chart: ^0.68.0
+  wakelock_plus: ^1.2.10
 
 dev_dependencies:
   flutter_test:
