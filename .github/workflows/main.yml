@@ -26,6 +26,16 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # 2.5. Generate Gradle wrapper files (required because this repo was created without Flutter CLI)
+      - name: Generate Gradle wrapper
+        run: |
+          flutter create --platforms=android temp_wrapper_project
+          cp temp_wrapper_project/android/gradlew android/
+          cp temp_wrapper_project/android/gradlew.bat android/
+          cp temp_wrapper_project/android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/
+          chmod +x android/gradlew
+          rm -rf temp_wrapper_project
+
       # 3. Cache the Android Signing Keystore
       - name: Cache Android Keystore
         id: cache-keystore
@@ -80,7 +90,7 @@ jobs:
               print('build.gradle already configured for release signing.')
           "
 
-      # 7. Build the APK (DEBUG for testing widget)
+      # 7. Build the APK
       - name: Build Debug APK
         run: flutter build apk --debug
 
