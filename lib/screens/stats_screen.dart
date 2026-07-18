@@ -41,7 +41,7 @@ class _StatsScreenState extends State<StatsScreen>
     final startOfWeek = DateTime(weekAgo.year, weekAgo.month, weekAgo.day);
 
     final sessions = await DatabaseHelper.instance
-        .getStudySessionsForDateRange(startOfWeek, now);
+        .getStudySessionsForDateRange(startOfWeek.millisecondsSinceEpoch, now.millisecondsSinceEpoch);
     final todayMin = await DatabaseHelper.instance.getTodayStudyMinutes();
     final streak = await DatabaseHelper.instance.getLatestStreak();
 
