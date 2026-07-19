@@ -1,4 +1,4 @@
-name: Build Flutter APK
+name: Build Flutter Release APK
 
 on:
   push:
@@ -83,33 +83,71 @@ jobs:
           fi
           echo "Keystore found successfully."
 
-      # 8. Configure release signing
-      - name: Configure release signing
+      # 8. Configure release signing + ABI filter for single small APK
+      - name: Configure release build
         run: |
           python3 -c "
           import re
+
           with open('android/app/build.gradle', 'r') as f:
               content = f.read()
-          
+
+          # --- A. Add ABI filters to keep single APK under 50 MB ---
+          if 'abiFilters' not in content:
+              if 'versionName = flutter.versionName' in content:
+                  content = content.replace(
+                      'versionName = flutter.versionName',
+                      'versionName = flutter.versionName\\n        ndk {\\n            abiFilters \\'arm64-v8a\\', \\'armeabi-v7a\\'\\n        }'
+                  )
+                  print('Added ABI filters (with = syntax).')
+              elif 'versionName flutter.versionName' in content:
+                  content = content.replace(
+                      'versionName flutter.versionName',
+                      'versionName flutter.versionName\\n        ndk {\\n            abiFilters \\'arm64-v8a\\', \\'armeabi-v7a\\'\\n        }'
+                  )
+                  print('Added ABI filters (without = syntax).')
+
+          # --- B. Add signingConfigs.release if missing ---
+          if 'signingConfigs.release' not in content:
+              release_config = '''        release {
+                  keyAlias 'release'
+                  keyPassword 'releasepass'
+                  storeFile file('release-key.jks')
+                  storePassword 'releasepass'
+              }
+          '''
+              if 'signingConfigs {' in content:
+                  content = content.replace('signingConfigs {', 'signingConfigs {\\n' + release_config, 1)
+                  print('Added release signing config to existing block.')
+              else:
+                  content = content.replace(
+                      '    buildTypes {',
+                      '    signingConfigs {\\n' + release_config + '    }\\n\\n    buildTypes {',
+                      1
+                  )
+                  print('Created signingConfigs block with release config.')
+
+          # --- C. Point release buildType to release signing ---
           if 'signingConfig signingConfigs.release' not in content:
               content = content.replace(
-                  'signingConfig signingConfigs.debug', 
+                  'signingConfig signingConfigs.debug',
                   'signingConfig signingConfigs.release'
               )
-              with open('android/app/build.gradle', 'w') as f:
-                  f.write(content)
-              print('Updated build.gradle to use release signing.')
+              print('Switched release buildType to release signing.')
           else:
-              print('build.gradle already configured for release signing.')
+              print('Release signing already active.')
+
+          with open('android/app/build.gradle', 'w') as f:
+              f.write(content)
           "
 
-      # 9. Build the APK
-      - name: Build Debug APK
-        run: flutter build apk --debug
+      # 9. Build the Release APK (single, optimized, AOT-compiled)
+      - name: Build Release APK
+        run: flutter build apk --release
 
-      # 10. Upload APK
-      - name: Upload APK
+      # 10. Upload the single Release APK
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: debug-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
