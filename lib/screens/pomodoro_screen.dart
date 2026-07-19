@@ -335,7 +335,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final gradientColors = AppThemes.gradientColorsFor(
-      EventCountdownAppState.of(context)?.theme ?? AppThemeOption.defaultBlue,
+      EventCountdownAppState.of(context)?.theme ?? AppThemeOption.auroraBorealis,
     );
 
     return Scaffold(
