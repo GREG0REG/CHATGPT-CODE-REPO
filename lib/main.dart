@@ -70,7 +70,7 @@ class EventCountdownApp extends StatefulWidget {
 
 class EventCountdownAppState extends State<EventCountdownApp>
     with WidgetsBindingObserver {
-  AppThemeOption _theme = AppThemeOption.defaultBlue;
+  AppThemeOption _theme = AppThemeOption.auroraBorealis;
   ThemeMode _themeMode = ThemeMode.system;
   Color? _customColor;
   bool _highContrast = false;
