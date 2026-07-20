@@ -1,370 +1,230 @@
-import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:dynamic_color/dynamic_color.dart';
+import 'package:workmanager/workmanager.dart';
+import 'database_helper.dart';
+import 'services/export_import_service.dart';
+import 'screens/home_screen.dart';
+import 'screens/main_screen.dart';
+import 'screens/widget_settings_screen.dart';
+import 'screens/stats_screen.dart';
+import 'services/backup_service.dart';
+import 'services/notification_service.dart';
+import 'services/pomodoro_service.dart';
+import 'services/settings_service.dart';
+import 'services/widget_service.dart';
+import 'theme/app_themes.dart';
 
-// ============================================
-// RECURRENCE TYPES
-// ============================================
-enum RecurrenceType {
-  none,
-  daily,
-  weekly,
-  monthly,
-  yearly,
+const String kWidgetRefreshTaskName = 'event_countdown_widget_refresh';
+const String kBackupTaskName = 'event_countdown_weekly_backup';
+
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    if (task == kWidgetRefreshTaskName) {
+      await WidgetService.refreshWidget();
+      await WidgetService.refreshPomodoroWidget();
+    } else if (task == kBackupTaskName) {
+      return Future.value(await BackupService.executeBackup());
+    }
+    return Future.value(true);
+  });
 }
 
-// ============================================
-// YEARLY SPECIFIC DATE (for JSON serialization)
-// ============================================
-class YearlySpecificDate {
-  final int month; // 1-12
-  final int day; // 1-31
-  final int? customStartTimeMillis;
-  final int? customDeadlineMillis;
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.instance.init();
+  await PomodoroService.instance.init();
 
-  const YearlySpecificDate({
-    required this.month,
-    required this.day,
-    this.customStartTimeMillis,
-    this.customDeadlineMillis,
-  });
+  await Workmanager().initialize(
+    callbackDispatcher,
+    isInDebugMode: false,
+  );
 
-  Map<String, dynamic> toJson() => {
-        'm': month,
-        'd': day,
-        if (customStartTimeMillis != null) 's': customStartTimeMillis,
-        if (customDeadlineMillis != null) 'e': customDeadlineMillis,
-      };
+  await Workmanager().registerPeriodicTask(
+    kWidgetRefreshTaskName,
+    kWidgetRefreshTaskName,
+    frequency: const Duration(hours: 4),
+    constraints: Constraints(networkType: NetworkType.not_required),
+    existingWorkPolicy: ExistingWorkPolicy.keep,
+  );
 
-  factory YearlySpecificDate.fromJson(Map<String, dynamic> json) =>
-      YearlySpecificDate(
-        month: json['m'] as int,
-        day: json['d'] as int,
-        customStartTimeMillis: json['s'] as int?,
-        customDeadlineMillis: json['e'] as int?,
-      );
+  await BackupService.registerWeeklyBackup();
+  
+  try {
+    await WidgetService.refreshWidget();
+    await WidgetService.refreshPomodoroWidget();
+  } catch (e) {
+    debugPrint('Widget refresh error: $e');
+  }
 
-  DateTime toDateTime(int year) => DateTime(year, month, day);
+  runApp(const EventCountdownApp());
+}
+
+class EventCountdownApp extends StatefulWidget {
+  const EventCountdownApp({super.key});
 
   @override
-  String toString() => '$month/$day';
+  State<EventCountdownApp> createState() => EventCountdownAppState();
 }
 
-// ============================================
-// EVENT ICONS FOR STUDENTS
-// ============================================
-class EventIcons {
-  EventIcons._();
+class EventCountdownAppState extends State<EventCountdownApp>
+    with WidgetsBindingObserver {
+  AppThemeOption _theme = AppThemeOption.auroraBorealis;
+  ThemeMode _themeMode = ThemeMode.system;
+  Color? _customColor;
+  bool _highContrast = false;
 
-  static const Map<String, IconData> icons = {
-    'event': Icons.event,
-    'school': Icons.school,
-    'book': Icons.book,
-    'menu_book': Icons.menu_book,
-    'calculate': Icons.calculate,
-    'science': Icons.science,
-    'biotech': Icons.biotech,
-    'computer': Icons.computer,
-    'code': Icons.code,
-    'edit_note': Icons.edit_note,
-    'assignment': Icons.assignment,
-    'quiz': Icons.quiz,
-    'emoji_events': Icons.emoji_events,
-    'sports': Icons.sports,
-    'music_note': Icons.music_note,
-    'palette': Icons.palette,
-    'translate': Icons.translate,
-    'public': Icons.public,
-    'psychology': Icons.psychology,
-    'history_edu': Icons.history_edu,
-    'self_improvement': Icons.self_improvement,
-    'alarm': Icons.alarm,
-    'timer': Icons.timer,
-    'group': Icons.group,
-    'presentation': Icons.present_to_all,
-    'work': Icons.work,
-  };
+  // PUBLIC GETTER so other screens can read the current theme
+  AppThemeOption get theme => _theme;
 
-  static IconData? getIcon(String? name) => icons[name] ?? Icons.event;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadAllSettings();
+    _checkFirstLaunch();
+  }
 
-  static String? getDefaultIconName() => 'event';
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      WidgetService.refreshWidget();
+      WidgetService.refreshPomodoroWidget();
+    }
+  }
+
+  Future<void> _loadAllSettings() async {
+    final theme = await SettingsService.instance.getSelectedTheme();
+    final mode = await SettingsService.instance.getThemeMode();
+    final custom = await SettingsService.instance.getCustomColor();
+    final hc = await SettingsService.instance.getHighContrast();
+
+    if (mounted) {
+      setState(() {
+        _theme = theme;
+        _themeMode = mode;
+        _customColor = custom;
+        _highContrast = hc;
+      });
+    }
+  }
+
+  Future<void> _checkFirstLaunch() async {
+    final isFirst = await SettingsService.instance.isFirstLaunch();
+    if (!isFirst) return;
+
+    await SettingsService.instance.setFirstLaunch(false);
+    await Future.delayed(const Duration(seconds: 2));
+
+    if (!mounted) return;
+
+    final backupPath = await BackupService.findRecentBackup();
+    if (backupPath == null) return;
+    if (!mounted) return;
+
+    final shouldRestore = await showDialog<bool>(
+      context: navigatorKey.currentContext!,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Restore Backup?'),
+        content: const Text(
+          'A previous backup was found. Would you like to restore your events?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Skip'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldRestore == true) {
+      try {
+        final count = await ExportImportService.importFromJson(backupPath);
+        final events = await DatabaseHelper.instance.getAllEventsSorted();
+        await NotificationService.instance.rescheduleAll(events);
+        await WidgetService.refreshWidget();
+        await WidgetService.refreshPomodoroWidget();
+
+        if (mounted) {
+          ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+            SnackBar(content: Text('Restored $count event(s)')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
+            SnackBar(content: Text('Restore failed: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  static EventCountdownAppState? of(BuildContext context) =>
+      context.findAncestorStateOfType<EventCountdownAppState>();
+
+  void updateTheme(AppThemeOption theme) {
+    setState(() => _theme = theme);
+  }
+
+  void updateThemeMode(ThemeMode mode) {
+    setState(() => _themeMode = mode);
+  }
+
+  void updateCustomColor(Color? color) {
+    setState(() => _customColor = color);
+  }
+
+  void updateHighContrast(bool value) {
+    setState(() => _highContrast = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DynamicColorBuilder(
+      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+        return MaterialApp(
+          title: 'Event Countdown',
+          debugShowCheckedModeBanner: false,
+          navigatorKey: navigatorKey,
+          themeMode: _themeMode,
+          theme: AppThemes.buildTheme(
+            _theme,
+            brightness: Brightness.light,
+            customColor: _customColor,
+            dynamicScheme:
+                _theme == AppThemeOption.materialYou ? lightDynamic : null,
+            highContrast: _highContrast,
+          ),
+          darkTheme: AppThemes.buildTheme(
+            _theme,
+            brightness: Brightness.dark,
+            customColor: _customColor,
+            dynamicScheme:
+                _theme == AppThemeOption.materialYou ? darkDynamic : null,
+            highContrast: _highContrast,
+          ),
+          home: const MainScreen(),
+          routes: {
+            '/widget_settings': (context) => const WidgetSettingsScreen(),
+            '/stats': (context) => const StatsScreen(),
+          },
+        );
+      },
+    );
+  }
 }
 
-// ============================================
-// MAIN EVENT MODEL
-// ============================================
-class Event {
-  final int? id;
-  final String title;
-  final int dateMillis;
-  final int? startTimeMillis;
-  final int? deadlineMillis;
-  final String? notes;
-
-  // --- Recurrence fields ---
-  final RecurrenceType recurrence;
-  final int recurrenceInterval;
-  final bool yearlyUseSpecificDates;
-  final String? yearlySpecificDatesJson;
-  final String? excludedDatesJson;
-
-  // --- Student Study Pack fields (NEW) ---
-  final String? iconName;
-  final int priority; // 0=none, 1=low, 2=normal, 3=high, 4=urgent
-  final String? subjectTag;
-  final bool isCompleted;
-
-  const Event({
-    this.id,
-    required this.title,
-    required this.dateMillis,
-    this.startTimeMillis,
-    this.deadlineMillis,
-    this.notes,
-    this.recurrence = RecurrenceType.none,
-    this.recurrenceInterval = 1,
-    this.yearlyUseSpecificDates = false,
-    this.yearlySpecificDatesJson,
-    this.excludedDatesJson,
-    this.iconName,
-    this.priority = 2, // default normal
-    this.subjectTag,
-    this.isCompleted = false,
-  });
-
-  // --- Computed properties ---
-
-  bool get isRecurring => recurrence != RecurrenceType.none;
-
-  List<YearlySpecificDate> get yearlySpecificDates {
-    if (yearlySpecificDatesJson == null || yearlySpecificDatesJson!.isEmpty)
-      return [];
-    try {
-      final list = jsonDecode(yearlySpecificDatesJson!) as List;
-      return list
-          .map((e) => YearlySpecificDate.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  List<int> get excludedDates {
-    if (excludedDatesJson == null || excludedDatesJson!.isEmpty) return [];
-    try {
-      final list = jsonDecode(excludedDatesJson!) as List;
-      return list.cast<int>();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  /// The timestamp used for sorting / "which event is next" purposes.
-  int get primarySortMillis {
-    if (startTimeMillis != null) return startTimeMillis!;
-    if (deadlineMillis != null) return deadlineMillis!;
-    return dateMillis;
-  }
-
-  /// The final relevant timestamp for this event.
-  int get finalMillis {
-    if (deadlineMillis != null) return deadlineMillis!;
-    if (startTimeMillis != null) return startTimeMillis!;
-    return dateMillis;
-  }
-
-  // ============================================
-  // URGENCY COLOR (FIXED - hour-based for same-day)
-  // ============================================
-  Color getUrgencyColor(DateTime now) {
-    if (isCompleted) return Colors.grey;
-
-    final nowMillis = now.millisecondsSinceEpoch;
-    final target = deadlineMillis ?? startTimeMillis ?? dateMillis;
-    final diff = Duration(milliseconds: target - nowMillis);
-
-    if (diff.isNegative || diff.inHours < 0) {
-      return Colors.grey;
-    } else if (diff.inDays >= 7) {
-      return Colors.green;
-    } else if (diff.inDays >= 3) {
-      return Colors.orange;
-    } else if (diff.inHours >= 24) {
-      return Colors.orange; // 1-3 days
-    } else if (diff.inHours >= 3) {
-      return Colors.deepOrange; // 3-24 hours
-    } else {
-      return Colors.red; // Under 3 hours
-    }
-  }
-
-  // ============================================
-  // PRIORITY COLOR & LABEL
-  // ============================================
-  Color get priorityColor {
-    switch (priority) {
-      case 1:
-        return Colors.blue;
-      case 2:
-        return Colors.green;
-      case 3:
-        return Colors.orange;
-      case 4:
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String get priorityLabel {
-    switch (priority) {
-      case 1:
-        return 'Low';
-      case 2:
-        return 'Normal';
-      case 3:
-        return 'High';
-      case 4:
-        return 'Urgent';
-      default:
-        return 'None';
-    }
-  }
-
-  // FIX: Added ?? Icons.event so it never returns null
-  IconData get iconData => EventIcons.getIcon(iconName) ?? Icons.event;
-
-  /// Convenience: returns the countdown text string for this event at [now].
-  String getCountdownText(DateTime now, {required bool smartFormatEnabled}) {
-    if (isCompleted) return 'Completed';
-
-    // FIX: For date-only events (no start, no deadline), use end of day
-    int targetMillis;
-    if (deadlineMillis != null) {
-      targetMillis = deadlineMillis!;
-    } else if (startTimeMillis != null) {
-      targetMillis = startTimeMillis!;
-    } else {
-      // Date-only: countdown to end of that day
-      final eventDate = DateTime.fromMillisecondsSinceEpoch(dateMillis);
-      targetMillis = DateTime(eventDate.year, eventDate.month, eventDate.day, 23, 59, 59).millisecondsSinceEpoch;
-    }
-
-    final diff = Duration(
-      milliseconds: targetMillis - now.millisecondsSinceEpoch,
-    );
-
-    if (diff.isNegative) return 'Completed';
-
-    if (diff.inHours >= 24) {
-      final days = diff.inDays;
-      return '$days day${days == 1 ? '' : 's'} left';
-    } else if (diff.inMinutes >= 60) {
-      final hours = diff.inHours;
-      return '$hours hour${hours == 1 ? '' : 's'} left';
-    } else {
-      final minutes = diff.inMinutes < 1 ? 1 : diff.inMinutes;
-      return '$minutes minute${minutes == 1 ? '' : 's'} left';
-    }
-  }
-
-  // ============================================
-  // COPY & SERIALIZATION
-  // ============================================
-  Event copyWith({
-    int? id,
-    String? title,
-    int? dateMillis,
-    int? startTimeMillis,
-    bool clearStartTime = false,
-    int? deadlineMillis,
-    bool clearDeadline = false,
-    String? notes,
-    RecurrenceType? recurrence,
-    int? recurrenceInterval,
-    bool? yearlyUseSpecificDates,
-    String? yearlySpecificDatesJson,
-    bool clearYearlySpecificDates = false,
-    String? excludedDatesJson,
-    bool clearExcludedDates = false,
-    String? iconName,
-    bool clearIconName = false,
-    int? priority,
-    String? subjectTag,
-    bool clearSubjectTag = false,
-    bool? isCompleted,
-  }) {
-    return Event(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      dateMillis: dateMillis ?? this.dateMillis,
-      startTimeMillis: clearStartTime
-          ? null
-          : (startTimeMillis ?? this.startTimeMillis),
-      deadlineMillis: clearDeadline
-          ? null
-          : (deadlineMillis ?? this.deadlineMillis),
-      notes: notes ?? this.notes,
-      recurrence: recurrence ?? this.recurrence,
-      recurrenceInterval: recurrenceInterval ?? this.recurrenceInterval,
-      yearlyUseSpecificDates:
-          yearlyUseSpecificDates ?? this.yearlyUseSpecificDates,
-      yearlySpecificDatesJson: clearYearlySpecificDates
-          ? null
-          : (yearlySpecificDatesJson ?? this.yearlySpecificDatesJson),
-      excludedDatesJson: clearExcludedDates
-          ? null
-          : (excludedDatesJson ?? this.excludedDatesJson),
-      iconName: clearIconName ? null : (iconName ?? this.iconName),
-      priority: priority ?? this.priority,
-      subjectTag: clearSubjectTag ? null : (subjectTag ?? this.subjectTag),
-      isCompleted: isCompleted ?? this.isCompleted,
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'title': title,
-      'dateMillis': dateMillis,
-      'startTimeMillis': startTimeMillis,
-      'deadlineMillis': deadlineMillis,
-      'notes': notes,
-      'recurrence': recurrence.index,
-      'recurrenceInterval': recurrenceInterval,
-      'yearlyUseSpecificDates': yearlyUseSpecificDates ? 1 : 0,
-      'yearlySpecificDatesJson': yearlySpecificDatesJson,
-      'excludedDatesJson': excludedDatesJson,
-      'iconName': iconName,
-      'priority': priority,
-      'subjectTag': subjectTag,
-      'isCompleted': isCompleted ? 1 : 0,
-    };
-  }
-
-  factory Event.fromMap(Map<String, dynamic> map) {
-    return Event(
-      id: map['id'] as int?,
-      title: map['title'] as String,
-      dateMillis: map['dateMillis'] as int,
-      startTimeMillis: map['startTimeMillis'] as int?,
-      deadlineMillis: map['deadlineMillis'] as int?,
-      notes: map['notes'] as String?,
-      recurrence: RecurrenceType.values[
-          (map['recurrence'] as int?)?.clamp(0, RecurrenceType.values.length - 1) ??
-              0],
-      recurrenceInterval:
-          (map['recurrenceInterval'] as int?)?.clamp(1, 50) ?? 1,
-      yearlyUseSpecificDates: (map['yearlyUseSpecificDates'] as int?) == 1,
-      yearlySpecificDatesJson: map['yearlySpecificDatesJson'] as String?,
-      excludedDatesJson: map['excludedDatesJson'] as String?,
-      iconName: map['iconName'] as String?,
-      priority: (map['priority'] as int?)?.clamp(0, 4) ?? 2,
-      subjectTag: map['subjectTag'] as String?,
-      isCompleted: (map['isCompleted'] as int? ?? 0) == 1,
-    );
-  }
-
-  Map<String, dynamic> toJson() => toMap();
-
-  factory Event.fromJson(Map<String, dynamic> json) => Event.fromMap(json);
-}
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
