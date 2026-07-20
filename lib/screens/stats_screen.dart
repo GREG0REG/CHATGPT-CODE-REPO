@@ -1,5 +1,5 @@
 // CHATGPT-CODE-REPO-TEST/lib/screens/stats_screen.dart
-// COMPLETE FILE - With GPA Calculator integrated
+// COMPLETE FILE - With GPA Calculator and Exam Countdown integrated
 
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -8,6 +8,7 @@ import '../models/study_session.dart';
 import '../theme/app_themes.dart';
 import '../main.dart';
 import '../WIDGET/gpa_calculator_widget.dart';
+import '../WIDGET/exam_countdown_widget.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -136,6 +137,10 @@ class _StatsScreenState extends State<StatsScreen>
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  // Exam Countdown Banner
+                  const ExamCountdownWidget(),
+                  const SizedBox(height: 16),
+
                   // Summary cards
                   _buildSummaryRow(cs),
                   const SizedBox(height: 24),
