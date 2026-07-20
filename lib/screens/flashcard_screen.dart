@@ -441,6 +441,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         boxLevel: existing?.boxLevel ?? 1,
         lastReviewedMillis: existing?.lastReviewedMillis,
         nextReviewMillis: existing?.nextReviewMillis,
+        createdAtMillis: existing?.createdAtMillis ?? DateTime.now().millisecondsSinceEpoch,
       );
 
       if (existing != null && existing.id != null) {
@@ -558,6 +559,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
             subjectTag: result['subject'] as String,
             frontText: parts[0].trim(),
             backText: parts[1].trim(),
+            createdAtMillis: DateTime.now().millisecondsSinceEpoch,
           );
           await DatabaseHelper.instance.insertFlashcard(card);
           imported++;
