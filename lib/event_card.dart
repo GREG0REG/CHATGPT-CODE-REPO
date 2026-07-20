@@ -109,28 +109,25 @@ class _EventCardState extends State<EventCard> {
     );
   }
 
-  /// Build a mini circular progress indicator for the card
-  Widget _buildCircularProgress(double progress, Color color) {
-    return SizedBox(
-      width: 44,
-      height: 44,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          CircularProgressIndicator(
-            value: 1.0,
-            strokeWidth: 3,
-            backgroundColor: color.withOpacity(0.12),
-            valueColor: const AlwaysStoppedAnimation(Colors.transparent),
+  /// Build vertical progress indicator for the left side of card
+  Widget _buildVerticalProgress(double progress, Color color) {
+    return Container(
+      width: 4,
+      height: 80,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Container(
+          width: 4,
+          height: 80 * progress,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
           ),
-          CircularProgressIndicator(
-            value: progress,
-            strokeWidth: 3,
-            backgroundColor: Colors.transparent,
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-            strokeCap: StrokeCap.round,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -162,12 +159,11 @@ class _EventCardState extends State<EventCard> {
       subtitleParts.add('Deadline: ${_formatDateTime(widget.event.deadlineMillis!)}');
     }
 
-    // FIX: Use displayEvent for urgency so child occurrences show correct urgency
     final urgencyColor = isCompleted ? Colors.grey : displayEvent.getUrgencyColor(now);
     final isRecurringParent = widget.event.isRecurring && widget.event.id != null && widget.event.id! > 0;
     final hasChildren = widget.childOccurrences != null && widget.childOccurrences!.isNotEmpty;
 
-    // Calculate progress for the circular indicator
+    // Calculate progress for the vertical bar (0.0 to 1.0)
     double progressValue = 0.0;
     if (!isCompleted && displayEvent.deadlineMillis != null && displayEvent.startTimeMillis != null) {
       final total = displayEvent.deadlineMillis! - displayEvent.startTimeMillis!;
@@ -206,6 +202,10 @@ class _EventCardState extends State<EventCard> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    // Vertical progress bar on the left
+                    _buildVerticalProgress(progressValue, isCompleted ? Colors.grey : cs.primary),
+                    const SizedBox(width: 12),
+
                     // Event Icon with urgency-colored background
                     Container(
                       width: 48,
@@ -223,13 +223,6 @@ class _EventCardState extends State<EventCard> {
                           color: isCompleted ? Colors.grey : urgencyColor,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-
-                    // Circular progress indicator
-                    _buildCircularProgress(
-                      progressValue,
-                      isCompleted ? Colors.grey : cs.primary,
                     ),
                     const SizedBox(width: 12),
 
@@ -253,7 +246,6 @@ class _EventCardState extends State<EventCard> {
                                   maxLines: 1, overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              // FIX: Show priority badge for ALL priorities > 0
                               if (widget.event.priority > 0) ...[
                                 const SizedBox(width: 6),
                                 Container(
