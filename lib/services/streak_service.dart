@@ -38,25 +38,23 @@ class StreakService {
       if (currentStreak > bestStreak) {
         bestStreak = currentStreak;
       }
-      await p.setInt(_kStreakCount, currentStreak);
-      await p.setInt(_kBestStreak, bestStreak);
-      await p.setInt(_kTotalStudyDays, totalDays);
-      await p.setInt(_kLastStudyDate, todayMillis);
-    } else if (difference > 1) {
-      // Streak broken - reset to 1
+    } else {
+      // Streak broken - reset
       currentStreak = 1;
       totalDays++;
-      await p.setInt(_kStreakCount, currentStreak);
-      await p.setInt(_kTotalStudyDays, totalDays);
-      await p.setInt(_kLastStudyDate, todayMillis);
     }
+
+    // Save updated values
+    await p.setInt(_kStreakCount, currentStreak);
+    await p.setInt(_kLastStudyDate, todayMillis);
+    await p.setInt(_kBestStreak, bestStreak);
+    await p.setInt(_kTotalStudyDays, totalDays);
 
     return StreakInfo(
       currentStreak: currentStreak,
       bestStreak: bestStreak,
       totalStudyDays: totalDays,
-      lastStudyDate: lastStudyDay,
-      isStudiedToday: difference == 0,
+      studiedToday: difference == 0,
     );
   }
 
@@ -70,20 +68,26 @@ class StreakService {
     final lastStudyDate = DateTime.fromMillisecondsSinceEpoch(lastStudyMillis);
     final lastStudyDay = DateTime(lastStudyDate.year, lastStudyDate.month, lastStudyDate.day);
 
+    int currentStreak = p.getInt(_kStreakCount) ?? 0;
+    int bestStreak = p.getInt(_kBestStreak) ?? 0;
+    int totalDays = p.getInt(_kTotalStudyDays) ?? 0;
+
     final difference = today.difference(lastStudyDay).inDays;
 
+    // If missed a day, streak is broken
+    if (difference > 1) {
+      currentStreak = 0;
+    }
+
     return StreakInfo(
-      currentStreak: p.getInt(_kStreakCount) ?? 0,
-      bestStreak: p.getInt(_kBestStreak) ?? 0,
-      totalStudyDays: p.getInt(_kTotalStudyDays) ?? 0,
-      lastStudyDate: lastStudyDay,
-      isStudiedToday: difference == 0,
-      isStreakActive: difference <= 1,
-      daysUntilBreak: difference == 0 ? 1 : (difference == 1 ? 0 : -1),
+      currentStreak: currentStreak,
+      bestStreak: bestStreak,
+      totalStudyDays: totalDays,
+      studiedToday: difference == 0,
     );
   }
 
-  /// Reset streak (for testing or user request)
+  /// Reset all streak data
   Future<void> resetStreak() async {
     final p = await _prefs;
     await p.remove(_kStreakCount);
@@ -97,31 +101,12 @@ class StreakInfo {
   final int currentStreak;
   final int bestStreak;
   final int totalStudyDays;
-  final DateTime lastStudyDate;
-  final bool isStudiedToday;
-  final bool isStreakActive;
-  final int daysUntilBreak;
+  final bool studiedToday;
 
-  StreakInfo({
+  const StreakInfo({
     required this.currentStreak,
     required this.bestStreak,
     required this.totalStudyDays,
-    required this.lastStudyDate,
-    this.isStudiedToday = false,
-    this.isStreakActive = false,
-    this.daysUntilBreak = 0,
+    required this.studiedToday,
   });
-
-  String get streakText {
-    if (currentStreak == 0) return 'Start your streak today!';
-    if (currentStreak == 1) return '1 day streak';
-    return '$currentStreak day streak 🔥';
-  }
-
-  String get motivationalMessage {
-    if (!isStreakActive && currentStreak > 0) return 'Streak broken! Start fresh today 💪';
-    if (isStudiedToday) return 'Great job today! Keep it up 🎉';
-    if (currentStreak == 0) return 'Study today to start your streak! 📚';
-    return '$daysUntilBreak days until streak break - study today! ⚡';
-  }
 }
