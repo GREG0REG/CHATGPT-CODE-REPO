@@ -1,6 +1,9 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
+import 'models/flashcard_review_history.dart';
+import 'models/daily_card_goal.dart';
+
 import 'models/event.dart';
 import 'models/custom_reminder.dart';
 import 'models/notification_history.dart';
@@ -159,6 +162,32 @@ class DatabaseHelper {
         colorHex TEXT DEFAULT '#2196F3',
         totalFocusMinutes INTEGER DEFAULT 0,
         createdAtMillis INTEGER NOT NULL
+      )
+    """);
+        // ---- FLASHCARD REVIEW HISTORY (v8) ----
+    await db.execute("""
+      CREATE TABLE flashcard_review_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cardId INTEGER NOT NULL,
+        reviewedAtMillis INTEGER NOT NULL,
+        difficulty TEXT NOT NULL,
+        timeSpentSeconds INTEGER DEFAULT 0,
+        boxLevelBefore INTEGER DEFAULT 1,
+        boxLevelAfter INTEGER DEFAULT 1,
+        sessionId TEXT
+      )
+    """);
+
+    // ---- DAILY CARD GOALS (v8) ----
+    await db.execute("""
+      CREATE TABLE daily_card_goals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dateMillis INTEGER NOT NULL UNIQUE,
+        targetReviews INTEGER DEFAULT 20,
+        achievedReviews INTEGER DEFAULT 0,
+        targetNewCards INTEGER DEFAULT 5,
+        achievedNewCards INTEGER DEFAULT 0,
+        streakCount INTEGER DEFAULT 0
       )
     """);
   }
