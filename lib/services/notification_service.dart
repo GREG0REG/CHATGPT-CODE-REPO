@@ -49,9 +49,8 @@ Future<void> scheduleForEvent(Event event) async {
   if (event.id == null) return;
   await cancelForEvent(event.id!);
   
-  // Which timestamp drives the reminders: start time if set, else deadline.
-  final anchorMillis = event.startTimeMillis ?? event.deadlineMillis;
-  if (anchorMillis == null) return; // nothing to schedule
+  // FIX: Which timestamp drives the reminders: start time if set, else deadline, else date.
+  final anchorMillis = event.startTimeMillis ?? event.deadlineMillis ?? event.dateMillis;
   
   final anchor = DateTime.fromMillisecondsSinceEpoch(anchorMillis);
   final now = DateTime.now();
@@ -69,7 +68,15 @@ Future<void> scheduleForEvent(Event event) async {
   // 1 hour before the anchor.
   final hourBefore = anchor.subtract(const Duration(hours: 1));
   
-  final label = event.startTimeMillis != null ? 'starts' : 'deadline is';
+  // FIX: Determine label text based on what type of time we have
+  String label;
+  if (event.startTimeMillis != null) {
+    label = 'starts';
+  } else if (event.deadlineMillis != null) {
+    label = 'deadline is';
+  } else {
+    label = 'is on';
+  }
   
   // Format time for display (12-hour or 24-hour)
   String formatTime(DateTime dt) {
@@ -83,7 +90,7 @@ Future<void> scheduleForEvent(Event event) async {
   if (dayBefore.isAfter(now)) {
     await _scheduleAt(
       id: _dayBeforeId(event.id!),
-      title: ' ${event.title}',
+      title: event.title,
       body: 'Tomorrow at 9:00 AM • ${event.title} $label',
       when: dayBefore,
     );
