@@ -6,12 +6,6 @@
     android:background="#00BFA5"
     android:padding="12dp">
 
-    <!-- Background layer -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@drawable/widget_glass_background" />
-
     <!-- Content layer -->
     <LinearLayout
         android:layout_width="match_parent"
@@ -55,22 +49,13 @@
             android:layout_marginTop="8dp"
             android:progressDrawable="@drawable/widget_progress_drawable" />
 
-        <!-- Mini progress bar (hidden by default) -->
-        <ProgressBar
-            android:id="@+id/pomodoro_mini_progress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="2dp"
-            android:layout_marginTop="4dp"
-            android:visibility="gone"
-            android:progressDrawable="@drawable/widget_progress_drawable" />
-
         <LinearLayout
             android:id="@+id/pomodoro_session_chips"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="6dp">
+            android:layout_marginTop="6dp"
+            android:visibility="gone">
 
             <TextView
                 android:id="@+id/completed_sessions"
