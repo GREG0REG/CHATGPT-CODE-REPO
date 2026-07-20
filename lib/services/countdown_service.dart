@@ -35,8 +35,11 @@ class CountdownService {
     if (deadline != null) {
       return nowMillis < deadline ? CountdownPhase.active : CountdownPhase.completed;
     }
-    // FIX: For date-only events, use dateMillis as the reference
-    return nowMillis < event.dateMillis ? CountdownPhase.beforeStart : CountdownPhase.completed;
+    // FIX: For date-only events, use the END of the day (midnight) as cutoff
+    // so the event shows as "active" throughout its day
+    final eventDate = DateTime.fromMillisecondsSinceEpoch(event.dateMillis);
+    final endOfDay = DateTime(eventDate.year, eventDate.month, eventDate.day, 23, 59, 59);
+    return nowMillis < endOfDay.millisecondsSinceEpoch ? CountdownPhase.active : CountdownPhase.completed;
   }
 
   static CountdownResult buildCountdownText(
@@ -58,7 +61,16 @@ class CountdownService {
 
       case CountdownPhase.active:
         // FIX: Use dateMillis as fallback when no deadline is set
-        final targetMillis = event.deadlineMillis ?? event.dateMillis;
+        int targetMillis;
+        if (event.deadlineMillis != null) {
+          targetMillis = event.deadlineMillis!;
+        } else if (event.startTimeMillis != null) {
+          targetMillis = event.startTimeMillis!;
+        } else {
+          // Date-only: countdown to end of that day
+          final eventDate = DateTime.fromMillisecondsSinceEpoch(event.dateMillis);
+          targetMillis = DateTime(eventDate.year, eventDate.month, eventDate.day, 23, 59, 59).millisecondsSinceEpoch;
+        }
         final diff = Duration(milliseconds: targetMillis - now.millisecondsSinceEpoch);
         if (diff.isNegative) {
           return const CountdownResult(CountdownPhase.completed, 'Completed');
