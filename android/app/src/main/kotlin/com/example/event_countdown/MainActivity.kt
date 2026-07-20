@@ -1,3 +1,6 @@
+// CHATGPT-CODE-REPO-TEST/android/app/src/main/kotlin/com/example/event_countdown/MainActivity.kt
+// COMPLETE REPLACEMENT
+
 package com.example.event_countdown
 
 import android.appwidget.AppWidgetManager
@@ -24,6 +27,8 @@ class MainActivity : FlutterActivity() {
                     val bgColorStr = call.argument<String>("bgColor")
                     val textColorStr = call.argument<String>("textColor")
                     val progressPercent = call.argument<Int>("progressPercent") ?: 65
+                    val urgencyColor = call.argument<String>("urgencyColor")
+                    val iconName = call.argument<String>("iconName")
 
                     for (widgetId in appWidgetIds) {
                         EventCountdownWidgetProvider.updateWidgetDirectly(
@@ -34,7 +39,9 @@ class MainActivity : FlutterActivity() {
                             countdown,
                             bgColorStr,
                             textColorStr,
-                            progressPercent
+                            progressPercent,
+                            urgencyColor,
+                            iconName
                         )
                     }
 
@@ -50,6 +57,7 @@ class MainActivity : FlutterActivity() {
                     val status = call.argument<String>("status") ?: "Focus"
                     val bgColorStr = call.argument<String>("bgColor")
                     val progressPercent = call.argument<Int>("progressPercent") ?: 45
+                    val completedSessions = call.argument<Int>("completedSessions") ?: 0
 
                     for (widgetId in appWidgetIds) {
                         PomodoroWidgetProvider.updateWidgetDirectly(
@@ -60,7 +68,8 @@ class MainActivity : FlutterActivity() {
                             timerText,
                             status,
                             bgColorStr,
-                            progressPercent
+                            progressPercent,
+                            completedSessions
                         )
                     }
 
