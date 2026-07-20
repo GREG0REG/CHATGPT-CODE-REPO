@@ -176,6 +176,7 @@ class PomodoroService extends ChangeNotifier {
       await prefs.setString('pomodoro_subject', subject);
       await prefs.setString('pomodoro_timer_text', timerText);
       await prefs.setString('pomodoro_status', status);
+      await prefs.setInt('pomodoro_completed_sessions', _completedFocusSessions);
 
       await WidgetService.refreshPomodoroWidget();
     } catch (e) {
