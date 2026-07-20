@@ -205,32 +205,76 @@ class _EventCardState extends State<EventCard> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Circular progress indicator
-                    SizedBox(
+                    // Event Icon with urgency-colored background (FIXED - was missing)
+                    Container(
                       width: 48,
                       height: 48,
+                      decoration: BoxDecoration(
+                        color: isCompleted
+                            ? Colors.grey.withOpacity(0.12)
+                            : urgencyColor.withOpacity(0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Icon(
+                          displayEvent.iconData,
+                          size: 24,
+                          color: isCompleted ? Colors.grey : urgencyColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+
+                    // Circular progress indicator
+                    SizedBox(
+                      width: 44,
+                      height: 44,
                       child: _buildCircularProgress(
                         progressValue,
                         isCompleted ? Colors.grey : cs.primary,
                       ),
                     ),
-                    const SizedBox(width: 14),
+                    const SizedBox(width: 12),
 
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Title
-                          Text(
-                            widget.event.title,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              decoration: isCompleted ? TextDecoration.lineThrough : null,
-                              color: isCompleted ? Colors.grey : null,
-                            ),
-                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                          // Title with priority badge (FIXED - priority now visible)
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  widget.event.title,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    decoration: isCompleted ? TextDecoration.lineThrough : null,
+                                    color: isCompleted ? Colors.grey : null,
+                                  ),
+                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (widget.event.priority > 2) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: widget.event.priorityColor.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    widget.event.priorityLabel,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: widget.event.priorityColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                           if (widget.event.subjectTag != null && widget.event.subjectTag!.isNotEmpty) ...[
                             const SizedBox(height: 4),
@@ -266,15 +310,29 @@ class _EventCardState extends State<EventCard> {
                             ),
                           ],
                           const SizedBox(height: 6),
-                          Text(
-                            isCompleted ? 'Completed' : result.text,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              color: isCompleted
-                                  ? Colors.grey
-                                  : cs.primary,
-                            ),
+                          // Urgency dot + countdown text (FIXED - visual urgency indicator)
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: urgencyColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                isCompleted ? 'Completed' : result.text,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                  color: isCompleted
+                                      ? Colors.grey
+                                      : cs.primary,
+                                ),
+                              ),
+                            ],
                           ),
                           if (_subtasks.isNotEmpty) ...[
                             const SizedBox(height: 8),
