@@ -6,12 +6,6 @@
     android:background="#00BFA5"
     android:padding="12dp">
 
-    <!-- Background layer -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@drawable/widget_glass_background" />
-
     <!-- Content layer -->
     <LinearLayout
         android:layout_width="match_parent"
@@ -83,7 +77,7 @@
             android:textColor="#B0FFFFFF"
             android:layout_marginTop="6dp" />
 
-        <!-- Progress bar (horizontal style with horizontal drawable) -->
+        <!-- Progress bar -->
         <ProgressBar
             android:id="@+id/widget_progress_ring"
             style="?android:attr/progressBarStyleHorizontal"
@@ -92,21 +86,6 @@
             android:layout_marginTop="8dp"
             android:progressDrawable="@drawable/widget_progress_drawable" />
 
-        <!-- Bottom strip -->
-        <LinearLayout
-            android:id="@+id/bottom_action_strip"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="8dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Open App"
-                android:textSize="10sp"
-                android:textColor="#80FFFFFF" />
-        </LinearLayout>
     </LinearLayout>
 
 </FrameLayout>
