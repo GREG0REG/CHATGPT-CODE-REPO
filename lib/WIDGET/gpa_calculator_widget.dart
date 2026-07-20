@@ -1,189 +1,376 @@
-// CHATGPT-CODE-REPO-TEST/lib/widgets/gpa_calculator_widget.dart
-// COMPLETE FILE - Standalone GPA calculator widget
+// CHATGPT-CODE-REPO-TEST/lib/screens/stats_screen.dart
+// COMPLETE FILE - With GPA Calculator integrated
 
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
+import '../database_helper.dart';
+import '../models/study_session.dart';
+import '../theme/app_themes.dart';
+import '../main.dart';
+import '../WIDGET/gpa_calculator_widget.dart';
 
-class GPACalculatorWidget extends StatefulWidget {
-  const GPACalculatorWidget({super.key});
+class StatsScreen extends StatefulWidget {
+  const StatsScreen({super.key});
 
   @override
-  State<GPACalculatorWidget> createState() => _GPACalculatorWidgetState();
+  State<StatsScreen> createState() => _StatsScreenState();
 }
 
-class _GPACalculatorWidgetState extends State<GPACalculatorWidget> {
-  final List<_CourseGrade> _courses = [];
+class _StatsScreenState extends State<StatsScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  bool _loading = true;
+  List<StudySession> _sessions = [];
+  int _todayMinutes = 0;
+  int _latestStreak = 0;
+  int _totalSessions = 0;
+  int _totalHours = 0;
+  String? _favoriteSubject;
+
+  final Map<String, int> _subjectMinutes = {};
+  final List<int> _dailyMinutes = List.filled(7, 0);
 
   @override
   void initState() {
     super.initState();
-    _addCourse(); // Start with one empty course
+    _loadData();
   }
 
-  void _addCourse() {
+  Future<void> _loadData() async {
+    final now = DateTime.now();
+    final weekAgo = now.subtract(const Duration(days: 6));
+    final startOfWeek = DateTime(weekAgo.year, weekAgo.month, weekAgo.day);
+
+    final sessions = await DatabaseHelper.instance
+        .getStudySessionsForDateRange(startOfWeek.millisecondsSinceEpoch, now.millisecondsSinceEpoch);
+    final todayMin = await DatabaseHelper.instance.getTodayStudyMinutes();
+    final streak = await DatabaseHelper.instance.getLatestStreak();
+
+    final subjectMap = <String, int>{};
+    final daily = List<int>.filled(7, 0);
+    int totalMin = 0;
+
+    for (final s in sessions) {
+      totalMin += s.durationMinutes;
+      subjectMap[s.subjectTag ?? 'General'] =
+          (subjectMap[s.subjectTag ?? 'General'] ?? 0) + s.durationMinutes;
+
+      final dt = DateTime.fromMillisecondsSinceEpoch(s.completedAtMillis);
+      final dayIndex = now.difference(DateTime(dt.year, dt.month, dt.day)).inDays;
+      if (dayIndex >= 0 && dayIndex < 7) {
+        daily[6 - dayIndex] += s.durationMinutes;
+      }
+    }
+
+    String? fav;
+    int maxMin = 0;
+    subjectMap.forEach((sub, min) {
+      if (min > maxMin) {
+        maxMin = min;
+        fav = sub;
+      }
+    });
+
+    if (!mounted) return;
     setState(() {
-      _courses.add(_CourseGrade(
-        name: 'Course ${_courses.length + 1}',
-        credits: 3,
-        grade: 'B',
-      ));
+      _sessions = sessions;
+      _todayMinutes = todayMin;
+      _latestStreak = streak;
+      _totalSessions = sessions.length;
+      _totalHours = totalMin ~/ 60;
+      _favoriteSubject = fav;
+      _subjectMinutes.addAll(subjectMap);
+      _dailyMinutes.setAll(0, daily);
+      _loading = false;
     });
   }
 
-  double _gradeToPoints(String grade) {
-    switch (grade) {
-      case 'A+': return 4.0;
-      case 'A': return 4.0;
-      case 'A-': return 3.7;
-      case 'B+': return 3.3;
-      case 'B': return 3.0;
-      case 'B-': return 2.7;
-      case 'C+': return 2.3;
-      case 'C': return 2.0;
-      case 'C-': return 1.7;
-      case 'D+': return 1.3;
-      case 'D': return 1.0;
-      case 'F': return 0.0;
-      default: return 0.0;
-    }
+  Future<void> _refresh() async {
+    setState(() => _loading = true);
+    await _loadData();
   }
 
-  double get _gpa {
-    double totalPoints = 0;
-    double totalCredits = 0;
-    for (final c in _courses) {
-      totalPoints += _gradeToPoints(c.grade) * c.credits;
-      totalCredits += c.credits;
-    }
-    if (totalCredits == 0) return 0.0;
-    return totalPoints / totalCredits;
+  Color _subjectColor(int index, Brightness brightness) {
+    final colors = [
+      Colors.blue,
+      Colors.green,
+      Colors.orange,
+      Colors.purple,
+      Colors.teal,
+      Colors.pink,
+      Colors.indigo,
+      Colors.red,
+    ];
+    return colors[index % colors.length];
   }
 
-  Color get _gpaColor {
-    final g = _gpa;
-    if (g >= 3.5) return Colors.green;
-    if (g >= 2.5) return Colors.orange;
-    return Colors.red;
+  String _dayLabel(int daysAgo) {
+    final dt = DateTime.now().subtract(Duration(days: daysAgo));
+    const names = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    return names[dt.weekday % 7];
   }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    super.build(context);
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
 
-    return Card(
-      margin: const EdgeInsets.all(16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.school, color: cs.primary),
-                const SizedBox(width: 8),
-                const Text(
-                  'GPA Calculator',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Study Stats'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _refresh,
+            tooltip: 'Refresh stats',
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // Summary cards
+                  _buildSummaryRow(cs),
+                  const SizedBox(height: 24),
+
+                  // GPA Calculator Widget
+                  const GPACalculatorWidget(),
+                  const SizedBox(height: 24),
+
+                  // Weekly trend line chart
+                  _buildSectionTitle('Weekly Focus Trend'),
+                  const SizedBox(height: 8),
+                  _buildTrendChart(cs),
+                  const SizedBox(height: 24),
+
+                  // Subject breakdown bar chart
+                  if (_subjectMinutes.isNotEmpty) ...[
+                    _buildSectionTitle('Minutes by Subject'),
+                    const SizedBox(height: 8),
+                    _buildSubjectChart(cs),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Streak card
+                  _buildStreakCard(cs),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _buildSummaryRow(ColorScheme cs) {
+    return Row(
+      children: [
+        Expanded(
+          child: _SummaryCard(
+            icon: Icons.timer,
+            label: 'Today',
+            value: '$_todayMinutes',
+            unit: 'min',
+            color: cs.primary,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _SummaryCard(
+            icon: Icons.local_fire_department,
+            label: 'Streak',
+            value: '$_latestStreak',
+            unit: 'days',
+            color: Colors.orange,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _SummaryCard(
+            icon: Icons.hourglass_bottom,
+            label: 'Total',
+            value: '$_totalHours',
+            unit: 'hrs',
+            color: Colors.green,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionTitle(String text) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+    );
+  }
+
+  Widget _buildTrendChart(ColorScheme cs) {
+    final maxY = _dailyMinutes.reduce((a, b) => a > b ? a : b).toDouble();
+    final safeMaxY = maxY < 10 ? 60.0 : maxY * 1.2;
+
+    return SizedBox(
+      height: 180,
+      child: LineChart(
+        LineChartData(
+          minY: 0,
+          maxY: safeMaxY,
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          titlesData: FlTitlesData(
+            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, meta) {
+                  final idx = value.toInt();
+                  if (idx < 0 || idx > 6) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      _dayLabel(6 - idx),
+                      style: TextStyle(fontSize: 11, color: cs.outline),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          lineBarsData: [
+            LineChartBarData(
+              spots: List.generate(
+                7,
+                (i) => FlSpot(i.toDouble(), _dailyMinutes[i].toDouble()),
+              ),
+              isCurved: true,
+              gradient: LinearGradient(
+                colors: [cs.primary, cs.primary.withOpacity(0.3)],
+              ),
+              barWidth: 3,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                gradient: LinearGradient(
+                  colors: [
+                    cs.primary.withOpacity(0.2),
+                    cs.primary.withOpacity(0.0),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubjectChart(ColorScheme cs) {
+    final entries = _subjectMinutes.entries.toList();
+    final maxVal = entries.map((e) => e.value).reduce((a, b) => a > b ? a : b).toDouble();
+    final safeMax = maxVal < 10 ? 60.0 : maxVal * 1.1;
+
+    return SizedBox(
+      height: 200,
+      child: BarChart(
+        BarChartData(
+          maxY: safeMax,
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          titlesData: FlTitlesData(
+            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, meta) {
+                  final idx = value.toInt();
+                  if (idx < 0 || idx >= entries.length) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      entries[idx].key.length > 6
+                          ? '${entries[idx].key.substring(0, 6)}..'
+                          : entries[idx].key,
+                      style: TextStyle(fontSize: 10, color: cs.outline),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          barGroups: List.generate(
+            entries.length,
+            (i) => BarChartGroupData(
+              x: i,
+              barRods: [
+                BarChartRodData(
+                  toY: entries[i].value.toDouble(),
+                  gradient: LinearGradient(
+                    colors: [
+                      _subjectColor(i, Theme.of(context).brightness),
+                      _subjectColor(i, Theme.of(context).brightness).withOpacity(0.6),
+                    ],
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                  ),
+                  width: 22,
+                  borderRadius: BorderRadius.circular(4),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+          ),
+        ),
+      ),
+    );
+  }
 
-            // GPA Display
-            if (_courses.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _gpaColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _gpaColor.withOpacity(0.3)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text('GPA: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text(
-                      _gpa.toStringAsFixed(2),
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: _gpaColor,
-                      ),
-                    ),
-                  ],
-                ),
+  Widget _buildStreakCard(ColorScheme cs) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.15),
+                shape: BoxShape.circle,
               ),
-
-            const SizedBox(height: 12),
-
-            // Course list
-            ..._courses.asMap().entries.map((entry) {
-              final i = entry.key;
-              final c = entry.value;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: TextField(
-                        decoration: const InputDecoration(
-                          hintText: 'Course name',
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                        ),
-                        controller: TextEditingController(text: c.name),
-                        onChanged: (v) => setState(() => _courses[i] = _courses[i].copyWith(name: v)),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 60,
-                      child: DropdownButtonFormField<int>(
-                        value: c.credits,
-                        isDense: true,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                        items: [1, 2, 3, 4, 5].map((credits) => 
-                          DropdownMenuItem(value: credits, child: Text('$credits'))
-                        ).toList(),
-                        onChanged: (v) => setState(() => _courses[i] = _courses[i].copyWith(credits: v!)),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 70,
-                      child: DropdownButtonFormField<String>(
-                        value: c.grade,
-                        isDense: true,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                        items: ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'F']
-                            .map((g) => DropdownMenuItem(value: g, child: Text(g)))
-                            .toList(),
-                        onChanged: (v) => setState(() => _courses[i] = _courses[i].copyWith(grade: v!)),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                      onPressed: () => setState(() => _courses.removeAt(i)),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
-              );
-            }),
-
-            const SizedBox(height: 8),
-
-            TextButton.icon(
-              onPressed: _addCourse,
-              icon: const Icon(Icons.add),
-              label: const Text('Add Course'),
+              child: const Icon(Icons.local_fire_department, color: Colors.orange),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$_latestStreak day streak',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _favoriteSubject != null
+                        ? 'Favorite subject: $_favoriteSubject'
+                        : 'Keep studying to build your streak!',
+                    style: TextStyle(fontSize: 13, color: cs.outline),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -192,26 +379,46 @@ class _GPACalculatorWidgetState extends State<GPACalculatorWidget> {
   }
 }
 
-class _CourseGrade {
-  String name;
-  int credits;
-  String grade;
+class _SummaryCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String unit;
+  final Color color;
 
-  _CourseGrade({
-    required this.name,
-    this.credits = 3,
-    this.grade = 'B',
+  const _SummaryCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.unit,
+    required this.color,
   });
 
-  _CourseGrade copyWith({
-    String? name,
-    int? credits,
-    String? grade,
-  }) {
-    return _CourseGrade(
-      name: name ?? this.name,
-      credits: credits ?? this.credits,
-      grade: grade ?? this.grade,
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              unit,
+              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.outline),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.outline),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
