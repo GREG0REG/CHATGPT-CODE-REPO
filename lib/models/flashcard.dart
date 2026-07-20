@@ -1,11 +1,12 @@
 // CHATGPT-CODE-REPO-TEST/lib/models/flashcard.dart
-// ENHANCED - With image support, tags, audio, stats, and review history
+// ENHANCED VERSION - With Audio, Images, Tags, Review History, Favorites
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
 
-/// A simple Q&A card for active recall with enhanced features.
+/// A Q&A card for active recall with enhanced features.
 /// boxLevel 1-5 implements a lightweight spaced-repetition ladder.
+/// Supports: images, audio, tags, review history, favorites, difficulty tracking.
 class Flashcard {
   final int? id;
   final String subjectTag;
@@ -15,16 +16,17 @@ class Flashcard {
   final int? lastReviewedMillis;
   final int? nextReviewMillis;
   
-  // NEW ENHANCED FIELDS
+  // NEW: Enhanced fields
   final String? imagePath;           // Local image path for visual cards
-  final String? audioFrontPath;      // TTS/audio for front text
-  final String? audioBackPath;       // TTS/audio for back text
-  final String tagsJson;             // JSON array of tags ["Hard", "Exam", "Quick Review"]
-  final int totalReviews;            // Total times reviewed
+  final String? audioFrontPath;      // TTS/audio for front side
+  final String? audioBackPath;       // TTS/audio for back side
+  final String tagsJson;             // JSON array of tags ["Hard","Exam","Quick Review"]
+  final int totalReviews;           // Total times reviewed
   final int consecutiveCorrect;      // Streak of correct answers
-  final int totalStudySeconds;       // Total time spent on this card
-  final String? lastDifficulty;      // "again", "hard", "good", "easy"
-  final int createdAtMillis;
+  final int createdAtMillis;        // When card was created
+  final bool isFavorite;             // Starred card
+  final double difficultyRating;     // 0.0-5.0 calculated difficulty
+  final String? reviewHistoryJson;   // JSON array of review records
 
   const Flashcard({
     this.id,
@@ -40,9 +42,10 @@ class Flashcard {
     this.tagsJson = '[]',
     this.totalReviews = 0,
     this.consecutiveCorrect = 0,
-    this.totalStudySeconds = 0,
-    this.lastDifficulty,
     required this.createdAtMillis,
+    this.isFavorite = false,
+    this.difficultyRating = 2.5,
+    this.reviewHistoryJson,
   });
 
   List<String> get tags {
@@ -54,8 +57,33 @@ class Flashcard {
     }
   }
 
-  bool get hasImage => imagePath != null && imagePath!.isNotEmpty;
-  bool get hasAudio => audioFrontPath != null || audioBackPath != null;
+  List<Map<String, dynamic>> get reviewHistory {
+    try {
+      if (reviewHistoryJson == null || reviewHistoryJson!.isEmpty) return [];
+      final list = jsonDecode(reviewHistoryJson!) as List;
+      return list.cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  String get masteryLabel {
+    if (boxLevel >= 5) return 'Mastered';
+    if (boxLevel >= 4) return 'Expert';
+    if (boxLevel >= 3) return 'Proficient';
+    if (boxLevel >= 2) return 'Learning';
+    return 'New';
+  }
+
+  Color get masteryColor {
+    if (boxLevel >= 5) return Colors.green;
+    if (boxLevel >= 4) return Colors.lightGreen;
+    if (boxLevel >= 3) return Colors.orange;
+    if (boxLevel >= 2) return Colors.deepOrange;
+    return Colors.red;
+  }
+
+  double get masteryPercent => boxLevel / 5.0;
 
   Map<String, dynamic> toMap() {
     return {
@@ -72,9 +100,10 @@ class Flashcard {
       'tagsJson': tagsJson,
       'totalReviews': totalReviews,
       'consecutiveCorrect': consecutiveCorrect,
-      'totalStudySeconds': totalStudySeconds,
-      'lastDifficulty': lastDifficulty,
       'createdAtMillis': createdAtMillis,
+      'isFavorite': isFavorite ? 1 : 0,
+      'difficultyRating': difficultyRating,
+      'reviewHistoryJson': reviewHistoryJson,
     };
   }
 
@@ -93,9 +122,10 @@ class Flashcard {
       tagsJson: map['tagsJson'] as String? ?? '[]',
       totalReviews: map['totalReviews'] as int? ?? 0,
       consecutiveCorrect: map['consecutiveCorrect'] as int? ?? 0,
-      totalStudySeconds: map['totalStudySeconds'] as int? ?? 0,
-      lastDifficulty: map['lastDifficulty'] as String?,
-      createdAtMillis: map['createdAtMillis'] as int,
+      createdAtMillis: map['createdAtMillis'] as int? ?? DateTime.now().millisecondsSinceEpoch,
+      isFavorite: (map['isFavorite'] as int? ?? 0) == 1,
+      difficultyRating: (map['difficultyRating'] as num?)?.toDouble() ?? 2.5,
+      reviewHistoryJson: map['reviewHistoryJson'] as String?,
     );
   }
 
@@ -108,14 +138,19 @@ class Flashcard {
     int? lastReviewedMillis,
     int? nextReviewMillis,
     String? imagePath,
+    bool clearImagePath = false,
     String? audioFrontPath,
+    bool clearAudioFrontPath = false,
     String? audioBackPath,
+    bool clearAudioBackPath = false,
     String? tagsJson,
     int? totalReviews,
     int? consecutiveCorrect,
-    int? totalStudySeconds,
-    String? lastDifficulty,
     int? createdAtMillis,
+    bool? isFavorite,
+    double? difficultyRating,
+    String? reviewHistoryJson,
+    bool clearReviewHistory = false,
   }) {
     return Flashcard(
       id: id ?? this.id,
@@ -125,64 +160,36 @@ class Flashcard {
       boxLevel: boxLevel ?? this.boxLevel,
       lastReviewedMillis: lastReviewedMillis ?? this.lastReviewedMillis,
       nextReviewMillis: nextReviewMillis ?? this.nextReviewMillis,
-      imagePath: imagePath ?? this.imagePath,
-      audioFrontPath: audioFrontPath ?? this.audioFrontPath,
-      audioBackPath: audioBackPath ?? this.audioBackPath,
+      imagePath: clearImagePath ? null : (imagePath ?? this.imagePath),
+      audioFrontPath: clearAudioFrontPath ? null : (audioFrontPath ?? this.audioFrontPath),
+      audioBackPath: clearAudioBackPath ? null : (audioBackPath ?? this.audioBackPath),
       tagsJson: tagsJson ?? this.tagsJson,
       totalReviews: totalReviews ?? this.totalReviews,
       consecutiveCorrect: consecutiveCorrect ?? this.consecutiveCorrect,
-      totalStudySeconds: totalStudySeconds ?? this.totalStudySeconds,
-      lastDifficulty: lastDifficulty ?? this.lastDifficulty,
       createdAtMillis: createdAtMillis ?? this.createdAtMillis,
+      isFavorite: isFavorite ?? this.isFavorite,
+      difficultyRating: difficultyRating ?? this.difficultyRating,
+      reviewHistoryJson: clearReviewHistory ? null : (reviewHistoryJson ?? this.reviewHistoryJson),
     );
   }
-}
 
-/// Review history entry for detailed card statistics
-class CardReviewHistory {
-  final int? id;
-  final int cardId;
-  final String difficulty; // "again", "hard", "good", "easy"
-  final int oldBoxLevel;
-  final int newBoxLevel;
-  final int reviewDurationSeconds; // How long the user spent on this review
-  final int reviewedAtMillis;
-  final bool wasCorrect; // true for good/easy, false for again/hard
-
-  const CardReviewHistory({
-    this.id,
-    required this.cardId,
-    required this.difficulty,
-    required this.oldBoxLevel,
-    required this.newBoxLevel,
-    required this.reviewDurationSeconds,
-    required this.reviewedAtMillis,
-    required this.wasCorrect,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'cardId': cardId,
+  /// Add a review record to history
+  Flashcard withReviewRecord(String difficulty, int timeSpentSeconds) {
+    final history = reviewHistory;
+    final newRecord = {
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
       'difficulty': difficulty,
-      'oldBoxLevel': oldBoxLevel,
-      'newBoxLevel': newBoxLevel,
-      'reviewDurationSeconds': reviewDurationSeconds,
-      'reviewedAtMillis': reviewedAtMillis,
-      'wasCorrect': wasCorrect ? 1 : 0,
+      'timeSpentSeconds': timeSpentSeconds,
+      'boxLevelAfter': boxLevel,
     };
-  }
-
-  factory CardReviewHistory.fromMap(Map<String, dynamic> map) {
-    return CardReviewHistory(
-      id: map['id'] as int?,
-      cardId: map['cardId'] as int,
-      difficulty: map['difficulty'] as String,
-      oldBoxLevel: map['oldBoxLevel'] as int,
-      newBoxLevel: map['newBoxLevel'] as int,
-      reviewDurationSeconds: map['reviewDurationSeconds'] as int,
-      reviewedAtMillis: map['reviewedAtMillis'] as int,
-      wasCorrect: (map['wasCorrect'] as int? ?? 0) == 1,
+    history.add(newRecord);
+    
+    // Keep only last 50 records to prevent bloat
+    final trimmed = history.length > 50 ? history.sublist(history.length - 50) : history;
+    
+    return copyWith(
+      reviewHistoryJson: jsonEncode(trimmed),
+      totalReviews: totalReviews + 1,
     );
   }
 }
