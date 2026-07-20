@@ -1,5 +1,5 @@
 // CHATGPT-CODE-REPO-TEST/lib/services/widget_service.dart
-// COMPLETE REPLACEMENT
+// COMPLETE REPLACEMENT - WITH DART SYNTAX FIX
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -39,16 +39,15 @@ class WidgetService {
   }
 
   /// Get urgency color name for widget
+  /// FIXED: Using Dart if-else instead of Kotlin when
   static String _getUrgencyColorName(Event event, DateTime now) {
     final color = event.getUrgencyColor(now);
-    return when (color) {
-      Colors.green => 'green',
-      Colors.orange => 'orange',
-      Colors.deepOrange => 'deepOrange',
-      Colors.red => 'red',
-      Colors.grey => 'grey',
-      _ => 'green',
-    };
+    if (color == Colors.green) return 'green';
+    if (color == Colors.orange) return 'orange';
+    if (color == Colors.deepOrange) return 'deepOrange';
+    if (color == Colors.red) return 'red';
+    if (color == Colors.grey) return 'grey';
+    return 'green';
   }
 
   /// Refresh the Event Countdown widget with the next upcoming event.
