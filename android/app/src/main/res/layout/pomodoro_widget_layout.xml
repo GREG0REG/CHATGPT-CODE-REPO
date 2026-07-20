@@ -1,3 +1,6 @@
+<!-- CHATGPT-CODE-REPO-TEST/android/app/src/main/res/layout/pomodoro_widget_layout.xml -->
+<!-- COMPLETE REPLACEMENT -->
+
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/pomodoro_widget_root"
@@ -24,6 +27,27 @@
         android:gravity="center"
         android:orientation="vertical"
         android:padding="16dp">
+
+        <!-- Session counter chips (NEW) -->
+        <LinearLayout
+            android:id="@+id/pomodoro_session_chips"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/widget_pulse_frame_2"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="2dp"
+                android:text="🔥 3"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/pomodoro_widget_subject"
@@ -55,7 +79,7 @@
             android:shadowRadius="6"
             android:text="25:00"
             android:textColor="#FFFFFF"
-            android:textSize="28sp"
+            android:textSize="32sp"
             android:textStyle="bold" />
 
         <TextView
@@ -73,6 +97,19 @@
             android:textColor="#FFFFFF"
             android:textSize="11sp"
             android:alpha="0.75" />
+
+        <!-- Mini progress bar under timer (NEW) -->
+        <ProgressBar
+            android:id="@+id/pomodoro_mini_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="80dp"
+            android:layout_height="3dp"
+            android:layout_marginTop="6dp"
+            android:indeterminate="false"
+            android:max="100"
+            android:progress="45"
+            android:progressDrawable="@drawable/widget_progress_drawable"
+            android:visibility="gone" />
 
     </LinearLayout>
 
