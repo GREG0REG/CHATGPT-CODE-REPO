@@ -1,6 +1,3 @@
-<!-- CHATGPT-CODE-REPO-TEST/android/app/src/main/res/drawable/widget_circular_progress.xml -->
-<!-- COMPLETE REPLACEMENT -->
-
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     
