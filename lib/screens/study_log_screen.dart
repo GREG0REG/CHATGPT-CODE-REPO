@@ -60,7 +60,7 @@ class _StudyLogScreenState extends State<StudyLogScreen> {
       durationMinutes: minutes,
       completedAtMillis: DateTime.now().millisecondsSinceEpoch,
       sessionType: _sessionType,
-      // REMOVED: notes parameter does not exist in StudySession model
+      notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
     );
 
     await DatabaseHelper.instance.insertStudySession(session);
@@ -230,13 +230,13 @@ class _StudyLogScreenState extends State<StudyLogScreen> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        // Notes field kept for UI but not saved to database
+                        // Notes field - now properly saved to database
                         TextField(
                           controller: _notesController,
                           maxLines: 2,
                           decoration: const InputDecoration(
                             labelText: 'Notes (optional)',
-                            hintText: 'What did you study? (for your reference only)',
+                            hintText: 'What did you study?',
                             prefixIcon: Icon(Icons.notes),
                           ),
                         ),
