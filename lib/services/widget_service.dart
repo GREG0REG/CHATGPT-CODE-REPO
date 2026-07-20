@@ -1,3 +1,6 @@
+// CHATGPT-CODE-REPO-TEST/lib/services/widget_service.dart
+// COMPLETE REPLACEMENT
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,6 +38,19 @@ class WidgetService {
     }
   }
 
+  /// Get urgency color name for widget
+  static String _getUrgencyColorName(Event event, DateTime now) {
+    final color = event.getUrgencyColor(now);
+    return when (color) {
+      Colors.green => 'green',
+      Colors.orange => 'orange',
+      Colors.deepOrange => 'deepOrange',
+      Colors.red => 'red',
+      Colors.grey => 'grey',
+      _ => 'green',
+    };
+  }
+
   /// Refresh the Event Countdown widget with the next upcoming event.
   static Future<void> refreshWidget() async {
     try {
@@ -45,6 +61,8 @@ class WidgetService {
       String title = 'No upcoming events';
       String countdown = '';
       int progressPercent = 65;
+      String urgencyColorName = 'grey';
+      String? iconName;
 
       final activeEvent = CountdownService.getActiveEvent(events, now);
       if (activeEvent != null) {
@@ -56,12 +74,18 @@ class WidgetService {
         );
         countdown = result.text;
         progressPercent = _calculateProgress(activeEvent, now);
+        urgencyColorName = _getUrgencyColorName(activeEvent, now);
+        iconName = activeEvent.iconName;
       }
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('event_title', title);
       await prefs.setString('countdown_text', countdown);
       await prefs.setInt('widget_progress_percent', progressPercent);
+      await prefs.setString('widget_urgency_color', urgencyColorName);
+      if (iconName != null) {
+        await prefs.setString('widget_icon_name', iconName);
+      }
 
       // Get theme color for the widget background
       final theme = await SettingsService.instance.getSelectedTheme();
@@ -80,6 +104,8 @@ class WidgetService {
         'bgColor': bgColorHex,
         'textColor': '#FFFFFF',
         'progressPercent': progressPercent,
+        'urgencyColor': urgencyColorName,
+        'iconName': iconName,
       });
     } catch (e) {
       debugPrint('Widget refresh error: $e');
@@ -93,8 +119,9 @@ class WidgetService {
       final subject = prefs.getString('pomodoro_subject') ?? 'Ready to Focus';
       final timerText = prefs.getString('pomodoro_timer_text') ?? 'Tap to start';
       final status = prefs.getString('pomodoro_status') ?? 'Focus';
+      final completedSessions = prefs.getInt('pomodoro_completed_sessions') ?? 0;
 
-      // Calculate pomodoro progress (25 min = 1500 seconds)
+      // Calculate pomodoro progress
       final parts = timerText.split(':');
       int progressPercent = 45;
       if (parts.length == 2) {
@@ -117,6 +144,7 @@ class WidgetService {
 
       await prefs.setString('pomodoro_bg_color', bgColorHex);
       await prefs.setInt('pomodoro_progress_percent', progressPercent);
+      await prefs.setInt('pomodoro_completed_sessions', completedSessions);
 
       await _channel.invokeMethod('updatePomodoroWidget', {
         'subject': subject,
@@ -124,6 +152,7 @@ class WidgetService {
         'status': status,
         'bgColor': bgColorHex,
         'progressPercent': progressPercent,
+        'completedSessions': completedSessions,
       });
     } catch (e) {
       debugPrint('Pomodoro widget refresh error: $e');
