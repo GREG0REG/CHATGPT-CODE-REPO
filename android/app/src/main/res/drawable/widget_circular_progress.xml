@@ -1,3 +1,6 @@
+<!-- CHATGPT-CODE-REPO-TEST/android/app/src/main/res/drawable/widget_circular_progress.xml -->
+<!-- COMPLETE REPLACEMENT -->
+
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     
@@ -6,13 +9,13 @@
         <shape
             android:innerRadiusRatio="3"
             android:shape="ring"
-            android:thickness="4dp"
+            android:thickness="5dp"
             android:useLevel="false">
-            <solid android:color="#20FFFFFF" />
+            <solid android:color="#18FFFFFF" />
         </shape>
     </item>
     
-    <!-- Progress arc with gradient -->
+    <!-- Progress arc with enhanced gradient -->
     <item android:id="@android:id/progress">
         <rotate
             android:fromDegrees="270"
@@ -20,12 +23,13 @@
             <shape
                 android:innerRadiusRatio="3"
                 android:shape="ring"
-                android:thickness="4dp"
+                android:thickness="5dp"
                 android:useLevel="true">
                 <gradient
                     android:angle="0"
-                    android:endColor="#FF7C4DFF"
-                    android:startColor="#FF00BFA5"
+                    android:endColor="#FFFF4081"
+                    android:startColor="#FF00E5FF"
+                    android:centerColor="#FF7C4DFF"
                     android:type="sweep" />
                 <corners android:radius="2dp" />
             </shape>
