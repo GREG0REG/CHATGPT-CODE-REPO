@@ -162,6 +162,7 @@ class _EventCardState extends State<EventCard> {
       subtitleParts.add('Deadline: ${_formatDateTime(widget.event.deadlineMillis!)}');
     }
 
+    // FIX: Use displayEvent for urgency so child occurrences show correct urgency
     final urgencyColor = isCompleted ? Colors.grey : displayEvent.getUrgencyColor(now);
     final isRecurringParent = widget.event.isRecurring && widget.event.id != null && widget.event.id! > 0;
     final hasChildren = widget.childOccurrences != null && widget.childOccurrences!.isNotEmpty;
@@ -205,7 +206,7 @@ class _EventCardState extends State<EventCard> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Event Icon with urgency-colored background (FIXED - was missing)
+                    // Event Icon with urgency-colored background
                     Container(
                       width: 48,
                       height: 48,
@@ -226,13 +227,9 @@ class _EventCardState extends State<EventCard> {
                     const SizedBox(width: 12),
 
                     // Circular progress indicator
-                    SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: _buildCircularProgress(
-                        progressValue,
-                        isCompleted ? Colors.grey : cs.primary,
-                      ),
+                    _buildCircularProgress(
+                      progressValue,
+                      isCompleted ? Colors.grey : cs.primary,
                     ),
                     const SizedBox(width: 12),
 
@@ -241,7 +238,7 @@ class _EventCardState extends State<EventCard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Title with priority badge (FIXED - priority now visible)
+                          // Title with priority badge
                           Row(
                             children: [
                               Expanded(
@@ -256,7 +253,8 @@ class _EventCardState extends State<EventCard> {
                                   maxLines: 1, overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              if (widget.event.priority > 2) ...[
+                              // FIX: Show priority badge for ALL priorities > 0
+                              if (widget.event.priority > 0) ...[
                                 const SizedBox(width: 6),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -310,7 +308,7 @@ class _EventCardState extends State<EventCard> {
                             ),
                           ],
                           const SizedBox(height: 6),
-                          // Urgency dot + countdown text (FIXED - visual urgency indicator)
+                          // Urgency dot + countdown text
                           Row(
                             children: [
                               Container(
