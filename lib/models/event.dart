@@ -173,13 +173,14 @@ class Event {
   }
 
   // ============================================
-  // URGENCY COLOR (unchanged)
+  // URGENCY COLOR (FIXED - uses the same target as countdown text)
   // ============================================
   Color getUrgencyColor(DateTime now) {
     if (isCompleted) return Colors.grey;
 
     final nowMillis = now.millisecondsSinceEpoch;
-    final target = deadlineMillis ?? startTimeMillis ?? dateMillis;
+    // FIX: Use the same target that countdown text uses
+    final target = _countdownTargetMillis;
     final diff = Duration(milliseconds: target - nowMillis);
 
     if (diff.isNegative || diff.inDays < 0) {
@@ -191,6 +192,17 @@ class Event {
     } else {
       return Colors.red;
     }
+  }
+
+  /// The millis used for countdown display (start time if before start, else deadline/date)
+  int get _countdownTargetMillis {
+    final nowMillis = DateTime.now().millisecondsSinceEpoch;
+    // If we have a start time and we're before it, count down to start
+    if (startTimeMillis != null && nowMillis < startTimeMillis!) {
+      return startTimeMillis!;
+    }
+    // Otherwise count down to deadline or date
+    return deadlineMillis ?? dateMillis;
   }
 
   // ============================================
@@ -233,21 +245,32 @@ class Event {
   String getCountdownText(DateTime now, {required bool smartFormatEnabled}) {
     if (isCompleted) return 'Completed';
 
-    final diff = Duration(
-      milliseconds: finalMillis - now.millisecondsSinceEpoch,
-    );
+    final nowMillis = now.millisecondsSinceEpoch;
+    // FIX: Use start time if before start, else deadline/date
+    int targetMillis;
+    if (startTimeMillis != null && nowMillis < startTimeMillis!) {
+      targetMillis = startTimeMillis!;
+    } else {
+      targetMillis = deadlineMillis ?? dateMillis;
+    }
+
+    final diff = Duration(milliseconds: targetMillis - nowMillis);
 
     if (diff.isNegative) return 'Completed';
 
+    // Check if counting down to start vs deadline
+    final isBeforeStart = startTimeMillis != null && nowMillis < startTimeMillis!;
+    final suffix = isBeforeStart ? ' until start' : ' left';
+
     if (diff.inHours >= 24) {
       final days = diff.inDays;
-      return '$days day${days == 1 ? '' : 's'} left';
+      return '$days day${days == 1 ? '' : 's'}$suffix';
     } else if (diff.inMinutes >= 60) {
       final hours = diff.inHours;
-      return '$hours hour${hours == 1 ? '' : 's'} left';
+      return '$hours hour${hours == 1 ? '' : 's'}$suffix';
     } else {
       final minutes = diff.inMinutes < 1 ? 1 : diff.inMinutes;
-      return '$minutes minute${minutes == 1 ? '' : 's'} left';
+      return '$minutes minute${minutes == 1 ? '' : 's'}$suffix';
     }
   }
 
