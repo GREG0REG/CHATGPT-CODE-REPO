@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../database_helper.dart';
 import '../models/event.dart';
@@ -27,14 +28,21 @@ class ExportImportService {
     // Try to copy to Downloads for easy user access
     String? downloadsPath;
     try {
-      final downloadsDir = Directory('/storage/emulated/0/Download');
-      if (downloadsDir.existsSync()) {
-        final downloadsFile = File('${downloadsDir.path}/$fileName');
-        await appFile.copy(downloadsFile.path);
-        downloadsPath = downloadsFile.path;
+      // Request storage permission for Android 10+
+      if (Platform.isAndroid) {
+        final status = await Permission.storage.request();
+        if (status.isGranted) {
+          final downloadsDir = Directory('/storage/emulated/0/Download');
+          if (downloadsDir.existsSync()) {
+            final downloadsFile = File('${downloadsDir.path}/$fileName');
+            await appFile.copy(downloadsFile.path);
+            downloadsPath = downloadsFile.path;
+          }
+        }
       }
     } catch (e) {
       // Downloads not accessible, fallback to app directory only
+      debugPrint('Downloads export failed: $e');
     }
 
     return downloadsPath ?? appFile.path;
@@ -44,12 +52,37 @@ class ExportImportService {
   /// database contents with them.
   static Future<int> importFromJson(String filePath) async {
     final file = File(filePath);
+    if (!await file.exists()) {
+      throw Exception('File not found: $filePath');
+    }
+    
     final contents = await file.readAsString();
-    final decoded = jsonDecode(contents) as List<dynamic>;
+    if (contents.trim().isEmpty) {
+      throw Exception('File is empty');
+    }
+    
+    final decoded = jsonDecode(contents);
+    if (decoded is! List) {
+      throw Exception('Invalid JSON format: expected a list of events');
+    }
+    
     final events = decoded
-        .map((e) => Event.fromJson(Map<String, dynamic>.from(e as Map)))
+        .map((e) {
+          if (e is! Map) {
+            throw Exception('Invalid event format in JSON');
+          }
+          return Event.fromJson(Map<String, dynamic>.from(e as Map));
+        })
         .toList();
+    
     await DatabaseHelper.instance.replaceAllEvents(events);
     return events.length;
+  }
+
+  /// Share export file using system share sheet
+  static Future<void> shareExport() async {
+    final path = await exportToJson();
+    // Use share_plus to share the file
+    // This requires adding share_plus to pubspec.yaml
   }
 }
