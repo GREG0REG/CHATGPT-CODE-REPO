@@ -4,7 +4,6 @@ import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
-import android.content.Intent
 import android.graphics.Color
 import android.widget.RemoteViews
 
@@ -17,7 +16,6 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         private const val KEY_TEXT_COLOR = "widget_text_color"
         private const val KEY_PROGRESS = "widget_progress_percent"
         private const val KEY_URGENCY_COLOR = "widget_urgency_color"
-        private const val KEY_ICON_NAME = "widget_icon_name"
 
         fun parseColorOrDefault(colorStr: String?, defaultColor: Int): Int {
             return try {
@@ -36,8 +34,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             bgColorStr: String?,
             textColorStr: String?,
             progressPercent: Int = 65,
-            urgencyColorName: String? = null,
-            iconName: String? = null
+            urgencyColorName: String? = null
         ) {
             try {
                 val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
@@ -61,10 +58,10 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 views.setTextColor(R.id.widget_countdown, textColor)
 
                 // Urgency indicator - show for orange, deepOrange, red
-                val showUrgency = urgencyColorName != null && 
-                    urgencyColorName != "green" && 
+                val showUrgency = urgencyColorName != null &&
+                    urgencyColorName != "green" &&
                     urgencyColorName != "grey"
-                
+
                 if (showUrgency) {
                     views.setViewVisibility(R.id.widget_urgency_row, android.view.View.VISIBLE)
                     val urgencyColor = when (urgencyColorName) {
@@ -73,7 +70,8 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                         "orange" -> Color.parseColor("#FF9800")
                         else -> Color.parseColor("#FF9800")
                     }
-                    views.setInt(R.id.widget_urgency_dot, "setBackgroundColor", urgencyColor)
+                    // FIX: Set text color on bullet TextView instead of background on View
+                    views.setTextColor(R.id.widget_urgency_dot, urgencyColor)
                     val urgencyLabel = when (urgencyColorName) {
                         "red" -> "URGENT"
                         "deepOrange" -> "Soon"
@@ -119,10 +117,9 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             val textColorStr = prefs.getString(KEY_TEXT_COLOR, null)
             val progressPercent = prefs.getInt(KEY_PROGRESS, 65)
             val urgencyColorName = prefs.getString(KEY_URGENCY_COLOR, null)
-            val iconName = prefs.getString(KEY_ICON_NAME, null)
 
             for (widgetId in appWidgetIds) {
-                updateWidgetDirectly(context, appWidgetManager, widgetId, title, countdown, bgColorStr, textColorStr, progressPercent, urgencyColorName, iconName)
+                updateWidgetDirectly(context, appWidgetManager, widgetId, title, countdown, bgColorStr, textColorStr, progressPercent, urgencyColorName)
             }
         } catch (e: Exception) {
             android.util.Log.e("EventWidget", "onUpdate failed", e)
