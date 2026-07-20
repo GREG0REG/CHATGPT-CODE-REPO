@@ -26,7 +26,6 @@ class MainActivity : FlutterActivity() {
                         val textColorStr = call.argument<String>("textColor")
                         val progressPercent = call.argument<Int>("progressPercent") ?: 65
                         val urgencyColor = call.argument<String>("urgencyColor")
-                        val iconName = call.argument<String>("iconName")
 
                         for (widgetId in appWidgetIds) {
                             EventCountdownWidgetProvider.updateWidgetDirectly(
@@ -38,8 +37,7 @@ class MainActivity : FlutterActivity() {
                                 bgColorStr,
                                 textColorStr,
                                 progressPercent,
-                                urgencyColor,
-                                iconName
+                                urgencyColor
                             )
                         }
 
