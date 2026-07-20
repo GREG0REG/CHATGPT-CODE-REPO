@@ -6,6 +6,7 @@ class StudySession {
   final int durationMinutes;   // actual focused minutes
   final int completedAtMillis; // timestamp
   final String sessionType;    // 'pomodoro', 'deep_work', 'exam_crunch', 'custom'
+  final String? notes;       // session notes
 
   const StudySession({
     this.id,
@@ -14,6 +15,7 @@ class StudySession {
     required this.durationMinutes,
     required this.completedAtMillis,
     this.sessionType = 'pomodoro',
+    this.notes,
   });
 
   Map<String, dynamic> toMap() {
@@ -24,6 +26,7 @@ class StudySession {
       'durationMinutes': durationMinutes,
       'completedAtMillis': completedAtMillis,
       'sessionType': sessionType,
+      'notes': notes,
     };
   }
 
@@ -35,6 +38,7 @@ class StudySession {
       durationMinutes: map['durationMinutes'] as int,
       completedAtMillis: map['completedAtMillis'] as int,
       sessionType: map['sessionType'] as String? ?? 'pomodoro',
+      notes: map['notes'] as String?,
     );
   }
 
@@ -45,6 +49,8 @@ class StudySession {
     int? durationMinutes,
     int? completedAtMillis,
     String? sessionType,
+    String? notes,
+    bool clearNotes = false,
   }) {
     return StudySession(
       id: id ?? this.id,
@@ -53,6 +59,7 @@ class StudySession {
       durationMinutes: durationMinutes ?? this.durationMinutes,
       completedAtMillis: completedAtMillis ?? this.completedAtMillis,
       sessionType: sessionType ?? this.sessionType,
+      notes: clearNotes ? null : (notes ?? this.notes),
     );
   }
 }
