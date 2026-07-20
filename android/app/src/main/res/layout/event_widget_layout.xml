@@ -1,17 +1,3 @@
-<!-- CHATGPT-CODE-REPO-TEST/android/app/src/main/res/layout/event_widget_layout.xml -->
-<!-- COMPLETE REPLACEMENT -->
-
-<?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_root"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/widget_glass_background">
-
-    <!-- Circular progress background ring -->
-    <ProgressBar
-        android:id="@+id/widget_progress_ring"
-        style="?android:attr/progressBarStyleHorizontal"
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
