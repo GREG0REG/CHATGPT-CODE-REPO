@@ -7,7 +7,7 @@ import '../database_helper.dart';
 import '../models/study_session.dart';
 import '../theme/app_themes.dart';
 import '../main.dart';
-import '../widgets/gpa_calculator_widget.dart';
+import '../WIDGET/gpa_calculator_widget.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
