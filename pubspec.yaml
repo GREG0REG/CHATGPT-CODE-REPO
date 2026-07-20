@@ -19,20 +19,18 @@ dependencies:
   workmanager: ^0.5.2
   image_picker: ^1.1.2
   file_picker: ^8.0.7
-  # FIX: Downgrade to 9.x so it depends on web ^0.5.0, compatible with battery_plus
   share_plus: ^9.0.0
   dynamic_color: 1.7.0
-  # FIX: Pin exact version to avoid Kotlin 2.2 upgrades
   battery_plus: '6.0.0'
   cupertino_icons: ^1.0.8
   fl_chart: ^0.68.0
-  # FIX: Pin exact version to avoid Kotlin 2.2 upgrades
   wakelock_plus: '1.2.10'
+  permission_handler: ^11.3.1  # ADD THIS
 
-# FIX: package_info_plus 9.0.1 uses Kotlin 2.2 which breaks the build.
-# Force the older 8.1.0 which uses Kotlin 1.9 and is fully compatible.
+
 dependency_overrides:
   package_info_plus: '8.1.0'
+
 
 dev_dependencies:
   flutter_test:
