@@ -1,9 +1,13 @@
+// CHATGPT-CODE-REPO-TEST/lib/screens/stats_screen.dart
+// COMPLETE FILE - With GPA Calculator integrated
+
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../database_helper.dart';
 import '../models/study_session.dart';
 import '../theme/app_themes.dart';
 import '../main.dart';
+import '../widgets/gpa_calculator_widget.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -15,7 +19,7 @@ class StatsScreen extends StatefulWidget {
 class _StatsScreenState extends State<StatsScreen>
     with AutomaticKeepAliveClientMixin {
   @override
-  bool get wantKeepAlive => true; // Survives IndexedStack switches
+  bool get wantKeepAlive => true;
 
   bool _loading = true;
   List<StudySession> _sessions = [];
@@ -25,7 +29,6 @@ class _StatsScreenState extends State<StatsScreen>
   int _totalHours = 0;
   String? _favoriteSubject;
 
-  // 7-day buckets
   final Map<String, int> _subjectMinutes = {};
   final List<int> _dailyMinutes = List.filled(7, 0);
 
@@ -45,7 +48,6 @@ class _StatsScreenState extends State<StatsScreen>
     final todayMin = await DatabaseHelper.instance.getTodayStudyMinutes();
     final streak = await DatabaseHelper.instance.getLatestStreak();
 
-    // Build buckets
     final subjectMap = <String, int>{};
     final daily = List<int>.filled(7, 0);
     int totalMin = 0;
@@ -112,7 +114,7 @@ class _StatsScreenState extends State<StatsScreen>
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Required by AutomaticKeepAliveClientMixin
+    super.build(context);
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -136,6 +138,10 @@ class _StatsScreenState extends State<StatsScreen>
                 children: [
                   // Summary cards
                   _buildSummaryRow(cs),
+                  const SizedBox(height: 24),
+
+                  // GPA Calculator Widget
+                  const GPACalculatorWidget(),
                   const SizedBox(height: 24),
 
                   // Weekly trend line chart
