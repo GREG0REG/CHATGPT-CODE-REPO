@@ -1,116 +1,61 @@
-<!-- CHATGPT-CODE-REPO-TEST/android/app/src/main/res/layout/pomodoro_widget_layout.xml -->
-<!-- COMPLETE REPLACEMENT -->
-
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/pomodoro_widget_root"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_glass_background">
+    android:orientation="vertical"
+    android:background="@drawable/widget_glass_background"
+    android:padding="12dp">
 
-    <!-- Circular progress ring -->
+    <TextView
+        android:id="@+id/pomodoro_subject"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Subject"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF" />
+
+    <TextView
+        android:id="@+id/pomodoro_timer_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="25:00"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:layout_marginTop="4dp" />
+
+    <TextView
+        android:id="@+id/pomodoro_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Focus"
+        android:textSize="12sp"
+        android:textColor="#B0FFFFFF"
+        android:layout_marginTop="2dp" />
+
     <ProgressBar
-        android:id="@+id/pomodoro_progress_ring"
+        android:id="@+id/pomodoro_progress"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_gravity="center"
-        android:indeterminate="false"
-        android:max="100"
-        android:progress="45"
-        android:progressDrawable="@drawable/widget_circular_progress_teal"
-        android:rotation="-90" />
+        android:layout_height="4dp"
+        android:layout_marginTop="8dp"
+        android:progressDrawable="@drawable/widget_circular_progress" />
 
     <LinearLayout
+        android:id="@+id/session_chips"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:padding="16dp">
-
-        <!-- Session counter chips (NEW) -->
-        <LinearLayout
-            android:id="@+id/pomodoro_session_chips"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/widget_pulse_frame_2"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="2dp"
-                android:text="🔥 3"
-                android:textColor="#FFFFFF"
-                android:textSize="10sp" />
-        </LinearLayout>
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="6dp">
 
         <TextView
-            android:id="@+id/pomodoro_widget_subject"
+            android:id="@+id/completed_sessions"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:fontFamily="sans-serif-medium"
-            android:gravity="center"
-            android:maxLines="1"
-            android:shadowColor="#40000000"
-            android:shadowDx="0"
-            android:shadowDy="2"
-            android:shadowRadius="4"
-            android:text="Biology"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:alpha="0.85" />
-
-        <TextView
-            android:id="@+id/pomodoro_widget_timer"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:fontFamily="sans-serif-light"
-            android:gravity="center"
-            android:shadowColor="#60000000"
-            android:shadowDx="0"
-            android:shadowDy="2"
-            android:shadowRadius="6"
-            android:text="25:00"
-            android:textColor="#FFFFFF"
-            android:textSize="32sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/pomodoro_widget_status"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:fontFamily="sans-serif"
-            android:gravity="center"
-            android:shadowColor="#40000000"
-            android:shadowDx="0"
-            android:shadowDy="1"
-            android:shadowRadius="3"
-            android:text="Focus"
-            android:textColor="#FFFFFF"
-            android:textSize="11sp"
-            android:alpha="0.75" />
-
-        <!-- Mini progress bar under timer (NEW) -->
-        <ProgressBar
-            android:id="@+id/pomodoro_mini_progress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="80dp"
-            android:layout_height="3dp"
-            android:layout_marginTop="6dp"
-            android:indeterminate="false"
-            android:max="100"
-            android:progress="45"
-            android:progressDrawable="@drawable/widget_progress_drawable"
-            android:visibility="gone" />
-
+            android:text="0 sessions"
+            android:textSize="10sp"
+            android:textColor="#B0FFFFFF" />
     </LinearLayout>
 
-</FrameLayout>
+</LinearLayout>
