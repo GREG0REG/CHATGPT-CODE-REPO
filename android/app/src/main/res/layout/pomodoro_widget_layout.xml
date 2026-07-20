@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/pomodoro_widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -7,7 +8,7 @@
     android:padding="12dp">
 
     <TextView
-        android:id="@+id/pomodoro_subject"
+        android:id="@+id/pomodoro_widget_subject"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Subject"
@@ -16,7 +17,7 @@
         android:textColor="#FFFFFF" />
 
     <TextView
-        android:id="@+id/pomodoro_timer_text"
+        android:id="@+id/pomodoro_widget_timer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="25:00"
@@ -26,7 +27,7 @@
         android:layout_marginTop="4dp" />
 
     <TextView
-        android:id="@+id/pomodoro_status"
+        android:id="@+id/pomodoro_widget_status"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Focus"
@@ -35,15 +36,25 @@
         android:layout_marginTop="2dp" />
 
     <ProgressBar
-        android:id="@+id/pomodoro_progress"
+        android:id="@+id/pomodoro_progress_ring"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
         android:layout_height="4dp"
         android:layout_marginTop="8dp"
         android:progressDrawable="@drawable/widget_circular_progress" />
 
+    <!-- Mini progress bar (referenced in Kotlin) -->
+    <ProgressBar
+        android:id="@+id/pomodoro_mini_progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:layout_marginTop="4dp"
+        android:visibility="gone"
+        android:progressDrawable="@drawable/widget_progress_drawable" />
+
     <LinearLayout
-        android:id="@+id/session_chips"
+        android:id="@+id/pomodoro_session_chips"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
