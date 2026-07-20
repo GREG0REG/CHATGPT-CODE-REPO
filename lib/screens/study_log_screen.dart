@@ -12,7 +12,7 @@ class StudyLogScreen extends StatefulWidget {
 }
 
 class _StudyLogScreenState extends State<StudyLogScreen> {
-  final List<StudySession> _sessions = [];
+  List<StudySession> _sessions = [];
   bool _loading = true;
 
   // Quick log form
