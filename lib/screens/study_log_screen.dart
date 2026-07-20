@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import '../database_helper.dart';
 import '../models/study_session.dart';
 
-/// Simple study session logger with subject tracking
+/// Simple study session logger with custom time support
 class StudyLogScreen extends StatefulWidget {
   const StudyLogScreen({super.key});
 
@@ -18,10 +18,13 @@ class _StudyLogScreenState extends State<StudyLogScreen> {
   // Quick log form
   final _subjectController = TextEditingController();
   final _notesController = TextEditingController();
+  final _customMinutesController = TextEditingController();
   int _durationMinutes = 25;
   String _sessionType = 'pomodoro';
+  bool _useCustomTime = false;
 
   final List<String> _sessionTypes = ['pomodoro', 'deep_work', 'reading', 'review', 'practice'];
+  final List<int> _presetMinutes = [15, 25, 30, 45, 60, 90, 120];
 
   @override
   void initState() {
@@ -42,11 +45,22 @@ class _StudyLogScreenState extends State<StudyLogScreen> {
       _subjectController.text = 'General Study';
     }
 
+    // Use custom time if enabled, otherwise dropdown value
+    int minutes;
+    if (_useCustomTime) {
+      minutes = int.tryParse(_customMinutesController.text) ?? 25;
+      if (minutes < 1) minutes = 1;
+      if (minutes > 1440) minutes = 1440; // Max 24 hours
+    } else {
+      minutes = _durationMinutes;
+    }
+
     final session = StudySession(
       subjectTag: _subjectController.text.trim(),
-      durationMinutes: _durationMinutes,
+      durationMinutes: minutes,
       completedAtMillis: DateTime.now().millisecondsSinceEpoch,
       sessionType: _sessionType,
+      notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
     );
 
     await DatabaseHelper.instance.insertStudySession(session);
@@ -56,21 +70,23 @@ class _StudyLogScreenState extends State<StudyLogScreen> {
     final subjects = await DatabaseHelper.instance.getAllStudySubjects();
     final match = subjects.where((s) => s.name == _subjectController.text.trim()).firstOrNull;
     if (match != null && match.id != null) {
-      await DatabaseHelper.instance.addSubjectFocusMinutes(match.id!, _durationMinutes);
+      await DatabaseHelper.instance.addSubjectFocusMinutes(match.id!, minutes);
     }
 
     _subjectController.clear();
     _notesController.clear();
+    _customMinutesController.clear();
     _durationMinutes = 25;
+    _useCustomTime = false;
     
     await _loadSessions();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Study session logged!'),
+        SnackBar(
+          content: Text('Logged $minutes min study session!'),
           backgroundColor: Colors.green,
-          duration: Duration(seconds: 1),
+          duration: const Duration(seconds: 1),
         ),
       );
     }
@@ -158,23 +174,70 @@ class _StudyLogScreenState extends State<StudyLogScreen> {
                                   labelText: 'Type',
                                   prefixIcon: Icon(Icons.category),
                                 ),
-                                items: _sessionTypes.map((t) => DropdownMenuItem(value: t, child: Text(t[0].toUpperCase() + t.substring(1)))).toList(),
+                                items: _sessionTypes.map((t) => DropdownMenuItem(
+                                  value: t, 
+                                  child: Text(t[0].toUpperCase() + t.substring(1))
+                                )).toList(),
                                 onChanged: (v) => setState(() => _sessionType = v!),
                               ),
                             ),
-                            const SizedBox(width: 12),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        // Duration selection: preset OR custom
+                        Row(
+                          children: [
                             Expanded(
-                              child: DropdownButtonFormField<int>(
-                                value: _durationMinutes,
-                                decoration: const InputDecoration(
-                                  labelText: 'Duration',
-                                  prefixIcon: Icon(Icons.schedule),
-                                ),
-                                items: [15, 25, 30, 45, 60, 90, 120].map((m) => DropdownMenuItem(value: m, child: Text('${m}m'))).toList(),
-                                onChanged: (v) => setState(() => _durationMinutes = v!),
-                              ),
+                              child: _useCustomTime
+                                ? TextField(
+                                    controller: _customMinutesController,
+                                    keyboardType: TextInputType.number,
+                                    decoration: InputDecoration(
+                                      labelText: 'Custom minutes',
+                                      hintText: 'e.g. 37',
+                                      prefixIcon: const Icon(Icons.edit),
+                                      suffixIcon: IconButton(
+                                        icon: const Icon(Icons.close),
+                                        onPressed: () => setState(() {
+                                          _useCustomTime = false;
+                                          _customMinutesController.clear();
+                                        }),
+                                      ),
+                                    ),
+                                  )
+                                : DropdownButtonFormField<int>(
+                                    value: _durationMinutes,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Duration',
+                                      prefixIcon: Icon(Icons.schedule),
+                                    ),
+                                    items: [
+                                      ..._presetMinutes.map((m) => DropdownMenuItem(
+                                        value: m, 
+                                        child: Text('${m}m')
+                                      )),
+                                      const DropdownMenuItem(value: -1, child: Text('Custom...')),
+                                    ],
+                                    onChanged: (v) {
+                                      if (v == -1) {
+                                        setState(() => _useCustomTime = true);
+                                      } else if (v != null) {
+                                        setState(() => _durationMinutes = v);
+                                      }
+                                    },
+                                  ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _notesController,
+                          maxLines: 2,
+                          decoration: const InputDecoration(
+                            labelText: 'Notes (optional)',
+                            hintText: 'What did you study?',
+                            prefixIcon: Icon(Icons.notes),
+                          ),
                         ),
                         const SizedBox(height: 12),
                         SizedBox(
@@ -274,6 +337,7 @@ class _StudyLogScreenState extends State<StudyLogScreen> {
   void dispose() {
     _subjectController.dispose();
     _notesController.dispose();
+    _customMinutesController.dispose();
     super.dispose();
   }
 }
