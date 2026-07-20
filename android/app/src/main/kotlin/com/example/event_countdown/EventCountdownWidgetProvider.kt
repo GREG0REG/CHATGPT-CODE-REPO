@@ -1,5 +1,5 @@
 // CHATGPT-CODE-REPO-TEST/android/app/src/main/kotlin/com/example/event_countdown/EventCountdownWidgetProvider.kt
-// COMPLETE REPLACEMENT
+// COMPLETE REPLACEMENT - DEFENSIVE VERSION
 
 package com.example.event_countdown
 
@@ -10,7 +10,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.widget.RemoteViews
-import android.widget.ProgressBar
 
 class EventCountdownWidgetProvider : AppWidgetProvider() {
     companion object {
@@ -56,52 +55,59 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             urgencyColorName: String? = null,
             iconName: String? = null
         ) {
-            val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
+            try {
+                val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
 
-            views.setTextViewText(R.id.widget_title, title)
-            views.setTextViewText(R.id.widget_countdown, countdown)
+                // Set text content
+                views.setTextViewText(R.id.widget_title, title)
+                views.setTextViewText(R.id.widget_countdown, countdown)
 
-            // Update progress ring
-            views.setProgressBar(R.id.widget_progress_ring, 100, progressPercent.coerceIn(0, 100), false)
+                // Update progress bar (horizontal, safe)
+                views.setProgressBar(R.id.widget_progress_ring, 100, progressPercent.coerceIn(0, 100), false)
 
-            // Parse theme colors with fallback to beautiful gradient
-            val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#00BFA5"))
-            val textColor = parseColorOrDefault(textColorStr, Color.WHITE)
+                // Parse theme colors
+                val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#00BFA5"))
+                val textColor = parseColorOrDefault(textColorStr, Color.WHITE)
 
-            // Apply glassmorphism background with theme color tint
-            views.setInt(R.id.widget_root, "setBackgroundColor", themeColor)
-            
-            // Text colors with shadow for readability
-            views.setTextColor(R.id.widget_title, textColor)
-            views.setTextColor(R.id.widget_countdown, textColor)
+                // Set background color on the FrameLayout root
+                views.setInt(R.id.widget_root, "setBackgroundColor", themeColor)
 
-            // Show urgency indicator (NEW)
-            if (urgencyColorName != null && urgencyColorName != "green" && urgencyColorName != "grey") {
-                views.setViewVisibility(R.id.widget_urgency_row, android.view.View.VISIBLE)
-                views.setInt(R.id.widget_urgency_dot, "setBackgroundColor", getUrgencyColor(urgencyColorName))
-                val urgencyLabel = when (urgencyColorName) {
-                    "red" -> "URGENT"
-                    "deepOrange" -> "Soon"
-                    "orange" -> "Upcoming"
-                    else -> ""
+                // Text colors
+                views.setTextColor(R.id.widget_title, textColor)
+                views.setTextColor(R.id.widget_countdown, textColor)
+
+                // Urgency indicator
+                if (urgencyColorName != null && urgencyColorName != "green" && urgencyColorName != "grey") {
+                    views.setViewVisibility(R.id.widget_urgency_row, android.view.View.VISIBLE)
+                    views.setInt(R.id.widget_urgency_dot, "setBackgroundColor", getUrgencyColor(urgencyColorName))
+                    val urgencyLabel = when (urgencyColorName) {
+                        "red" -> "URGENT"
+                        "deepOrange" -> "Soon"
+                        "orange" -> "Upcoming"
+                        else -> ""
+                    }
+                    views.setTextViewText(R.id.widget_urgency_label, urgencyLabel)
+                    views.setTextColor(R.id.widget_urgency_label, getUrgencyColor(urgencyColorName))
+                } else {
+                    views.setViewVisibility(R.id.widget_urgency_row, android.view.View.GONE)
                 }
-                views.setTextViewText(R.id.widget_urgency_label, urgencyLabel)
-                views.setTextColor(R.id.widget_urgency_label, getUrgencyColor(urgencyColorName))
-            } else {
-                views.setViewVisibility(R.id.widget_urgency_row, android.view.View.GONE)
+
+                // Launch intent - tap anywhere opens app
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                if (launchIntent != null) {
+                    val pendingIntent = PendingIntent.getActivity(
+                        context,
+                        0,
+                        launchIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+                }
+
+                appWidgetManager.updateAppWidget(widgetId, views)
+            } catch (e: Exception) {
+                android.util.Log.e("EventWidget", "Update failed", e)
             }
-
-            // Launch intent - tap anywhere opens app
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            val pendingIntent = PendingIntent.getActivity(
-                context,
-                0,
-                launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
-
-            appWidgetManager.updateAppWidget(widgetId, views)
         }
     }
 
@@ -110,18 +116,22 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-        val title = prefs.getString(KEY_TITLE, "No upcoming events") ?: "No upcoming events"
-        val countdown = prefs.getString(KEY_COUNTDOWN, "") ?: ""
-        val bgColorStr = prefs.getString(KEY_BG_COLOR, null)
-        val textColorStr = prefs.getString(KEY_TEXT_COLOR, null)
-        val progressPercent = prefs.getInt(KEY_PROGRESS, 65)
-        val urgencyColorName = prefs.getString(KEY_URGENCY_COLOR, null)
-        val iconName = prefs.getString(KEY_ICON_NAME, null)
+            val title = prefs.getString(KEY_TITLE, "No upcoming events") ?: "No upcoming events"
+            val countdown = prefs.getString(KEY_COUNTDOWN, "") ?: ""
+            val bgColorStr = prefs.getString(KEY_BG_COLOR, null)
+            val textColorStr = prefs.getString(KEY_TEXT_COLOR, null)
+            val progressPercent = prefs.getInt(KEY_PROGRESS, 65)
+            val urgencyColorName = prefs.getString(KEY_URGENCY_COLOR, null)
+            val iconName = prefs.getString(KEY_ICON_NAME, null)
 
-        for (widgetId in appWidgetIds) {
-            updateWidgetDirectly(context, appWidgetManager, widgetId, title, countdown, bgColorStr, textColorStr, progressPercent, urgencyColorName, iconName)
+            for (widgetId in appWidgetIds) {
+                updateWidgetDirectly(context, appWidgetManager, widgetId, title, countdown, bgColorStr, textColorStr, progressPercent, urgencyColorName, iconName)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("EventWidget", "onUpdate failed", e)
         }
     }
 }
@@ -162,17 +172,17 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.pomodoro_widget_timer, timerText)
                 views.setTextViewText(R.id.pomodoro_widget_status, status)
 
-                // Update progress ring
+                // Update progress bar (horizontal, safe)
                 views.setProgressBar(R.id.pomodoro_progress_ring, 100, progressPercent.coerceIn(0, 100), false)
 
-                // Show mini progress bar (NEW)
+                // Mini progress bar
                 views.setViewVisibility(R.id.pomodoro_mini_progress, android.view.View.VISIBLE)
                 views.setProgressBar(R.id.pomodoro_mini_progress, 100, progressPercent.coerceIn(0, 100), false)
 
-                // Show session chips if sessions completed (NEW)
+                // Show session chips if sessions completed
                 if (completedSessions > 0) {
                     views.setViewVisibility(R.id.pomodoro_session_chips, android.view.View.VISIBLE)
-                    views.setTextViewText(R.id.pomodoro_session_chips, "🔥 $completedSessions")
+                    views.setTextViewText(R.id.completed_sessions, "[fire] " + completedSessions)
                 } else {
                     views.setViewVisibility(R.id.pomodoro_session_chips, android.view.View.GONE)
                 }
