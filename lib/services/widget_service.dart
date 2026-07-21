@@ -96,9 +96,9 @@ class WidgetService {
         );
         countdown = result.text;
 
-        // Theme color
+        // Theme color - FIX: use fromName not fromNameString
         final themeName = prefs.getString('selected_theme') ?? 'auroraBorealis';
-        final theme = AppThemes.fromNameString(themeName);
+        final theme = AppThemes.fromName(themeName);
         final colors = AppThemes.gradientColorsFor(theme);
         if (colors != null && colors.isNotEmpty) {
           bgColor = '#${colors[0].value.toRadixString(16).substring(2)}';
@@ -123,7 +123,7 @@ class WidgetService {
         title = 'No upcoming events';
         countdown = 'Tap to add one';
         final themeName = prefs.getString('selected_theme') ?? 'auroraBorealis';
-        final theme = AppThemes.fromNameString(themeName);
+        final theme = AppThemes.fromName(themeName);
         final colors = AppThemes.gradientColorsFor(theme);
         if (colors != null && colors.isNotEmpty) {
           bgColor = '#${colors[0].value.toRadixString(16).substring(2)}';
@@ -174,10 +174,10 @@ class WidgetService {
       int progressPercent = prefs.getInt('pomodoro_progress_percent') ?? 45;
       int completedSessions = prefs.getInt('pomodoro_completed_sessions') ?? 0;
 
-      // Get theme color
+      // Get theme color - FIX: use fromName not fromNameString
       String? bgColor;
       final themeName = prefs.getString('selected_theme') ?? 'auroraBorealis';
-      final theme = AppThemes.fromNameString(themeName);
+      final theme = AppThemes.fromName(themeName);
       final colors = AppThemes.gradientColorsFor(theme);
       if (colors != null && colors.isNotEmpty) {
         bgColor = '#${colors[0].value.toRadixString(16).substring(2)}';
