@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/app_themes.dart';
 
-enum WidgetBackgroundType { themeColor, customImage }
+// REMOVED: WidgetBackgroundType enum - now imported from app_themes.dart
 
 class SettingsService {
   SettingsService._();
@@ -22,58 +22,58 @@ class SettingsService {
   static const _kQuietHoursEnabled = 'quiet_hours_enabled';
   static const _kQuietHoursStart = 'quiet_hours_start';
   static const _kQuietHoursEnd = 'quiet_hours_end';
-  static const _kDefaultReminderMinutes = 'default_reminder_minutes';
-  static const _kBatteryOptimization = 'battery_optimization_enabled';
   static const _kAdaptiveRefresh = 'adaptive_refresh_enabled';
-  static const _kLastVacuumMillis = 'last_vacuum_millis';
+  static const _kLastVacuum = 'last_vacuum_millis';
   static const _kFirstLaunch = 'first_launch';
+  static const _kDefaultReminderMinutes = 'default_reminder_minutes';
 
-  // Pomodoro & Goals (new)
-  static const _kPomodoroPreset = 'pomodoro_preset';
-  static const _kDailyGoalMinutes = 'daily_goal_minutes';
-  static const _kDailyGoalPomodoros = 'daily_goal_pomodoros';
-  static const _kAutoStartBreak = 'auto_start_break';
-  static const _kTimerSoundEnabled = 'timer_sound_enabled';
+  Future<SharedPreferences> get _prefs async => SharedPreferences.getInstance();
 
-  Future<SharedPreferences> get _prefs => SharedPreferences.getInstance();
-
+  // ── Smart Format ──
   Future<bool> getSmartFormatEnabled() async {
     final p = await _prefs;
     return p.getBool(_kSmartFormat) ?? false;
   }
 
-  Future<void> setSmartFormatEnabled(bool value) async {
+  Future<void> setSmartFormatEnabled(bool v) async {
     final p = await _prefs;
-    await p.setBool(_kSmartFormat, value);
+    await p.setBool(_kSmartFormat, v);
   }
 
+  // ── 24-Hour Time ──
   Future<bool> getUse24HourFormat() async {
     final p = await _prefs;
     return p.getBool(_kUse24Hour) ?? true;
   }
 
-  Future<void> setUse24HourFormat(bool value) async {
+  Future<void> setUse24HourFormat(bool v) async {
     final p = await _prefs;
-    await p.setBool(_kUse24Hour, value);
+    await p.setBool(_kUse24Hour, v);
   }
 
+  // ── Theme ──
   Future<AppThemeOption> getSelectedTheme() async {
     final p = await _prefs;
-    return AppThemes.fromName(p.getString(_kThemeName));
+    final name = p.getString(_kThemeName) ?? 'auroraBorealis';
+    return AppThemeOption.values.firstWhere(
+      (e) => e.name == name,
+      orElse: () => AppThemeOption.auroraBorealis,
+    );
   }
 
   Future<void> setSelectedTheme(AppThemeOption option) async {
     final p = await _prefs;
-    await p.setString(_kThemeName, AppThemes.nameOf(option));
+    await p.setString(_kThemeName, option.name);
   }
 
+  // ── Widget Background Type ──
   Future<WidgetBackgroundType> getWidgetBackgroundType() async {
     final p = await _prefs;
-    final raw = p.getString(_kWidgetBgType);
-    if (raw == WidgetBackgroundType.customImage.name) {
-      return WidgetBackgroundType.customImage;
-    }
-    return WidgetBackgroundType.themeColor;
+    final name = p.getString(_kWidgetBgType) ?? 'themeColor';
+    return WidgetBackgroundType.values.firstWhere(
+      (e) => e.name == name,
+      orElse: () => WidgetBackgroundType.themeColor,
+    );
   }
 
   Future<void> setWidgetBackgroundType(WidgetBackgroundType type) async {
@@ -81,6 +81,7 @@ class SettingsService {
     await p.setString(_kWidgetBgType, type.name);
   }
 
+  // ── Widget Image Path ──
   Future<String?> getWidgetImagePath() async {
     final p = await _prefs;
     return p.getString(_kWidgetImagePath);
@@ -95,17 +96,22 @@ class SettingsService {
     }
   }
 
+  // ── Theme Mode ──
   Future<ThemeMode> getThemeMode() async {
     final p = await _prefs;
-    final index = p.getInt(_kThemeMode) ?? 0;
-    return ThemeMode.values[index.clamp(0, ThemeMode.values.length - 1)];
+    final name = p.getString(_kThemeMode) ?? 'system';
+    return ThemeMode.values.firstWhere(
+      (e) => e.name == name,
+      orElse: () => ThemeMode.system,
+    );
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
     final p = await _prefs;
-    await p.setInt(_kThemeMode, mode.index);
+    await p.setString(_kThemeMode, mode.name);
   }
 
+  // ── Custom Color ──
   Future<Color?> getCustomColor() async {
     final p = await _prefs;
     final value = p.getInt(_kCustomColor);
@@ -118,54 +124,53 @@ class SettingsService {
     await p.setInt(_kCustomColor, color.value);
   }
 
-  Future<void> clearCustomColor() async {
-    final p = await _prefs;
-    await p.remove(_kCustomColor);
-  }
-
+  // ── High Contrast ──
   Future<bool> getHighContrast() async {
     final p = await _prefs;
     return p.getBool(_kHighContrast) ?? false;
   }
 
-  Future<void> setHighContrast(bool value) async {
+  Future<void> setHighContrast(bool v) async {
     final p = await _prefs;
-    await p.setBool(_kHighContrast, value);
+    await p.setBool(_kHighContrast, v);
   }
 
+  // ── Widget Progress Bar ──
   Future<bool> getWidgetProgressBar() async {
     final p = await _prefs;
     return p.getBool(_kWidgetProgressBar) ?? false;
   }
 
-  Future<void> setWidgetProgressBar(bool value) async {
+  Future<void> setWidgetProgressBar(bool v) async {
     final p = await _prefs;
-    await p.setBool(_kWidgetProgressBar, value);
+    await p.setBool(_kWidgetProgressBar, v);
   }
 
+  // ── Widget Pulse Animation ──
   Future<bool> getWidgetPulseAnimation() async {
     final p = await _prefs;
     return p.getBool(_kWidgetPulseAnimation) ?? false;
   }
 
-  Future<void> setWidgetPulseAnimation(bool value) async {
+  Future<void> setWidgetPulseAnimation(bool v) async {
     final p = await _prefs;
-    await p.setBool(_kWidgetPulseAnimation, value);
+    await p.setBool(_kWidgetPulseAnimation, v);
   }
 
+  // ── Quiet Hours ──
   Future<bool> getQuietHoursEnabled() async {
     final p = await _prefs;
     return p.getBool(_kQuietHoursEnabled) ?? false;
   }
 
-  Future<void> setQuietHoursEnabled(bool value) async {
+  Future<void> setQuietHoursEnabled(bool v) async {
     final p = await _prefs;
-    await p.setBool(_kQuietHoursEnabled, value);
+    await p.setBool(_kQuietHoursEnabled, v);
   }
 
   Future<int> getQuietHoursStart() async {
     final p = await _prefs;
-    return p.getInt(_kQuietHoursStart) ?? 1320;
+    return p.getInt(_kQuietHoursStart) ?? 1320; // 22:00
   }
 
   Future<void> setQuietHoursStart(int minutes) async {
@@ -175,7 +180,7 @@ class SettingsService {
 
   Future<int> getQuietHoursEnd() async {
     final p = await _prefs;
-    return p.getInt(_kQuietHoursEnd) ?? 420;
+    return p.getInt(_kQuietHoursEnd) ?? 420; // 07:00
   }
 
   Future<void> setQuietHoursEnd(int minutes) async {
@@ -183,120 +188,49 @@ class SettingsService {
     await p.setInt(_kQuietHoursEnd, minutes);
   }
 
-  Future<int> getDefaultReminderMinutes() async {
-    final p = await _prefs;
-    return p.getInt(_kDefaultReminderMinutes) ?? 60;
-  }
-
-  Future<void> setDefaultReminderMinutes(int minutes) async {
-    final p = await _prefs;
-    await p.setInt(_kDefaultReminderMinutes, minutes);
-  }
-
-  Future<bool> getBatteryOptimizationEnabled() async {
-    final p = await _prefs;
-    return p.getBool(_kBatteryOptimization) ?? true;
-  }
-
-  Future<void> setBatteryOptimizationEnabled(bool value) async {
-    final p = await _prefs;
-    await p.setBool(_kBatteryOptimization, value);
-  }
-
+  // ── Adaptive Refresh ──
   Future<bool> getAdaptiveRefreshEnabled() async {
     final p = await _prefs;
     return p.getBool(_kAdaptiveRefresh) ?? true;
   }
 
-  Future<void> setAdaptiveRefreshEnabled(bool value) async {
+  Future<void> setAdaptiveRefreshEnabled(bool v) async {
     final p = await _prefs;
-    await p.setBool(_kAdaptiveRefresh, value);
+    await p.setBool(_kAdaptiveRefresh, v);
   }
 
+  // ── Last Vacuum ──
   Future<DateTime?> getLastVacuum() async {
     final p = await _prefs;
-    final millis = p.getInt(_kLastVacuumMillis);
+    final millis = p.getInt(_kLastVacuum);
     if (millis == null) return null;
     return DateTime.fromMillisecondsSinceEpoch(millis);
   }
 
-  Future<void> setLastVacuum(DateTime time) async {
+  Future<void> setLastVacuum(DateTime dt) async {
     final p = await _prefs;
-    await p.setInt(_kLastVacuumMillis, time.millisecondsSinceEpoch);
+    await p.setInt(_kLastVacuum, dt.millisecondsSinceEpoch);
   }
 
+  // ── First Launch ──
   Future<bool> isFirstLaunch() async {
     final p = await _prefs;
     return p.getBool(_kFirstLaunch) ?? true;
   }
 
-  Future<void> setFirstLaunch(bool value) async {
+  Future<void> setFirstLaunch(bool v) async {
     final p = await _prefs;
-    await p.setBool(_kFirstLaunch, value);
+    await p.setBool(_kFirstLaunch, v);
   }
 
-  Future<bool> isInQuietHours(DateTime now) async {
-    if (!await getQuietHoursEnabled()) return false;
-
-    final start = await getQuietHoursStart();
-    final end = await getQuietHoursEnd();
-    final nowMinutes = now.hour * 60 + now.minute;
-
-    if (start < end) {
-      return nowMinutes >= start && nowMinutes < end;
-    } else {
-      return nowMinutes >= start || nowMinutes < end;
-    }
+  // ── Default Reminder Minutes ──
+  Future<int> getDefaultReminderMinutes() async {
+    final p = await _prefs;
+    return p.getInt(_kDefaultReminderMinutes) ?? 60;
   }
 
-  // Pomodoro & Goals getters/setters (new)
-  Future<String> getPomodoroPreset() async {
+  Future<void> setDefaultReminderMinutes(int v) async {
     final p = await _prefs;
-    return p.getString(_kPomodoroPreset) ?? 'classic';
-  }
-
-  Future<void> setPomodoroPreset(String preset) async {
-    final p = await _prefs;
-    await p.setString(_kPomodoroPreset, preset);
-  }
-
-  Future<int> getDailyGoalMinutes() async {
-    final p = await _prefs;
-    return p.getInt(_kDailyGoalMinutes) ?? 120;
-  }
-
-  Future<void> setDailyGoalMinutes(int minutes) async {
-    final p = await _prefs;
-    await p.setInt(_kDailyGoalMinutes, minutes);
-  }
-
-  Future<int> getDailyGoalPomodoros() async {
-    final p = await _prefs;
-    return p.getInt(_kDailyGoalPomodoros) ?? 4;
-  }
-
-  Future<void> setDailyGoalPomodoros(int count) async {
-    final p = await _prefs;
-    await p.setInt(_kDailyGoalPomodoros, count);
-  }
-
-  Future<bool> getAutoStartBreak() async {
-    final p = await _prefs;
-    return p.getBool(_kAutoStartBreak) ?? false;
-  }
-
-  Future<void> setAutoStartBreak(bool value) async {
-    final p = await _prefs;
-    await p.setBool(_kAutoStartBreak, value);
-  }
-
-  Future<bool> getTimerSoundEnabled() async {
-    final p = await _prefs;
-    return p.getBool(_kTimerSoundEnabled) ?? true;
-  }
-
-  Future<void> setTimerSoundEnabled(bool value) async {
-    final p = await _prefs;
-    await p.setBool(_kTimerSoundEnabled, value);
+    await p.setInt(_kDefaultReminderMinutes, v);
   }
 }
