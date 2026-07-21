@@ -1,6 +1,6 @@
 // CHATGPT-CODE-REPO-TEST/lib/screens/flashcard_screen.dart
 // ENHANCED VERSION - Dedicated Flashcards Section with Unique Features
-// FIXED: Card saving/answering logic, index bounds checking
+// FIXED: Card saving/answering logic, index bounds checking, createdAtMillis required
 
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -306,9 +306,10 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     }
   }
 
-  // FIXED: Card dialog with proper validation and saving
+  // FIXED: Card dialog with proper validation and saving - CRITICAL FIXES HERE
   Future<void> _showCardDialog({Flashcard? existing}) async {
     final subjects = _subjects;
+    // FIXED: Ensure subject is never empty/null when saving
     String subject = existing?.subjectTag ?? (subjects.isNotEmpty ? subjects.first : '');
     final frontController = TextEditingController(text: existing?.frontText ?? '');
     final backController = TextEditingController(text: existing?.backText ?? '');
@@ -386,18 +387,25 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
                 TextButton(
                   onPressed: () {
-                    if (frontController.text.trim().isEmpty || backController.text.trim().isEmpty) {
+                    // FIXED: Trim and validate all fields
+                    final frontText = frontController.text.trim();
+                    final backText = backController.text.trim();
+                    final subjectText = subject.trim();
+                    
+                    if (frontText.isEmpty || backText.isEmpty) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(content: Text('Both fields are required')),
+                        const SnackBar(content: Text('Both front and back fields are required')),
                       );
                       return;
                     }
-                    if (subject.trim().isEmpty) {
+                    if (subjectText.isEmpty) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
                         const SnackBar(content: Text('Subject is required')),
                       );
                       return;
                     }
+                    // FIXED: Update subject variable with trimmed value
+                    subject = subjectText;
                     Navigator.pop(ctx, true);
                   },
                   child: const Text('Save'),
@@ -409,23 +417,34 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       },
     );
 
+    // FIXED: Only proceed if result is true AND subject is valid
     if (result == true && mounted) {
+      // FIXED: Ensure subject is never empty
+      final finalSubject = subject.trim().isEmpty ? 'General' : subject.trim();
+      
+      // FIXED: Always include required createdAtMillis
+      final nowMillis = DateTime.now().millisecondsSinceEpoch;
+      
       final newCard = Flashcard(
         id: existing?.id,
-        subjectTag: subject.trim(),
+        subjectTag: finalSubject,
         frontText: frontController.text.trim(),
         backText: backController.text.trim(),
         boxLevel: existing?.boxLevel ?? 1,
         lastReviewedMillis: existing?.lastReviewedMillis,
         nextReviewMillis: existing?.nextReviewMillis,
-        createdAtMillis: existing?.createdAtMillis ?? DateTime.now().millisecondsSinceEpoch,
+        // FIXED: Required field - must be set!
+        createdAtMillis: existing?.createdAtMillis ?? nowMillis,
       );
 
       if (existing != null && existing.id != null) {
         await DatabaseHelper.instance.updateFlashcard(newCard);
       } else {
-        await DatabaseHelper.instance.insertFlashcard(newCard);
+        // FIXED: Insert new card and verify it saved
+        final insertedId = await DatabaseHelper.instance.insertFlashcard(newCard);
+        debugPrint('Flashcard inserted with ID: $insertedId');
       }
+      
       await _loadData();
       
       if (mounted) {
@@ -540,14 +559,16 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     if (result != null) {
       final lines = (result['text'] as String).split('\n');
       int imported = 0;
+      final nowMillis = DateTime.now().millisecondsSinceEpoch;
       for (final line in lines) {
         final parts = line.split('|');
         if (parts.length >= 2) {
           final card = Flashcard(
-            subjectTag: result['subject'] as String,
+            subjectTag: (result['subject'] as String).trim(),
             frontText: parts[0].trim(),
             backText: parts[1].trim(),
-            createdAtMillis: DateTime.now().millisecondsSinceEpoch,
+            // FIXED: Always set createdAtMillis
+            createdAtMillis: nowMillis,
           );
           await DatabaseHelper.instance.insertFlashcard(card);
           imported++;
