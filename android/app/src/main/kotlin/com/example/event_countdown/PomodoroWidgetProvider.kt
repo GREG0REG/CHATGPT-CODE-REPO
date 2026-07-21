@@ -4,7 +4,6 @@ import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
-import android.content.Intent
 import android.graphics.Color
 import android.widget.RemoteViews
 
@@ -17,6 +16,10 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         private const val KEY_BG_COLOR = "pomodoro_bg_color"
         private const val KEY_PROGRESS = "pomodoro_progress_percent"
         private const val KEY_SESSIONS = "pomodoro_completed_sessions"
+
+        // Default coral/red color matching the screenshot
+        private const val DEFAULT_CORAL = "#FF6B6B"
+        private const val DEFAULT_TEAL = "#00BFA5"
 
         fun parseColorOrDefault(colorStr: String?, defaultColor: Int): Int {
             return try {
@@ -40,6 +43,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             try {
                 val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
 
+                // Set text content
                 views.setTextViewText(R.id.pomodoro_widget_subject, subject)
                 views.setTextViewText(R.id.pomodoro_widget_timer, timerText)
                 views.setTextViewText(R.id.pomodoro_widget_status, status)
@@ -47,17 +51,34 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 // Update progress bar
                 views.setProgressBar(R.id.pomodoro_progress_ring, 100, progressPercent.coerceIn(0, 100), false)
 
+                // Parse theme colors - use coral/red for focus, teal for break
+                val isFocusMode = status.equals("Focus", ignoreCase = true) || 
+                                  status.equals("Focusing", ignoreCase = true) ||
+                                  status.equals("Ready to Focus", ignoreCase = true)
+                
+                val themeColor = if (isFocusMode) {
+                    parseColorOrDefault(bgColorStr, Color.parseColor(DEFAULT_CORAL))
+                } else {
+                    parseColorOrDefault(bgColorStr, Color.parseColor(DEFAULT_TEAL))
+                }
+                
+                // Set background color on the root
+                views.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", themeColor)
+
+                // Text colors - always white for contrast
+                views.setTextColor(R.id.pomodoro_widget_subject, Color.WHITE)
+                views.setTextColor(R.id.pomodoro_widget_timer, Color.WHITE)
+                views.setTextColor(R.id.pomodoro_widget_status, Color.WHITE)
+
                 // Show session chips if sessions completed
                 if (completedSessions > 0) {
                     views.setViewVisibility(R.id.pomodoro_session_chips, android.view.View.VISIBLE)
-                    views.setTextViewText(R.id.completed_sessions, "\uD83D\uDD25 " + completedSessions)
+                    views.setTextViewText(R.id.completed_sessions, "\uD83D\uDD25 $completedSessions")
                 } else {
                     views.setViewVisibility(R.id.pomodoro_session_chips, android.view.View.GONE)
                 }
 
-                val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#00BFA5"))
-                views.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", themeColor)
-
+                // Launch intent - tap anywhere opens app
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 if (launchIntent != null) {
                     val pendingIntent = PendingIntent.getActivity(
