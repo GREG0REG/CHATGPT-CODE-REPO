@@ -129,8 +129,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen> {
                 if (confirm == true) {
                   await DatabaseHelper.instance.clearGradeComponents();
                   await _loadComponents();
-                  await WidgetService.refreshGradeWidget();
-                  await WidgetService.refreshTaskWidget();
+                  await WidgetService.refreshWidget();
                 }
               },
               child: const Text('Clear', style: TextStyle(color: Colors.white)),
@@ -141,7 +140,6 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Grade display card
                 Container(
                   margin: const EdgeInsets.all(16),
                   padding: const EdgeInsets.all(20),
@@ -183,7 +181,6 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen> {
                   ),
                 ),
 
-                // Input section
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
@@ -247,7 +244,6 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen> {
 
                 const Divider(height: 32),
 
-                // Components list
                 Expanded(
                   child: _components.isEmpty
                       ? Center(
