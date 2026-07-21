@@ -23,7 +23,6 @@
             android:visibility="gone"
             android:layout_marginBottom="4dp">
 
-            <!-- FIX: TextView with bullet instead of View with shape drawable -->
             <TextView
                 android:id="@+id/widget_urgency_dot"
                 android:layout_width="wrap_content"
