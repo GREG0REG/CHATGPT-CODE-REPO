@@ -1,3 +1,6 @@
+// CHATGPT-CODE-REPO-TEST/lib/screens/pomodoro_screen.dart
+// FIXED - Added import for PomodoroService (PomodoroPhase & PomodoroPreset)
+
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,7 +11,7 @@ import '../main.dart';
 import '../models/event.dart';
 import '../models/study_subject.dart';
 import '../services/focus_settings_service.dart';
-import '../services/pomodoro_service.dart';
+import '../services/pomodoro_service.dart'; // FIXED: Added this import
 import '../services/widget_service.dart';
 import '../theme/app_themes.dart';
 import '../WIDGET/subject_picker_sheet.dart';
