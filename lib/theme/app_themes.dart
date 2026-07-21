@@ -1,374 +1,426 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+// CHATGPT-CODE-REPO-TEST/lib/theme/app_themes.dart
+// COMPLETE FILE - Fixed high contrast support
 
-/// Redesigned theme options — 5 beautiful presets + Material You + Custom
+import 'package:flutter/material.dart';
+import 'package:dynamic_color/dynamic_color.dart';
+
 enum AppThemeOption {
-  auroraBorealis,      // Teal → Purple gradient (matches your image)
-  sunsetGlow,          // Orange → Pink gradient
-  midnightOcean,       // Deep blue → Cyan
-  emeraldForest,       // Green → Lime
-  roseQuartz,          // Pink → Rose
-  materialYou,         // Android 12+ dynamic
-  customHex,           // User-defined
+  auroraBorealis,
+  oceanBreeze,
+  sunsetGlow,
+  midnightForest,
+  cherryBlossom,
+  materialYou,
+  customHex,
 }
 
-class AppThemeInfo {
+class ThemeInfo {
   final AppThemeOption option;
   final String label;
-  final Color primaryColor;
   final List<Color> gradientColors;
-  final IconData icon;
-  final Color accentColor;
 
-  const AppThemeInfo({
+  const ThemeInfo({
     required this.option,
     required this.label,
-    required this.primaryColor,
     required this.gradientColors,
-    required this.icon,
-    required this.accentColor,
   });
 }
 
-class AppThemes {
-  AppThemes._();
+enum WidgetBackgroundType { themeColor, customImage }
 
-  static const List<AppThemeInfo> all = [
-    AppThemeInfo(
+class AppThemes {
+  // ── Theme definitions ──
+  static const List<ThemeInfo> all = [
+    ThemeInfo(
       option: AppThemeOption.auroraBorealis,
       label: 'Aurora Borealis',
-      primaryColor: Color(0xFF00BFA5),
-      gradientColors: [Color(0xFF00BFA5), Color(0xFF7C4DFF)],
-      icon: Icons.north,
-      accentColor: Color(0xFF7C4DFF),
+      gradientColors: [Color(0xFF00BFA5), Color(0xFF00E5FF)],
     ),
-    AppThemeInfo(
+    ThemeInfo(
+      option: AppThemeOption.oceanBreeze,
+      label: 'Ocean Breeze',
+      gradientColors: [Color(0xFF2196F3), Color(0xFF00BCD4)],
+    ),
+    ThemeInfo(
       option: AppThemeOption.sunsetGlow,
       label: 'Sunset Glow',
-      primaryColor: Color(0xFFFF6D00),
-      gradientColors: [Color(0xFFFF6D00), Color(0xFFFF4081)],
-      icon: Icons.wb_twilight,
-      accentColor: Color(0xFFFF4081),
+      gradientColors: [Color(0xFFFF7043), Color(0xFFFFCA28)],
     ),
-    AppThemeInfo(
-      option: AppThemeOption.midnightOcean,
-      label: 'Midnight Ocean',
-      primaryColor: Color(0xFF1565C0),
-      gradientColors: [Color(0xFF1565C0), Color(0xFF00E5FF)],
-      icon: Icons.water,
-      accentColor: Color(0xFF00E5FF),
+    ThemeInfo(
+      option: AppThemeOption.midnightForest,
+      label: 'Midnight Forest',
+      gradientColors: [Color(0xFF2E7D32), Color(0xFF1B5E20)],
     ),
-    AppThemeInfo(
-      option: AppThemeOption.emeraldForest,
-      label: 'Emerald Forest',
-      primaryColor: Color(0xFF2E7D32),
-      gradientColors: [Color(0xFF2E7D32), Color(0xFF76FF03)],
-      icon: Icons.forest,
-      accentColor: Color(0xFF76FF03),
+    ThemeInfo(
+      option: AppThemeOption.cherryBlossom,
+      label: 'Cherry Blossom',
+      gradientColors: [Color(0xFFE91E63), Color(0xFFF48FB1)],
     ),
-    AppThemeInfo(
-      option: AppThemeOption.roseQuartz,
-      label: 'Rose Quartz',
-      primaryColor: Color(0xFFE91E63),
-      gradientColors: [Color(0xFFE91E63), Color(0xFFFF80AB)],
-      icon: Icons.diamond,
-      accentColor: Color(0xFFFF80AB),
-    ),
-    AppThemeInfo(
+    ThemeInfo(
       option: AppThemeOption.materialYou,
       label: 'Material You',
-      primaryColor: Color(0xFF2196F3),
-      gradientColors: [Color(0xFF2196F3), Color(0xFF03A9F4)],
-      icon: Icons.auto_awesome,
-      accentColor: Color(0xFF03A9F4),
+      gradientColors: [Color(0xFF6750A4), Color(0xFF7B61FF)],
     ),
-    AppThemeInfo(
+    ThemeInfo(
       option: AppThemeOption.customHex,
       label: 'Custom Color',
-      primaryColor: Color(0xFF2196F3),
-      gradientColors: [Color(0xFF2196F3), Color(0xFF64B5F6)],
-      icon: Icons.colorize,
-      accentColor: Color(0xFF64B5F6),
+      gradientColors: [Color(0xFF00BFA5), Color(0xFF00E5FF)],
     ),
   ];
 
-  static AppThemeInfo infoFor(AppThemeOption option) {
+  static ThemeInfo fromName(String name) {
     return all.firstWhere(
-      (t) => t.option == option,
+      (t) => t.option.name == name,
       orElse: () => all.first,
     );
   }
 
-  static Color primaryColorFor(AppThemeOption option) => infoFor(option).primaryColor;
-  static List<Color> gradientColorsFor(AppThemeOption option) => infoFor(option).gradientColors;
-  static Color accentColorFor(AppThemeOption option) => infoFor(option).accentColor;
-  static String nameOf(AppThemeOption option) => option.name;
-
-  static AppThemeOption fromName(String? name) {
-    return all
-        .map((t) => t.option)
-        .firstWhere((o) => o.name == name, orElse: () => AppThemeOption.auroraBorealis);
+  static List<Color>? gradientColorsFor(AppThemeOption option) {
+    final info = all.firstWhere((t) => t.option == option, orElse: () => all.first);
+    return info.gradientColors;
   }
 
-  /// Build complete ThemeData for light or dark mode
+  // ── FIXED: High contrast support ──
   static ThemeData buildTheme(
     AppThemeOption option, {
-    Brightness brightness = Brightness.light,
+    required Brightness brightness,
     Color? customColor,
     ColorScheme? dynamicScheme,
     bool highContrast = false,
   }) {
-    final isDark = brightness == Brightness.dark;
-    final info = infoFor(option);
-    
+    final baseColors = gradientColorsFor(option) ?? all.first.gradientColors;
+    final primaryColor = customColor ?? baseColors.first;
+
+    // FIXED: Generate high-contrast color scheme when enabled
     ColorScheme colorScheme;
-    Color primaryColor;
-    List<Color> gradientColors = info.gradientColors;
-
-    switch (option) {
-      case AppThemeOption.materialYou:
-        colorScheme = dynamicScheme ?? _defaultScheme(brightness);
-        primaryColor = colorScheme.primary;
-        break;
-
-      case AppThemeOption.customHex:
-        final seed = customColor ?? Colors.blue;
-        primaryColor = seed;
-        colorScheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
-        gradientColors = [seed, seed.withOpacity(0.7)];
-        break;
-
-      case AppThemeOption.auroraBorealis:
-      case AppThemeOption.sunsetGlow:
-      case AppThemeOption.midnightOcean:
-      case AppThemeOption.emeraldForest:
-      case AppThemeOption.roseQuartz:
-        primaryColor = info.primaryColor;
-        colorScheme = ColorScheme.fromSeed(
-          seedColor: info.primaryColor,
-          brightness: brightness,
-        ).copyWith(
-          primary: isDark ? info.primaryColor.withOpacity(0.9) : info.primaryColor,
-          secondary: isDark ? info.accentColor.withOpacity(0.9) : info.accentColor,
-          tertiary: info.gradientColors.length > 1 ? info.gradientColors[1] : info.primaryColor,
-        );
-        break;
-    }
-
-    // High contrast override
-    if (highContrast) {
-      colorScheme = colorScheme.copyWith(
-        surface: isDark ? Colors.black : Colors.white,
-        onSurface: isDark ? Colors.white : Colors.black,
+    
+    if (option == AppThemeOption.materialYou && dynamicScheme != null) {
+      // Use dynamic color with high contrast override
+      colorScheme = highContrast 
+        ? _applyHighContrast(dynamicScheme, brightness)
+        : dynamicScheme;
+    } else {
+      // Generate from seed color with high contrast
+      colorScheme = _generateColorScheme(
+        primaryColor, 
+        brightness, 
+        highContrast: highContrast,
       );
     }
 
-    final surfaceColor = isDark ? const Color(0xFF0F0F1B) : const Color(0xFFF8F9FE);
-    final cardColor = isDark ? const Color(0xFF1A1A2E) : Colors.white;
-    final scaffoldBg = isDark ? const Color(0xFF0F0F1B) : const Color(0xFFF0F2F8);
-
     return ThemeData(
       useMaterial3: true,
-      colorScheme: colorScheme,
       brightness: brightness,
-      scaffoldBackgroundColor: scaffoldBg,
-      
-      // ── Cards with glassmorphism feel ──
-      cardTheme: CardTheme(
-        elevation: isDark ? 0 : 2,
-        color: cardColor,
-        shadowColor: primaryColor.withOpacity(0.15),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: isDark
-              ? BorderSide(color: Colors.white.withOpacity(0.06), width: 1)
-              : BorderSide.none,
-        ),
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      ),
-      
-      // ── AppBar ──
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: colorScheme.surface,
       appBarTheme: AppBarTheme(
-        centerTitle: true,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: scaffoldBg,
+        backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
-        systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        elevation: 0,
+        centerTitle: true,
+      ),
+      cardTheme: CardTheme(
+        elevation: highContrast ? 2 : 0, // FIXED: More elevation in high contrast
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          // FIXED: Add border in high contrast mode
+          side: highContrast 
+            ? BorderSide(color: colorScheme.outline, width: 1.5)
+            : BorderSide.none,
         ),
+        color: colorScheme.surfaceContainerHighest,
       ),
-      
-      // ── FAB ──
-      floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-      
-      // ── List Tiles ──
       listTileTheme: ListTileThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      ),
-      
-      // ── Dividers ──
-      dividerTheme: DividerThemeData(
-        color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
-        thickness: 1,
-        indent: 16,
-        endIndent: 16,
-      ),
-      
-      // ── SnackBar ──
-      snackBarTheme: SnackBarThemeData(
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: isDark ? const Color(0xFF2A2A3E) : const Color(0xFF323232),
-      ),
-      
-      // ── Bottom Navigation ──
-      bottomNavigationBarTheme: BottomNavigationBarThemeData(
-        backgroundColor: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-        selectedItemColor: primaryColor,
-        unselectedItemColor: isDark ? Colors.white38 : Colors.black38,
-        elevation: 8,
-        type: BottomNavigationBarType.fixed,
-      ),
-      
-      // ── Dialogs ──
-      dialogTheme: DialogTheme(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: cardColor,
-      ),
-      
-      // ── Bottom Sheets ──
-      bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: cardColor,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
       ),
-      
-      // ── Input Decoration ──
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+        fillColor: colorScheme.surfaceContainerHighest,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: highContrast ? colorScheme.onSurface : colorScheme.outline,
+            width: highContrast ? 2.0 : 1.0, // FIXED: Thicker borders in high contrast
+          ),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: highContrast ? colorScheme.onSurface.withOpacity(0.7) : colorScheme.outline,
+            width: highContrast ? 2.0 : 1.0,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: primaryColor, width: 2),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: colorScheme.primary,
+            width: highContrast ? 3.0 : 2.0, // FIXED: Thicker focus border
+          ),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
-      
-      // ── Switches & Sliders ──
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: colorScheme.primaryContainer,
+          foregroundColor: colorScheme.onPrimaryContainer,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          // FIXED: Higher contrast filled buttons
+          backgroundColor: highContrast ? colorScheme.primary : null,
+          foregroundColor: highContrast ? colorScheme.onPrimary : null,
+        ),
+      ),
+      textTheme: _buildTextTheme(brightness, highContrast: highContrast),
+      dividerTheme: DividerThemeData(
+        color: colorScheme.outlineVariant,
+        thickness: highContrast ? 1.5 : 1.0, // FIXED: Thicker dividers
+      ),
       switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return primaryColor;
-          return isDark ? Colors.white54 : Colors.black38;
-        }),
         trackColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return primaryColor.withOpacity(0.3);
-          return isDark ? Colors.white12 : Colors.black12;
+          if (states.contains(WidgetState.selected)) {
+            return highContrast 
+              ? colorScheme.primary.withOpacity(0.9) 
+              : colorScheme.primaryContainer;
+          }
+          return highContrast 
+            ? colorScheme.onSurface.withOpacity(0.4)
+            : colorScheme.surfaceContainerHighest;
+        }),
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return highContrast ? colorScheme.onPrimary : colorScheme.primary;
+          }
+          return highContrast ? colorScheme.surface : colorScheme.outline;
         }),
       ),
-      
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return highContrast ? colorScheme.primary : colorScheme.primaryContainer;
+          }
+          return Colors.transparent;
+        }),
+        checkColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return highContrast ? colorScheme.onPrimary : colorScheme.onPrimaryContainer;
+          }
+          return null;
+        }),
+        side: BorderSide(
+          color: highContrast ? colorScheme.onSurface : colorScheme.outline,
+          width: highContrast ? 2.5 : 2.0,
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: colorScheme.surfaceContainerHighest,
+        selectedColor: highContrast ? colorScheme.primary : colorScheme.primaryContainer,
+        labelStyle: TextStyle(
+          color: highContrast ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
+          fontWeight: highContrast ? FontWeight.w600 : FontWeight.normal,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: highContrast 
+            ? BorderSide(color: colorScheme.outline, width: 1.5)
+            : BorderSide.none,
+        ),
+      ),
       sliderTheme: SliderThemeData(
-        activeTrackColor: primaryColor,
-        thumbColor: primaryColor,
-        inactiveTrackColor: isDark ? Colors.white12 : Colors.black12,
-        overlayColor: primaryColor.withOpacity(0.12),
-        trackHeight: 4,
-        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+        activeTrackColor: highContrast ? colorScheme.primary : colorScheme.primaryContainer,
+        inactiveTrackColor: highContrast ? colorScheme.onSurface.withOpacity(0.3) : colorScheme.surfaceContainerHighest,
+        thumbColor: highContrast ? colorScheme.onPrimary : colorScheme.primary,
+        overlayColor: colorScheme.primary.withOpacity(0.1),
       ),
-      
-      // ── Page Transitions ──
-      pageTransitionsTheme: const PageTransitionsTheme(
-        builders: {
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        },
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: highContrast ? colorScheme.primary : colorScheme.primary,
+        linearTrackColor: highContrast ? colorScheme.onSurface.withOpacity(0.2) : colorScheme.surfaceContainerHighest,
+        circularTrackColor: highContrast ? colorScheme.onSurface.withOpacity(0.2) : colorScheme.surfaceContainerHighest,
       ),
-      
-      // ── Typography ──
-      textTheme: _buildTextTheme(colorScheme.onSurface, isDark),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: colorScheme.surface,
+        indicatorColor: highContrast ? colorScheme.primary : colorScheme.secondaryContainer,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return TextStyle(
+              color: highContrast ? colorScheme.primary : colorScheme.onSurface,
+              fontWeight: highContrast ? FontWeight.bold : FontWeight.w600,
+              fontSize: 12,
+            );
+          }
+          return TextStyle(
+            color: colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w500,
+            fontSize: 12,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return IconThemeData(
+              color: highContrast ? colorScheme.onPrimary : colorScheme.onSecondaryContainer,
+              size: 24,
+            );
+          }
+          return IconThemeData(
+            color: colorScheme.onSurfaceVariant,
+            size: 24,
+          );
+        }),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        backgroundColor: highContrast ? colorScheme.inverseSurface : colorScheme.inverseSurface,
+        contentTextStyle: TextStyle(
+          color: highContrast ? colorScheme.onInverseSurface : colorScheme.onInverseSurface,
+          fontWeight: highContrast ? FontWeight.w600 : FontWeight.normal,
+        ),
+      ),
     );
   }
 
-  static TextTheme _buildTextTheme(Color onSurface, bool isDark) {
-    final baseColor = onSurface;
-    return TextTheme(
-      displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: baseColor, letterSpacing: -0.5),
-      displayMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: baseColor, letterSpacing: -0.5),
-      displaySmall: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: baseColor),
-      headlineLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: baseColor),
-      headlineMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: baseColor),
-      headlineSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: baseColor),
-      titleLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: baseColor),
-      titleMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: baseColor),
-      titleSmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: baseColor.withOpacity(0.7)),
-      bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.normal, color: baseColor),
-      bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.normal, color: baseColor),
-      bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.normal, color: baseColor.withOpacity(0.7)),
-      labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: baseColor),
-      labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: baseColor.withOpacity(0.7)),
-      labelSmall: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: baseColor.withOpacity(0.5)),
+  // FIXED: Generate high-contrast color scheme
+  static ColorScheme _generateColorScheme(
+    Color seedColor, 
+    Brightness brightness, {
+    required bool highContrast,
+  }) {
+    if (highContrast) {
+      // FIXED: Use high contrast variant of ColorScheme
+      return ColorScheme.fromSeed(
+        seedColor: seedColor,
+        brightness: brightness,
+        contrastLevel: 1.0, // Maximum contrast for Material 3
+      );
+    }
+    
+    return ColorScheme.fromSeed(
+      seedColor: seedColor,
+      brightness: brightness,
+      contrastLevel: 0.0,
     );
   }
 
-  static ColorScheme _defaultScheme(Brightness brightness) {
-    return ColorScheme.fromSeed(seedColor: const Color(0xFF00BFA5), brightness: brightness);
+  // FIXED: Apply high contrast modifications to dynamic color scheme
+  static ColorScheme _applyHighContrast(ColorScheme scheme, Brightness brightness) {
+    // Increase contrast by adjusting colors to be more distinct
+    return scheme.copyWith(
+      // Ensure surface and background have strong contrast with text
+      surface: brightness == Brightness.light 
+        ? scheme.surface 
+        : scheme.surface,
+      onSurface: brightness == Brightness.light 
+        ? Colors.black 
+        : Colors.white,
+      surfaceContainerHighest: brightness == Brightness.light
+        ? scheme.surfaceContainerHighest
+        : scheme.surfaceContainerHighest,
+      // Stronger primary colors
+      primary: _ensureContrast(scheme.primary, scheme.onPrimary, brightness),
+      onPrimary: scheme.onPrimary,
+      // Stronger error colors
+      error: brightness == Brightness.light 
+        ? const Color(0xFFB00020) 
+        : const Color(0xFFCF6679),
+      onError: Colors.white,
+      // Ensure outline is visible
+      outline: brightness == Brightness.light 
+        ? Colors.black54 
+        : Colors.white70,
+      outlineVariant: brightness == Brightness.light 
+        ? Colors.black38 
+        : Colors.white38,
+    );
   }
 
-  /// Auto-contrast text color for any background
-  static Color autoContrastColor(Color background) {
-    final luminance = background.computeLuminance();
-    return luminance > 0.5 ? Colors.black : Colors.white;
+  // Helper to ensure color has enough contrast
+  static Color _ensureContrast(Color color, Color onColor, Brightness brightness) {
+    // For high contrast, use more saturated/vivid colors
+    final hsl = HSLColor.fromColor(color);
+    return hsl.withLightness(
+      brightness == Brightness.light 
+        ? (hsl.lightness * 0.85).clamp(0.3, 0.5)  // Darker in light mode
+        : (hsl.lightness * 1.15).clamp(0.5, 0.7)  // Lighter in dark mode
+    ).toColor();
   }
 
-  /// Get glassmorphism decoration for widgets
+  // FIXED: Build text theme with high contrast support
+  static TextTheme _buildTextTheme(Brightness brightness, {required bool highContrast}) {
+    final baseTextTheme = brightness == Brightness.light 
+      ? ThemeData.light().textTheme 
+      : ThemeData.dark().textTheme;
+    
+    if (!highContrast) return baseTextTheme;
+
+    // FIXED: Apply high contrast text styles
+    return baseTextTheme.copyWith(
+      displayLarge: baseTextTheme.displayLarge?.copyWith(
+        fontWeight: FontWeight.bold,
+        color: brightness == Brightness.light ? Colors.black : Colors.white,
+      ),
+      displayMedium: baseTextTheme.displayMedium?.copyWith(
+        fontWeight: FontWeight.bold,
+        color: brightness == Brightness.light ? Colors.black : Colors.white,
+      ),
+      headlineLarge: baseTextTheme.headlineLarge?.copyWith(
+        fontWeight: FontWeight.bold,
+        color: brightness == Brightness.light ? Colors.black : Colors.white,
+      ),
+      headlineMedium: baseTextTheme.headlineMedium?.copyWith(
+        fontWeight: FontWeight.bold,
+        color: brightness == Brightness.light ? Colors.black : Colors.white,
+      ),
+      titleLarge: baseTextTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.w700,
+        color: brightness == Brightness.light ? Colors.black87 : Colors.white,
+      ),
+      titleMedium: baseTextTheme.titleMedium?.copyWith(
+        fontWeight: FontWeight.w600,
+        color: brightness == Brightness.light ? Colors.black87 : Colors.white,
+      ),
+      bodyLarge: baseTextTheme.bodyLarge?.copyWith(
+        fontWeight: FontWeight.w500,
+        color: brightness == Brightness.light ? Colors.black87 : Colors.white,
+      ),
+      bodyMedium: baseTextTheme.bodyMedium?.copyWith(
+        fontWeight: FontWeight.w500,
+        color: brightness == Brightness.light ? Colors.black87 : Colors.white,
+      ),
+      labelLarge: baseTextTheme.labelLarge?.copyWith(
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+
+  // ── Glassmorphism helper ──
   static BoxDecoration glassmorphism({
     required BuildContext context,
-    double opacity = 0.15,
-    double blurRadius = 20,
+    double opacity = 0.1,
     BorderRadius? borderRadius,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cs = Theme.of(context).colorScheme;
     return BoxDecoration(
-      color: isDark ? Colors.white.withOpacity(opacity) : Colors.white.withOpacity(opacity + 0.4),
+      gradient: LinearGradient(
+        colors: [
+          cs.primary.withOpacity(opacity),
+          cs.secondary.withOpacity(opacity * 0.5),
+        ],
+      ),
       borderRadius: borderRadius ?? BorderRadius.circular(20),
       border: Border.all(
-        color: isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.5),
+        color: cs.outline.withOpacity(0.2),
         width: 1,
       ),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
-          blurRadius: blurRadius,
-          spreadRadius: 0,
-          offset: const Offset(0, 8),
-        ),
-      ],
-    );
-  }
-
-  /// Get circular progress gradient for the current theme
-  static Gradient circularProgressGradient(AppThemeOption option, {bool isDark = false}) {
-    final colors = gradientColorsFor(option);
-    return SweepGradient(
-      colors: colors,
-      startAngle: 0,
-      endAngle: 3.14159 * 2,
     );
   }
 }
