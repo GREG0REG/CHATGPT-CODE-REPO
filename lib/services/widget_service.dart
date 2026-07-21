@@ -49,8 +49,8 @@ class WidgetService {
       final active = CountdownService.getActiveEvent(events, now);
 
       final smartFormat = await SettingsService.instance.getSmartFormatEnabled();
-      final themeName = await SettingsService.instance.getSelectedThemeName();
-      final theme = AppThemes.fromName(themeName);
+      // FIX: Use getSelectedTheme() which returns AppThemeOption directly
+      final themeOption = await SettingsService.instance.getSelectedTheme();
 
       if (active != null) {
         final result = CountdownService.buildCountdownText(
@@ -62,8 +62,8 @@ class WidgetService {
         final urgencyColorName = _colorName(active.getUrgencyColor(now));
         final progressPercent = _calculateProgress(active, now);
 
-        // FIX: Use theme.option (AppThemeOption) not theme (ThemeInfo)
-        final colors = AppThemes.gradientColorsFor(theme.option);
+        // FIX: Pass AppThemeOption directly, not ThemeInfo
+        final colors = AppThemes.gradientColorsFor(themeOption);
         final bgHex = _colorToHex(colors.first);
         final textHex = '#FFFFFF';
 
@@ -75,8 +75,8 @@ class WidgetService {
         await HomeWidget.saveWidgetData<String>(_kUrgencyColor, urgencyColorName);
       } else {
         // No upcoming events
-        // FIX: Use theme.option not theme
-        final colors = AppThemes.gradientColorsFor(theme.option);
+        // FIX: Pass AppThemeOption directly
+        final colors = AppThemes.gradientColorsFor(themeOption);
         final bgHex = _colorToHex(colors.first);
 
         await HomeWidget.saveWidgetData<String>(_kTitle, 'No upcoming events');
@@ -182,10 +182,10 @@ class WidgetService {
       final subject = prefs.getString('pomodoro_subject') ?? 'Ready to Focus';
       final timerText = prefs.getString('pomodoro_timer_text') ?? 'Tap to start';
       final status = prefs.getString('pomodoro_status') ?? 'Focus';
-      final themeName = await SettingsService.instance.getSelectedThemeName();
-      final theme = AppThemes.fromName(themeName);
-      // FIX: Use theme.option not theme
-      final colors = AppThemes.gradientColorsFor(theme.option);
+      // FIX: Use getSelectedTheme() which returns AppThemeOption directly
+      final themeOption = await SettingsService.instance.getSelectedTheme();
+      // FIX: Pass AppThemeOption directly
+      final colors = AppThemes.gradientColorsFor(themeOption);
       final bgHex = _colorToHex(colors.first);
       final progressPercent = prefs.getDouble('pomodoro_progress_percent')?.round() ?? 0;
       final completedSessions = prefs.getInt('pomodoro_completed_sessions_total') ?? 0;
