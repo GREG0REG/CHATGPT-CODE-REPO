@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database_helper.dart';
+import '../services/widget_service.dart';
 import '../models/event.dart';
 import '../services/widget_service.dart';
 
