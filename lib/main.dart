@@ -16,14 +16,24 @@ import 'services/widget_service.dart';
 import 'theme/app_themes.dart';
 
 const String kWidgetRefreshTaskName = 'event_countdown_widget_refresh';
+const String kWidgetRefreshFrequentTaskName = 'event_countdown_widget_frequent';
 const String kBackupTaskName = 'event_countdown_weekly_backup';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    if (task == kWidgetRefreshTaskName) {
-      await WidgetService.refreshWidget();
-      await WidgetService.refreshPomodoroWidget();
+    // Initialize minimal Flutter binding for background execution
+    WidgetsFlutterBinding.ensureInitialized();
+
+    if (task == kWidgetRefreshTaskName || task == kWidgetRefreshFrequentTaskName) {
+      try {
+        await WidgetService.refreshWidget();
+        await WidgetService.refreshPomodoroWidget();
+        return true;
+      } catch (e) {
+        debugPrint('Background widget refresh error: $e');
+        return false;
+      }
     } else if (task == kBackupTaskName) {
       return Future.value(await BackupService.executeBackup());
     }
@@ -41,6 +51,25 @@ Future<void> main() async {
     isInDebugMode: false,
   );
 
+  // Register frequent widget updates (every 15 minutes for active countdown)
+  // This ensures the widget stays current even when the app is closed
+  await Workmanager().registerPeriodicTask(
+    kWidgetRefreshFrequentTaskName,
+    kWidgetRefreshFrequentTaskName,
+    frequency: const Duration(minutes: 15), // Much more frequent than 4 hours
+    constraints: Constraints(
+      networkType: NetworkType.not_required,
+      requiresBatteryNotLow: false, // Update even on low battery
+      requiresCharging: false,
+      requiresDeviceIdle: false,
+      requiresStorageNotLow: false,
+    ),
+    existingWorkPolicy: ExistingWorkPolicy.replace, // Replace to ensure fresh schedule
+    backoffPolicy: BackoffPolicy.linear,
+    backoffPolicyDelay: const Duration(minutes: 1),
+  );
+
+  // Keep the 4-hour task as a fallback / safety net
   await Workmanager().registerPeriodicTask(
     kWidgetRefreshTaskName,
     kWidgetRefreshTaskName,
