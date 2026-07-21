@@ -3,10 +3,9 @@
     android:id="@+id/pomodoro_widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#00BFA5"
-    android:padding="12dp">
+    android:background="#FF6B6B"
+    android:padding="16dp">
 
-    <!-- Content layer -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -17,53 +16,59 @@
             android:id="@+id/pomodoro_widget_subject"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Subject"
-            android:textSize="14sp"
+            android:text="Ready to Focus"
+            android:textSize="16sp"
             android:textStyle="bold"
-            android:textColor="#FFFFFF" />
+            android:textColor="#FFFFFF"
+            android:alpha="0.95" />
 
         <TextView
             android:id="@+id/pomodoro_widget_timer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="25:00"
-            android:textSize="32sp"
+            android:text="Tap to start"
+            android:textSize="42sp"
             android:textStyle="bold"
             android:textColor="#FFFFFF"
-            android:layout_marginTop="4dp" />
+            android:layout_marginTop="8dp"
+            android:letterSpacing="0.02" />
 
         <TextView
             android:id="@+id/pomodoro_widget_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Focus"
-            android:textSize="12sp"
-            android:textColor="#B0FFFFFF"
-            android:layout_marginTop="2dp" />
+            android:textSize="14sp"
+            android:textColor="#FFFFFF"
+            android:alpha="0.7"
+            android:layout_marginTop="4dp" />
 
         <ProgressBar
             android:id="@+id/pomodoro_progress_ring"
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
             android:layout_height="4dp"
-            android:layout_marginTop="8dp"
-            android:progressDrawable="@drawable/widget_progress_drawable" />
+            android:layout_marginTop="12dp"
+            android:progressDrawable="@drawable/widget_progress_drawable"
+            android:max="100"
+            android:progress="45" />
 
         <LinearLayout
             android:id="@+id/pomodoro_session_chips"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="8dp"
             android:visibility="gone">
 
             <TextView
                 android:id="@+id/completed_sessions"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="0 sessions"
-                android:textSize="10sp"
-                android:textColor="#B0FFFFFF" />
+                android:text="🔥 0"
+                android:textSize="12sp"
+                android:textColor="#FFFFFF"
+                android:alpha="0.8" />
         </LinearLayout>
     </LinearLayout>
 
