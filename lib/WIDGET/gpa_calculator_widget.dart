@@ -1,5 +1,5 @@
-// CHATGPT-CODE-REPO-TEST/lib/widgets/gpa_calculator_widget.dart
-// COMPLETE FILE - Standalone GPA calculator widget
+// CHATGPT-CODE-REPO-TEST/lib/WIDGET/gpa_calculator_widget.dart
+// COMPLETE FILE - Fixed GPA calculator widget
 
 import 'package:flutter/material.dart';
 
@@ -12,6 +12,8 @@ class GPACalculatorWidget extends StatefulWidget {
 
 class _GPACalculatorWidgetState extends State<GPACalculatorWidget> {
   final List<_CourseGrade> _courses = [];
+  // FIX: Maintain persistent controllers for each course to prevent rebuild loss
+  final List<TextEditingController> _nameControllers = [];
 
   @override
   void initState() {
@@ -19,14 +21,39 @@ class _GPACalculatorWidgetState extends State<GPACalculatorWidget> {
     _addCourse(); // Start with one empty course
   }
 
+  @override
+  void dispose() {
+    // FIX: Dispose all controllers to prevent memory leaks
+    for (final controller in _nameControllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
   void _addCourse() {
     setState(() {
-      _courses.add(_CourseGrade(
+      final newCourse = _CourseGrade(
         name: 'Course ${_courses.length + 1}',
         credits: 3,
         grade: 'B',
-      ));
+      );
+      _courses.add(newCourse);
+      // FIX: Create controller once and keep it persistent
+      _nameControllers.add(TextEditingController(text: newCourse.name));
     });
+  }
+
+  void _removeCourse(int index) {
+    setState(() {
+      _courses.removeAt(index);
+      // FIX: Dispose and remove the corresponding controller
+      _nameControllers[index].dispose();
+      _nameControllers.removeAt(index);
+    });
+  }
+
+  void _updateCourseName(int index, String value) {
+    _courses[index] = _courses[index].copyWith(name: value);
   }
 
   double _gradeToPoints(String grade) {
@@ -116,9 +143,11 @@ class _GPACalculatorWidgetState extends State<GPACalculatorWidget> {
             const SizedBox(height: 12),
 
             // Course list
+            // FIX: Use persistent controllers instead of creating new ones on each build
             ..._courses.asMap().entries.map((entry) {
               final i = entry.key;
               final c = entry.value;
+
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
@@ -131,8 +160,9 @@ class _GPACalculatorWidgetState extends State<GPACalculatorWidget> {
                           isDense: true,
                           contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                         ),
-                        controller: TextEditingController(text: c.name),
-                        onChanged: (v) => setState(() => _courses[i] = _courses[i].copyWith(name: v)),
+                        // FIX: Use persistent controller from list
+                        controller: _nameControllers[i],
+                        onChanged: (v) => _updateCourseName(i, v),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -169,7 +199,8 @@ class _GPACalculatorWidgetState extends State<GPACalculatorWidget> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                      onPressed: () => setState(() => _courses.removeAt(i)),
+                      // FIX: Use _removeCourse which properly disposes controller
+                      onPressed: () => _removeCourse(i),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
