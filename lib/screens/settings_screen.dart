@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import '../database_helper.dart';
 import '../main.dart';
 import '../models/notification_history.dart';
+import '../services/battery_service.dart';
 import '../services/export_import_service.dart';
 import '../services/notification_service.dart';
 import '../services/settings_service.dart';
@@ -40,10 +42,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _loading = true;
   bool _busy = false;
 
+  // Battery state for live UI updates
+  String _batteryStatus = 'Unknown';
+  bool _batteryLow = false;
+  StreamSubscription<BatteryState>? _batterySub;
+
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _listenToBattery();
+  }
+
+  @override
+  void dispose() {
+    _batterySub?.cancel();
+    super.dispose();
+  }
+
+  /// Listen to battery state changes for live UI updates in SettingsScreen.
+  void _listenToBattery() {
+    _updateBatteryStatus();
+    _batterySub = BatteryService.instance.onBatteryStateChanged.listen((_) {
+      if (mounted) _updateBatteryStatus();
+    });
+  }
+
+  Future<void> _updateBatteryStatus() async {
+    final level = await BatteryService.instance.getBatteryLevel();
+    final charging = await BatteryService.instance.isCharging();
+    final low = await BatteryService.instance.isLowBattery();
+    if (!mounted) return;
+    setState(() {
+      _batteryStatus = '${charging ? '⚡ Charging' : '🔋 On battery'} • $level%';
+      _batteryLow = low;
+    });
   }
 
   Future<void> _loadSettings() async {
@@ -512,11 +545,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
                 const Divider(),
                 const _SectionHeader('Performance'),
+                // FIXED: BatteryService integration — live battery status in subtitle
                 SwitchListTile(
-                  secondary: const Icon(Icons.speed),
+                  secondary: Icon(
+                    Icons.speed,
+                    color: _batteryLow ? Colors.orange : null,
+                  ),
                   title: const Text('Adaptive Refresh'),
-                  subtitle:
-                      const Text('Faster updates when events are imminent'),
+                  subtitle: Text(
+                    _adaptiveRefresh
+                        ? '$_batteryStatus${_batteryLow ? ' • Reduced mode active' : ''}'
+                        : '$_batteryStatus • Always full speed',
+                  ),
                   value: _adaptiveRefresh,
                   onChanged: _setAdaptiveRefresh,
                 ),
