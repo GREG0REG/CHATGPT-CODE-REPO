@@ -1,10 +1,13 @@
+// CHATGPT-CODE-REPO-TEST/lib/services/notification_service.dart
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz_data;
+import 'package:flutter/material.dart';
 import '../models/event.dart';
 
-/// FIXED: Properly schedules notifications with exact alarm permissions
-/// and correct timing logic for start time vs deadline
+/// FIXED: Properly schedules notifications with exact alarm permissions,
+/// graceful degradation, and Android 13+ compatibility.
 class NotificationService {
   NotificationService._();
 
@@ -24,17 +27,25 @@ class NotificationService {
     const initSettings = InitializationSettings(android: androidInit);
     await _plugin.initialize(initSettings);
     
-    // FIXED: Request all required permissions for Android 12+ (API 31+)
     final androidImpl = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     
-    // Request notification permission (Android 13+)
-    final notifPermission = await androidImpl?.requestNotificationsPermission();
-    print('Notification permission: $notifPermission');
+    // FIX: Request notification permission (Android 13+) with better error handling
+    try {
+      final notifPermission = await androidImpl?.requestNotificationsPermission();
+      debugPrint('Notification permission: $notifPermission');
+    } catch (e) {
+      debugPrint('Notification permission request failed: $e');
+    }
     
-    // FIXED: Request exact alarm permission - CRITICAL for precise scheduling
-    final exactAlarmPermission = await androidImpl?.requestExactAlarmsPermission();
-    print('Exact alarm permission: $exactAlarmPermission');
+    // FIX: Request exact alarm permission with graceful fallback
+    bool exactAlarmGranted = false;
+    try {
+      exactAlarmGranted = await androidImpl?.requestExactAlarmsPermission() ?? false;
+      debugPrint('Exact alarm permission: $exactAlarmGranted');
+    } catch (e) {
+      debugPrint('Exact alarm permission request failed: $e');
+    }
     
     _initialized = true;
   }
@@ -50,13 +61,14 @@ class NotificationService {
   }
 
   /// FIXED: Properly determine anchor time and schedule both reminders
+  /// with fallback for denied exact alarm permission
   Future<void> scheduleForEvent(Event event) async {
     if (event.id == null) return;
     
     // Cancel any existing notifications for this event first
     await cancelForEvent(event.id!);
     
-    // FIXED: Determine the correct anchor time
+    // Determine the correct anchor time
     // Priority: startTime > deadline > date
     int anchorMillis;
     String timeType;
@@ -75,9 +87,9 @@ class NotificationService {
     final anchor = DateTime.fromMillisecondsSinceEpoch(anchorMillis);
     final now = DateTime.now();
     
-    // FIXED: Only schedule if event is in the future
+    // Only schedule if event is in the future
     if (anchor.isBefore(now)) {
-      print('Event "${event.title}" is in the past, skipping notification scheduling');
+      debugPrint('Event "${event.title}" is in the past, skipping notification scheduling');
       return;
     }
     
@@ -104,7 +116,7 @@ class NotificationService {
     
     // Schedule day-before notification
     if (dayBefore.isAfter(now)) {
-      print('Scheduling day-before notification for "${event.title}" at $dayBefore');
+      debugPrint('Scheduling day-before notification for "${event.title}" at $dayBefore');
       await _scheduleAt(
         id: _dayBeforeId(event.id!),
         title: '📅 ${event.title}',
@@ -115,7 +127,7 @@ class NotificationService {
     
     // Schedule hour-before notification
     if (hourBefore.isAfter(now)) {
-      print('Scheduling hour-before notification for "${event.title}" at $hourBefore');
+      debugPrint('Scheduling hour-before notification for "${event.title}" at $hourBefore');
       await _scheduleAt(
         id: _hourBeforeId(event.id!),
         title: '⏰ ${event.title}',
@@ -125,7 +137,8 @@ class NotificationService {
     }
   }
 
-  /// FIXED: Use exactAllowWhileIdle for reliable delivery even in Doze mode
+  /// FIXED: Use exactAllowWhileIdle with automatic fallback to inexact if permission denied.
+  /// Also uses Importance.high instead of max to avoid Do Not Disturb blocking.
   Future<void> _scheduleAt({
     required int id,
     required String title,
@@ -136,20 +149,24 @@ class NotificationService {
       'event_countdown_channel',
       'Event Reminders',
       channelDescription: 'Reminders for upcoming events and deadlines',
-      importance: Importance.max,
-      priority: Priority.max,
+      // FIX: Use high instead of max to prevent Do Not Disturb from blocking
+      importance: Importance.high,
+      priority: Priority.high,
       category: AndroidNotificationCategory.reminder,
       visibility: NotificationVisibility.public,
       autoCancel: true,
       playSound: true,
       enableVibration: true,
       icon: '@mipmap/ic_launcher',
-      // FIXED: Full screen intent for alarm-like behavior
       fullScreenIntent: false,
     );
     
     const details = NotificationDetails(android: androidDetails);
     
+    // Try exact scheduling first, fall back to inexact if denied
+    bool scheduled = false;
+    
+    // Attempt 1: Exact alarm (most reliable)
     try {
       await _plugin.zonedSchedule(
         id,
@@ -157,14 +174,17 @@ class NotificationService {
         body,
         tz.TZDateTime.from(when, tz.local),
         details,
-        // FIXED: Use exactAllowWhileIdle for Doze mode compatibility
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       );
-      print('Successfully scheduled notification ID $id for $when');
+      debugPrint('Successfully scheduled exact notification ID $id for $when');
+      scheduled = true;
     } catch (e) {
-      print('ERROR scheduling notification ID $id: $e');
-      // Fallback to inexact if exact fails
+      debugPrint('Exact scheduling failed for ID $id: $e');
+    }
+    
+    // Attempt 2: Inexact fallback (works without exact alarm permission)
+    if (!scheduled) {
       try {
         await _plugin.zonedSchedule(
           id,
@@ -175,9 +195,28 @@ class NotificationService {
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
           uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         );
-        print('Fallback: Scheduled inexact notification ID $id');
-      } catch (e2) {
-        print('FATAL: Could not schedule notification: $e2');
+        debugPrint('Fallback: Scheduled inexact notification ID $id');
+        scheduled = true;
+      } catch (e) {
+        debugPrint('Inexact scheduling also failed for ID $id: $e');
+      }
+    }
+    
+    // Attempt 3: Immediate notification as last resort (for very near events)
+    if (!scheduled) {
+      final timeUntil = when.difference(DateTime.now());
+      if (timeUntil.inMinutes < 5) {
+        try {
+          await _plugin.show(
+            id,
+            title,
+            '$body (Immediate - scheduling unavailable)',
+            details,
+          );
+          debugPrint('Last resort: Showed immediate notification ID $id');
+        } catch (e) {
+          debugPrint('FATAL: Could not show any notification for ID $id: $e');
+        }
       }
     }
   }
@@ -188,14 +227,14 @@ class NotificationService {
     }
   }
   
-  /// FIXED: Show immediate notification (for testing)
+  /// Show immediate notification (for testing)
   Future<void> showTestNotification(String title, String body) async {
     const androidDetails = AndroidNotificationDetails(
       'event_countdown_test',
       'Test Notifications',
       channelDescription: 'For testing notification functionality',
-      importance: Importance.max,
-      priority: Priority.max,
+      importance: Importance.high,
+      priority: Priority.high,
     );
     const details = NotificationDetails(android: androidDetails);
     await _plugin.show(99999, title, body, details);
