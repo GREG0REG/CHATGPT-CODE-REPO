@@ -1,5 +1,6 @@
 // CHATGPT-CODE-REPO-TEST/lib/screens/flashcard_screen.dart
 // ENHANCED VERSION - Dedicated Flashcards Section with Unique Features
+// FIXED: Card saving/answering logic, index bounds checking
 
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -7,24 +8,6 @@ import 'package:flutter/services.dart';
 import '../database_helper.dart';
 import '../models/flashcard.dart';
 import '../theme/app_themes.dart';
-
-/// ============================================================
-/// NEW FEATURES ADDED (compared to old version):
-/// 1. DASHBOARD OVERVIEW - Stats cards showing total cards, due today, 
-///    mastery level, and current streak
-/// 2. SUBJECT DECKS - Visual deck cards with progress rings per subject
-/// 3. BULK IMPORT - Quick-add multiple cards at once
-/// 4. STUDY MODES:
-///    - Normal Mode: Standard spaced repetition (existing)
-///    - Shuffle Mode: Random cards regardless of due date
-///    - cram Mode: All cards from a subject, no SRS
-/// 5. CARD DIFFICULTY TRACKING - "Hard", "Good", "Easy" instead of binary
-/// 6. CONFETTI CELEBRATION - When completing all due cards
-/// 7. STREAK TRACKING - Daily review streak with fire icon
-/// 8. CARD HISTORY - View review history per card
-/// 9. SEARCH & FILTER - Real-time search across all cards
-/// 10. DECK SHARING - Export subject decks as JSON
-/// ============================================================
 
 class FlashcardScreen extends StatefulWidget {
   const FlashcardScreen({super.key});
@@ -38,13 +21,11 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   @override
   bool get wantKeepAlive => true;
 
-  // Animation controllers
   late final AnimationController _flipController;
   late final AnimationController _slideController;
   late final AnimationController _confettiController;
   late final Animation<Offset> _slideAnimation;
 
-  // Data states
   List<Flashcard> _allCards = [];
   List<Flashcard> _dueCards = [];
   List<Flashcard> _filteredCards = [];
@@ -54,20 +35,16 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   bool _loading = true;
   bool _showingBack = false;
   
-  // Study mode: 'normal', 'shuffle', 'cram'
   String _studyMode = 'normal';
   
-  // Dashboard stats
   int _totalCards = 0;
   int _dueTodayCount = 0;
   int _masteredCount = 0;
   int _currentStreak = 0;
   double _overallMastery = 0.0;
   
-  // Current card index for review
   int _currentCardIndex = 0;
   
-  // Confetti particles
   final List<_ConfettiParticle> _confettiParticles = [];
   bool _showConfetti = false;
 
@@ -107,10 +84,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     _confettiController.dispose();
     super.dispose();
   }
-
-  // ============================================================
-  // DATA LOADING
-  // ============================================================
   
   Future<void> _loadData() async {
     setState(() => _loading = true);
@@ -122,7 +95,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
     final subjects = allCards.map((c) => c.subjectTag).toSet().toList()..sort();
 
-    // Calculate stats
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
     final dueToday = allCards.where((c) {
@@ -133,7 +105,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     final mastered = allCards.where((c) => c.boxLevel >= 4).length;
     final avgBox = allCards.isEmpty ? 0.0 : allCards.map((c) => c.boxLevel).reduce((a, b) => a + b) / allCards.length;
     
-    // Calculate streak (simplified - cards reviewed in last 7 days)
     final last7Days = now.subtract(const Duration(days: 7)).millisecondsSinceEpoch;
     final recentReviews = allCards.where((c) => 
       c.lastReviewedMillis != null && c.lastReviewedMillis! > last7Days
@@ -149,7 +120,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       _dueTodayCount = dueToday;
       _masteredCount = mastered;
       _currentStreak = streak;
-      _overallMastery = avgBox / 5.0; // 5 is max box level
+      _overallMastery = avgBox / 5.0;
       _loading = false;
       _showingBack = false;
       _currentCardIndex = 0;
@@ -160,12 +131,10 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   List<Flashcard> _applyFilters(List<Flashcard> cards) {
     var result = cards;
     
-    // Apply subject filter
     if (_filterSubject != null) {
       result = result.where((c) => c.subjectTag == _filterSubject).toList();
     }
     
-    // Apply search
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       result = result.where((c) => 
@@ -175,23 +144,17 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       ).toList();
     }
     
-    // Apply study mode
     if (_studyMode == 'shuffle') {
       result = result.toList()..shuffle();
     }
     
     return result;
   }
-
-  // ============================================================
-  // STUDY MODE SELECTION
-  // ============================================================
   
   void _setStudyMode(String mode) {
     setState(() {
       _studyMode = mode;
       if (mode == 'cram' && _filterSubject != null) {
-        // Load ALL cards from this subject for cramming
         _filteredCards = _allCards.where((c) => c.subjectTag == _filterSubject).toList()..shuffle();
       } else if (mode == 'shuffle') {
         _filteredCards = _allCards.toList()..shuffle();
@@ -203,10 +166,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       _flipController.value = 0;
     });
   }
-
-  // ============================================================
-  // CARD REVIEW ACTIONS
-  // ============================================================
   
   void _toggleFlip() {
     HapticFeedback.lightImpact();
@@ -219,39 +178,46 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     }
   }
 
+  // FIXED: Properly handle card answering with bounds checking
   Future<void> _answer({required String difficulty}) async {
     if (_filteredCards.isEmpty) return;
+    
+    // FIXED: Bounds check - ensure index is valid
+    if (_currentCardIndex < 0 || _currentCardIndex >= _filteredCards.length) {
+      _currentCardIndex = 0;
+      if (_filteredCards.isEmpty) {
+        await _loadData();
+        return;
+      }
+    }
+    
     final card = _filteredCards[_currentCardIndex];
 
-    // Animate card away
     await _slideController.forward();
     
-    // Reset flip instantly before removing
     _flipController.value = 0;
     setState(() => _showingBack = false);
 
     final now = DateTime.now().millisecondsSinceEpoch;
     
-    // NEW: Difficulty-based box level adjustment
     int newBox;
     switch (difficulty) {
-      case 'again': // Hard - reset to box 1
+      case 'again':
         newBox = 1;
         break;
-      case 'hard': // Hard - go back one box
+      case 'hard':
         newBox = max(card.boxLevel - 1, 1);
         break;
-      case 'good': // Good - advance one box
+      case 'good':
         newBox = min(card.boxLevel + 1, 5);
         break;
-      case 'easy': // Easy - advance two boxes
+      case 'easy':
         newBox = min(card.boxLevel + 2, 5);
         break;
       default:
         newBox = card.boxLevel;
     }
 
-    // NEW: Dynamic intervals based on difficulty
     final baseIntervals = [0, 600000, 3600000, 86400000, 259200000, 604800000];
     final intervalMultiplier = switch(difficulty) {
       'again' => 0.5,
@@ -273,26 +239,28 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
     HapticFeedback.mediumImpact();
 
-    // Reset slide animation
     _slideController.value = 0;
 
+    // FIXED: Check if this was the LAST card BEFORE incrementing
+    final wasLastCard = _currentCardIndex >= _filteredCards.length - 1;
+    
     setState(() {
-      _currentCardIndex++;
-      if (_currentCardIndex >= _filteredCards.length) {
+      if (wasLastCard) {
+        // All cards reviewed - trigger completion
         _currentCardIndex = 0;
         _triggerConfetti();
+        _filteredCards = []; // Clear to show "all caught up"
+      } else {
+        _currentCardIndex++;
       }
     });
 
-    // Check if all done
-    if (_currentCardIndex == 0 && _filteredCards.isNotEmpty) {
-      await _loadData(); // Refresh for next round
+    // Refresh data after completing all cards
+    if (wasLastCard) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      await _loadData();
     }
   }
-
-  // ============================================================
-  // CONFETTI CELEBRATION
-  // ============================================================
   
   void _triggerConfetti() {
     setState(() {
@@ -317,10 +285,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       setState(() => _showConfetti = false);
     });
   }
-
-  // ============================================================
-  // CARD MANAGEMENT
-  // ============================================================
   
   Future<void> _deleteCard(Flashcard card) async {
     if (card.id == null) return;
@@ -342,6 +306,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     }
   }
 
+  // FIXED: Card dialog with proper validation and saving
   Future<void> _showCardDialog({Flashcard? existing}) async {
     final subjects = _subjects;
     String subject = existing?.subjectTag ?? (subjects.isNotEmpty ? subjects.first : '');
@@ -362,8 +327,9 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     DropdownButtonFormField<String>(
-                      value: isNewSubject ? null : subject,
+                      value: isNewSubject ? null : (subjects.contains(subject) ? subject : null),
                       hint: const Text('Subject'),
+                      isExpanded: true,
                       decoration: InputDecoration(
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12),
@@ -420,7 +386,18 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
                 TextButton(
                   onPressed: () {
-                    if (frontController.text.trim().isEmpty || backController.text.trim().isEmpty) return;
+                    if (frontController.text.trim().isEmpty || backController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('Both fields are required')),
+                      );
+                      return;
+                    }
+                    if (subject.trim().isEmpty) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('Subject is required')),
+                      );
+                      return;
+                    }
                     Navigator.pop(ctx, true);
                   },
                   child: const Text('Save'),
@@ -449,16 +426,21 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       } else {
         await DatabaseHelper.instance.insertFlashcard(newCard);
       }
-      _loadData();
+      await _loadData();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(existing != null ? 'Card updated!' : 'Card added!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     }
 
     frontController.dispose();
     backController.dispose();
   }
-
-  // ============================================================
-  // BULK IMPORT
-  // ============================================================
   
   Future<void> _showBulkImportDialog() async {
     final controller = TextEditingController();
@@ -489,6 +471,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                       DropdownButtonFormField<String>(
                         value: isNewSubject ? null : selectedSubject,
                         hint: const Text('Select Subject'),
+                        isExpanded: true,
                         items: [
                           ..._subjects.map((s) => DropdownMenuItem(value: s, child: Text(s))),
                           const DropdownMenuItem(value: '__new__', child: Text('+ New subject')),
@@ -533,7 +516,12 @@ class _FlashcardScreenState extends State<FlashcardScreen>
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               TextButton(
                 onPressed: () {
-                  if (controller.text.trim().isEmpty || selectedSubject == null) return;
+                  if (controller.text.trim().isEmpty || selectedSubject == null || selectedSubject!.trim().isEmpty) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('Please enter cards and select a subject')),
+                    );
+                    return;
+                  }
                   Navigator.pop(ctx, {
                     'text': controller.text,
                     'subject': selectedSubject,
@@ -570,13 +558,9 @@ class _FlashcardScreenState extends State<FlashcardScreen>
           SnackBar(content: Text('Imported $imported cards!')),
         );
       }
-      _loadData();
+      await _loadData();
     }
   }
-
-  // ============================================================
-  // BUILD METHODS
-  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -656,13 +640,8 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   Widget _buildMainContent(ColorScheme cs) {
     return Column(
       children: [
-        // Dashboard Stats Row
         _buildDashboard(cs),
-        
-        // Search Bar
         _buildSearchBar(cs),
-        
-        // Subject Decks or Study Mode
         Expanded(
           child: _filteredCards.isEmpty && _searchQuery.isEmpty
               ? _buildSubjectDecks(cs)
@@ -671,10 +650,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       ],
     );
   }
-
-  // ============================================================
-  // DASHBOARD WIDGET
-  // ============================================================
   
   Widget _buildDashboard(ColorScheme cs) {
     return Container(
@@ -716,10 +691,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       ),
     );
   }
-
-  // ============================================================
-  // SEARCH BAR
-  // ============================================================
   
   Widget _buildSearchBar(ColorScheme cs) {
     return Padding(
@@ -756,10 +727,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       ),
     );
   }
-
-  // ============================================================
-  // SUBJECT DECKS VIEW
-  // ============================================================
   
   Widget _buildSubjectDecks(ColorScheme cs) {
     return Column(
@@ -774,7 +741,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface),
               ),
               const Spacer(),
-              // Study mode selector
               SegmentedButton<String>(
                 segments: const [
                   ButtonSegment(value: 'normal', label: Text('Due')),
@@ -812,7 +778,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                     });
                   },
                   onLongPress: () {
-                    // Cram mode - study ALL cards from this subject
                     setState(() {
                       _filterSubject = subject;
                       _studyMode = 'cram';
@@ -824,7 +789,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                     padding: const EdgeInsets.all(16),
                     child: Row(
                       children: [
-                        // Progress ring
                         SizedBox(
                           width: 56,
                           height: 56,
@@ -868,7 +832,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                                 style: TextStyle(fontSize: 13, color: cs.outline),
                               ),
                               const SizedBox(height: 6),
-                              // Box level indicators
                               Row(
                                 children: List.generate(5, (i) {
                                   final boxCount = subjectCards.where((c) => c.boxLevel == i + 1).length;
@@ -911,19 +874,19 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       ],
     );
   }
-
-  // ============================================================
-  // REVIEW STATE (CARD FLIPPING)
-  // ============================================================
   
   Widget _buildReviewState(ColorScheme cs) {
+    // FIXED: Handle empty filtered cards
     if (_filteredCards.isEmpty) {
       return _buildAllCaughtUp(cs);
     }
 
-    // Ensure index is valid
-    if (_currentCardIndex >= _filteredCards.length) {
+    // FIXED: Ensure index is valid
+    if (_currentCardIndex < 0 || _currentCardIndex >= _filteredCards.length) {
       _currentCardIndex = 0;
+      if (_filteredCards.isEmpty) {
+        return _buildAllCaughtUp(cs);
+      }
     }
     
     final card = _filteredCards[_currentCardIndex];
@@ -932,7 +895,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       children: [
         Column(
           children: [
-            // Progress indicator
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
               child: Row(
@@ -942,7 +904,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                     style: TextStyle(fontSize: 13, color: cs.outline, fontWeight: FontWeight.w500),
                   ),
                   const Spacer(),
-                  // Study mode badge
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
@@ -955,7 +916,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Box level indicator
                   Row(
                     children: List.generate(5, (i) {
                       return Padding(
@@ -982,7 +942,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
             const SizedBox(height: 12),
 
-            // Back button to decks
             if (_filterSubject != null || _searchQuery.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1010,9 +969,9 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 onHorizontalDragEnd: (details) {
                   if (details.primaryVelocity == null) return;
                   if (details.primaryVelocity! < -200) {
-                    _answer(difficulty: 'again'); // Swipe left
+                    _answer(difficulty: 'again');
                   } else if (details.primaryVelocity! > 200) {
-                    _answer(difficulty: 'good'); // Swipe right
+                    _answer(difficulty: 'good');
                   }
                 },
                 child: AnimatedBuilder(
@@ -1047,7 +1006,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
               ),
             ),
 
-            // Controls
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -1110,7 +1068,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
           ],
         ),
         
-        // Confetti overlay
         if (_showConfetti) _buildConfettiOverlay(),
       ],
     );
@@ -1218,7 +1175,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       ),
       child: Stack(
         children: [
-          // Edit/Delete menu
           Positioned(
             top: 0,
             right: 0,
@@ -1290,10 +1246,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       ),
     );
   }
-
-  // ============================================================
-  // CONFETTI OVERLAY
-  // ============================================================
   
   Widget _buildConfettiOverlay() {
     return AnimatedBuilder(
@@ -1331,10 +1283,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     );
   }
 }
-
-// ============================================================
-// CONFETTI PARTICLE MODEL
-// ============================================================
 
 class _ConfettiParticle {
   final double x;
