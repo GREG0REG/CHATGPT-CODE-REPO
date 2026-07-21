@@ -128,6 +128,8 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen> {
                 if (confirm == true) {
                   await DatabaseHelper.instance.clearGradeComponents();
                   await _loadComponents();
+                  await WidgetService.refreshGradeWidget();
+                  await WidgetService.refreshTaskWidget();
                 }
               },
               child: const Text('Clear', style: TextStyle(color: Colors.white)),
