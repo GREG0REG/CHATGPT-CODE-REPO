@@ -3,10 +3,7 @@ import 'package:flutter/services.dart';
 import '../database_helper.dart';
 import '../services/widget_service.dart';
 import '../models/event.dart';
-import '../services/widget_service.dart';
 
-/// Assignment tracker that syncs with Events database.
-/// Assignments ARE events with subject tags — fully persistent.
 class AssignmentTrackerScreen extends StatefulWidget {
   const AssignmentTrackerScreen({super.key});
 
@@ -35,8 +32,6 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen> {
     final now = DateTime.now();
     
     final assignments = events.where((e) {
-      // Treat all non-completed future events with subject tags as assignments
-      // Also include events that look like assignments (have subject tags)
       return e.subjectTag != null && 
              e.subjectTag!.isNotEmpty && 
              !e.isCompleted &&
@@ -57,7 +52,6 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen> {
     final title = _titleController.text.trim();
     final course = _courseController.text.trim().isEmpty ? 'General' : _courseController.text.trim();
     
-    // Create as an Event so it persists and widget updates
     final event = Event(
       title: title,
       dateMillis: DateTime(_dueDate.year, _dueDate.month, _dueDate.day).millisecondsSinceEpoch,
@@ -78,8 +72,7 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen> {
     _dueDate = DateTime.now().add(const Duration(days: 7));
     
     await _loadAssignments();
-    await WidgetService.refreshGradeWidget();
-    await WidgetService.refreshTaskWidget();
+    
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -195,7 +188,6 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Quick add
                 ExpansionTile(
                   title: const Text('Quick Add Assignment'),
                   leading: const Icon(Icons.add_circle),
@@ -282,7 +274,6 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen> {
 
                 const Divider(),
 
-                // Stats
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(
@@ -296,7 +287,6 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen> {
                   ),
                 ),
 
-                // List
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: _loadAssignments,
