@@ -91,7 +91,7 @@ class BatteryService {
       BatteryState.discharging => 'On battery',
       BatteryState.full => 'Full',
       BatteryState.unknown => 'Unknown',
-      BatteryState.connected => 'Plugged in',
+      BatteryState.connectedNotCharging => 'Plugged in',
     };
     return '$stateStr • $level%';
   }
