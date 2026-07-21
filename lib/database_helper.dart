@@ -31,7 +31,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 7,
+      version: 8, // BUMPED: was 7, now 8 for new tables
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -53,6 +53,9 @@ class DatabaseHelper {
         }
         if (oldVersion < 7) {
           await _migrateV6ToV7(db);
+        }
+        if (oldVersion < 8) {
+          await _migrateV7ToV8(db); // NEW: v7→v8 migration
         }
       },
     );
@@ -164,7 +167,8 @@ class DatabaseHelper {
         createdAtMillis INTEGER NOT NULL
       )
     """);
-        // ---- FLASHCARD REVIEW HISTORY (v8) ----
+    
+    // ---- FLASHCARD REVIEW HISTORY (v8) ----
     await db.execute("""
       CREATE TABLE flashcard_review_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -190,10 +194,34 @@ class DatabaseHelper {
         streakCount INTEGER DEFAULT 0
       )
     """);
+    
+    // ---- GRADE COMPONENTS (v8) ---- NEW TABLE
+    await db.execute("""
+      CREATE TABLE grade_components (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        weight REAL NOT NULL,
+        score REAL NOT NULL,
+        totalPoints REAL NOT NULL DEFAULT 100,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+    
+    // ---- QUICK NOTES (v8) ---- NEW TABLE
+    await db.execute("""
+      CREATE TABLE quick_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        subject TEXT NOT NULL DEFAULT 'General',
+        createdAtMillis INTEGER NOT NULL,
+        updatedAtMillis INTEGER
+      )
+    """);
   }
 
   // ============================================
-  // EXISTING MIGRATIONS (PRESERVED EXACTLY)
+  // MIGRATIONS
   // ============================================
   Future<void> _migrateV1ToV2(Database db) async {
     await db.execute('ALTER TABLE events ADD COLUMN recurrence INTEGER DEFAULT 0');
@@ -269,7 +297,6 @@ class DatabaseHelper {
     """);
   }
 
-  // v5 -> v6 migration (study subjects)
   Future<void> _migrateV5ToV6(Database db) async {
     await db.execute("""
       CREATE TABLE study_subjects (
@@ -282,13 +309,59 @@ class DatabaseHelper {
     """);
   }
 
-  // v6 -> v7 migration (session notes)
   Future<void> _migrateV6ToV7(Database db) async {
     await db.execute('ALTER TABLE study_sessions ADD COLUMN notes TEXT');
   }
 
+  // NEW: v7 -> v8 migration (flashcard review history + daily card goals + grade components + quick notes)
+  Future<void> _migrateV7ToV8(Database db) async {
+    await db.execute("""
+      CREATE TABLE flashcard_review_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cardId INTEGER NOT NULL,
+        reviewedAtMillis INTEGER NOT NULL,
+        difficulty TEXT NOT NULL,
+        timeSpentSeconds INTEGER DEFAULT 0,
+        boxLevelBefore INTEGER DEFAULT 1,
+        boxLevelAfter INTEGER DEFAULT 1,
+        sessionId TEXT
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE daily_card_goals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dateMillis INTEGER NOT NULL UNIQUE,
+        targetReviews INTEGER DEFAULT 20,
+        achievedReviews INTEGER DEFAULT 0,
+        targetNewCards INTEGER DEFAULT 5,
+        achievedNewCards INTEGER DEFAULT 0,
+        streakCount INTEGER DEFAULT 0
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE grade_components (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        weight REAL NOT NULL,
+        score REAL NOT NULL,
+        totalPoints REAL NOT NULL DEFAULT 100,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE quick_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        subject TEXT NOT NULL DEFAULT 'General',
+        createdAtMillis INTEGER NOT NULL,
+        updatedAtMillis INTEGER
+      )
+    """);
+  }
+
   // ============================================
-  // EXISTING EVENT CRUD (UNCHANGED)
+  // EVENT CRUD
   // ============================================
   Future<int> insertEvent(Event event) async {
     final db = await database;
@@ -335,7 +408,7 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // EXISTING CUSTOM REMINDER CRUD (UNCHANGED)
+  // CUSTOM REMINDER CRUD
   // ============================================
   Future<int> insertCustomReminder(CustomReminder reminder) async {
     final db = await database;
@@ -359,7 +432,7 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // EXISTING NOTIFICATION HISTORY CRUD (UNCHANGED)
+  // NOTIFICATION HISTORY CRUD
   // ============================================
   Future<int> insertNotificationHistory(NotificationHistory history) async {
     final db = await database;
@@ -378,7 +451,7 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // EXISTING STUDY SESSION CRUD (UNCHANGED)
+  // STUDY SESSION CRUD
   // ============================================
   Future<int> insertStudySession(StudySession session) async {
     final db = await database;
@@ -431,7 +504,6 @@ class DatabaseHelper {
     return db.delete('study_sessions', where: 'id = ?', whereArgs: [id]);
   }
 
-  // NEW: Update session note
   Future<void> updateSessionNote(int id, String note) async {
     final db = await database;
     await db.update(
@@ -443,7 +515,7 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // EXISTING SUBTASK CRUD (UNCHANGED)
+  // SUBTASK CRUD
   // ============================================
   Future<int> insertSubtask(Subtask subtask) async {
     final db = await database;
@@ -498,7 +570,7 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // EXISTING FLASHCARD CRUD (UNCHANGED)
+  // FLASHCARD CRUD
   // ============================================
   Future<int> insertFlashcard(Flashcard card) async {
     final db = await database;
@@ -557,7 +629,142 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // EXISTING STUDY SCHEDULE CRUD (UNCHANGED)
+  // FLASHCARD REVIEW HISTORY CRUD (NEW - v8)
+  // ============================================
+  Future<int> insertFlashcardReviewHistory(FlashcardReviewHistory history) async {
+    final db = await database;
+    return db.insert('flashcard_review_history', history.toMap()..remove('id'));
+  }
+
+  Future<List<FlashcardReviewHistory>> getFlashcardReviewHistoryForCard(int cardId, {int limit = 50}) async {
+    final db = await database;
+    final rows = await db.query(
+      'flashcard_review_history',
+      where: 'cardId = ?',
+      whereArgs: [cardId],
+      orderBy: 'reviewedAtMillis DESC',
+      limit: limit,
+    );
+    return rows.map((r) => FlashcardReviewHistory.fromMap(r)).toList();
+  }
+
+  Future<List<FlashcardReviewHistory>> getFlashcardReviewHistoryForSession(String sessionId) async {
+    final db = await database;
+    final rows = await db.query(
+      'flashcard_review_history',
+      where: 'sessionId = ?',
+      whereArgs: [sessionId],
+      orderBy: 'reviewedAtMillis ASC',
+    );
+    return rows.map((r) => FlashcardReviewHistory.fromMap(r)).toList();
+  }
+
+  Future<void> deleteFlashcardReviewHistory(int id) async {
+    final db = await database;
+    await db.delete('flashcard_review_history', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<Map<String, dynamic>> getFlashcardReviewStats(int cardId) async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT 
+        COUNT(*) as totalReviews,
+        AVG(CASE WHEN difficulty = 'easy' THEN 1.0 
+                 WHEN difficulty = 'good' THEN 0.75
+                 WHEN difficulty = 'hard' THEN 0.5
+                 WHEN difficulty = 'again' THEN 0.0 END) as avgAccuracy,
+        AVG(timeSpentSeconds) as avgTimeSeconds
+      FROM flashcard_review_history
+      WHERE cardId = ?
+    """, [cardId]);
+    return result.first;
+  }
+
+  // ============================================
+  // DAILY CARD GOAL CRUD (NEW - v8)
+  // ============================================
+  Future<int> insertOrUpdateDailyCardGoal(DailyCardGoal goal) async {
+    final db = await database;
+    final existing = await getDailyCardGoalForDate(goal.dateMillis);
+    if (existing != null) {
+      return db.update(
+        'daily_card_goals',
+        goal.toMap()..remove('id'),
+        where: 'dateMillis = ?',
+        whereArgs: [goal.dateMillis],
+      );
+    }
+    return db.insert('daily_card_goals', goal.toMap()..remove('id'));
+  }
+
+  Future<DailyCardGoal?> getDailyCardGoalForDate(int dateMillis) async {
+    final db = await database;
+    final rows = await db.query(
+      'daily_card_goals',
+      where: 'dateMillis = ?',
+      whereArgs: [dateMillis],
+    );
+    if (rows.isEmpty) return null;
+    return DailyCardGoal.fromMap(rows.first);
+  }
+
+  Future<DailyCardGoal> getTodayDailyCardGoal() async {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final existing = await getDailyCardGoalForDate(startOfDay);
+    if (existing != null) return existing;
+    return DailyCardGoal(dateMillis: startOfDay);
+  }
+
+  Future<void> addAchievedCardReview(int dateMillis) async {
+    final db = await database;
+    final goal = await getDailyCardGoalForDate(dateMillis);
+    if (goal != null) {
+      await db.update(
+        'daily_card_goals',
+        {'achievedReviews': goal.achievedReviews + 1},
+        where: 'dateMillis = ?',
+        whereArgs: [dateMillis],
+      );
+    } else {
+      await insertOrUpdateDailyCardGoal(DailyCardGoal(
+        dateMillis: dateMillis,
+        achievedReviews: 1,
+      ));
+    }
+  }
+
+  Future<void> addAchievedNewCard(int dateMillis) async {
+    final db = await database;
+    final goal = await getDailyCardGoalForDate(dateMillis);
+    if (goal != null) {
+      await db.update(
+        'daily_card_goals',
+        {'achievedNewCards': goal.achievedNewCards + 1},
+        where: 'dateMillis = ?',
+        whereArgs: [dateMillis],
+      );
+    } else {
+      await insertOrUpdateDailyCardGoal(DailyCardGoal(
+        dateMillis: dateMillis,
+        achievedNewCards: 1,
+      ));
+    }
+  }
+
+  Future<int> getCardStreak() async {
+    final db = await database;
+    final rows = await db.query(
+      'daily_card_goals',
+      orderBy: 'dateMillis DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return 0;
+    return DailyCardGoal.fromMap(rows.first).streakCount;
+  }
+
+  // ============================================
+  // STUDY SCHEDULE CRUD
   // ============================================
   Future<int> insertStudySchedule(StudySchedule schedule) async {
     final db = await database;
@@ -605,7 +812,7 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // EXISTING DAILY GOAL CRUD (UNCHANGED)
+  // DAILY GOAL CRUD
   // ============================================
   Future<int> insertOrUpdateDailyGoal(DailyGoal goal) async {
     final db = await database;
@@ -687,11 +894,6 @@ class DatabaseHelper {
     return DailyGoal.fromMap(rows.first).streakCount;
   }
 
-  Future<void> vacuum() async {
-    final db = await database;
-    await db.execute('VACUUM');
-  }
-
   // ============================================
   // STUDY SUBJECT CRUD
   // ============================================
@@ -737,5 +939,108 @@ class DatabaseHelper {
       SET totalFocusMinutes = totalFocusMinutes + ?
       WHERE id = ?
     """, [minutes, id]);
+  }
+
+  // ============================================
+  // GRADE COMPONENT CRUD (NEW - v8)
+  // ============================================
+  Future<int> insertGradeComponent(Map<String, dynamic> component) async {
+    final db = await database;
+    final data = {
+      'name': component['name'],
+      'weight': component['weight'],
+      'score': component['score'],
+      'totalPoints': component['totalPoints'] ?? 100.0,
+      'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
+    };
+    return db.insert('grade_components', data);
+  }
+
+  Future<int> updateGradeComponent(int id, Map<String, dynamic> component) async {
+    final db = await database;
+    final data = {
+      'name': component['name'],
+      'weight': component['weight'],
+      'score': component['score'],
+      'totalPoints': component['totalPoints'] ?? 100.0,
+    };
+    return db.update('grade_components', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteGradeComponent(int id) async {
+    final db = await database;
+    return db.delete('grade_components', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllGradeComponents() async {
+    final db = await database;
+    final rows = await db.query('grade_components', orderBy: 'createdAtMillis DESC');
+    return rows;
+  }
+
+  Future<void> clearGradeComponents() async {
+    final db = await database;
+    await db.delete('grade_components');
+  }
+
+  // ============================================
+  // QUICK NOTES CRUD (NEW - v8)
+  // ============================================
+  Future<int> insertQuickNote(Map<String, dynamic> note) async {
+    final db = await database;
+    final data = {
+      'title': note['title'],
+      'content': note['content'],
+      'subject': note['subject'] ?? 'General',
+      'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
+      'updatedAtMillis': null,
+    };
+    return db.insert('quick_notes', data);
+  }
+
+  Future<int> updateQuickNote(int id, Map<String, dynamic> note) async {
+    final db = await database;
+    final data = {
+      'title': note['title'],
+      'content': note['content'],
+      'subject': note['subject'] ?? 'General',
+      'updatedAtMillis': DateTime.now().millisecondsSinceEpoch,
+    };
+    return db.update('quick_notes', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteQuickNote(int id) async {
+    final db = await database;
+    return db.delete('quick_notes', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllQuickNotes({String? subjectFilter}) async {
+    final db = await database;
+    if (subjectFilter != null && subjectFilter != 'All') {
+      final rows = await db.query(
+        'quick_notes',
+        where: 'subject = ?',
+        whereArgs: [subjectFilter],
+        orderBy: 'createdAtMillis DESC',
+      );
+      return rows;
+    }
+    final rows = await db.query('quick_notes', orderBy: 'createdAtMillis DESC');
+    return rows;
+  }
+
+  Future<Map<String, dynamic>?> getQuickNote(int id) async {
+    final db = await database;
+    final rows = await db.query('quick_notes', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  // ============================================
+  // UTILITY
+  // ============================================
+  Future<void> vacuum() async {
+    final db = await database;
+    await db.execute('VACUUM');
   }
 }
