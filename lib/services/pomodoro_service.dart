@@ -1,560 +1,306 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:workmanager/workmanager.dart';
 
 import '../database_helper.dart';
-import '../models/study_session.dart';
-import 'settings_service.dart';
-import 'focus_settings_service.dart';
-import 'widget_service.dart';
+import '../models/event.dart';
+import '../services/countdown_service.dart';
+import '../services/recurrence_service.dart';
+import '../theme/app_themes.dart';
+import '../main.dart';
 
-/// Session presets for the Pomodoro timer.
-class PomodoroPreset {
-  final String name;
-  final int focusMinutes;
-  final int shortBreakMinutes;
-  final int longBreakMinutes;
-  final int sessionsBeforeLongBreak;
+/// Background update task name
+const String kWidgetBackgroundUpdateTask = 'event_countdown_widget_bg_update';
 
-  const PomodoroPreset({
-    required this.name,
-    required this.focusMinutes,
-    required this.shortBreakMinutes,
-    required this.longBreakMinutes,
-    required this.sessionsBeforeLongBreak,
-  });
+/// Service that bridges Flutter data to Android home-screen widgets.
+/// Enhanced with more frequent background updates and battery-aware scheduling.
+class WidgetService {
+  WidgetService._();
+  static final WidgetService instance = WidgetService._();
 
-  static const classic = PomodoroPreset(
-    name: 'Classic',
-    focusMinutes: 25,
-    shortBreakMinutes: 5,
-    longBreakMinutes: 15,
-    sessionsBeforeLongBreak: 4,
-  );
+  static const _channel = MethodChannel('com.example.event_countdown/widget');
 
-  static const deepWork = PomodoroPreset(
-    name: 'Deep Work',
-    focusMinutes: 45,
-    shortBreakMinutes: 10,
-    longBreakMinutes: 30,
-    sessionsBeforeLongBreak: 3,
-  );
+  // Track last update time to prevent excessive updates
+  static DateTime? _lastEventWidgetUpdate;
+  static DateTime? _lastPomodoroWidgetUpdate;
 
-  static const examCrunch = PomodoroPreset(
-    name: 'Exam Crunch',
-    focusMinutes: 60,
-    shortBreakMinutes: 10,
-    longBreakMinutes: 30,
-    sessionsBeforeLongBreak: 2,
-  );
-
-  static const custom = PomodoroPreset(
-    name: 'Custom',
-    focusMinutes: 25,
-    shortBreakMinutes: 5,
-    longBreakMinutes: 15,
-    sessionsBeforeLongBreak: 4,
-  );
-
-  static const List<PomodoroPreset> all = [classic, deepWork, examCrunch, custom];
-}
-
-enum PomodoroPhase { idle, focusing, shortBreak, longBreak, paused }
-
-/// Central service for the Pomodoro focus timer.
-/// Survives app restart via SharedPreferences and restores state automatically.
-class PomodoroService extends ChangeNotifier {
-  PomodoroService._();
-  static final PomodoroService instance = PomodoroService._();
-
-  // ── State ──
-  PomodoroPhase _phase = PomodoroPhase.idle;
-  PomodoroPhase? _phaseBeforePause;
-  PomodoroPreset _preset = PomodoroPreset.classic;
-  int _completedFocusSessions = 0;
-  int _remainingSeconds = 0;
-  DateTime? _endTime;
-
-  String? _subjectTag;
-  int? _linkedEventId;
-
-  // Break-pending state (when auto-start break is OFF)
-  bool _breakPending = false;
-  int _pendingBreakMinutes = 0;
-
-  // Session note prompt
-  int? _pendingSessionNoteId;
-
-  Timer? _tickTimer;
-  final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
-  bool _notifInit = false;
-
-  // ── ValueNotifiers for granular UI updates ──
-  final ValueNotifier<PomodoroPhase> phaseNotifier = ValueNotifier(PomodoroPhase.idle);
-  final ValueNotifier<int> remainingSecondsNotifier = ValueNotifier(0);
-  final ValueNotifier<int> completedSessionsNotifier = ValueNotifier(0);
-
-  // ── Getters ──
-  PomodoroPhase get phase => _phase;
-  int get remainingSeconds => _remainingSeconds;
-  PomodoroPreset get preset => _preset;
-  int get completedFocusSessions => _completedFocusSessions;
-  String? get subjectTag => _subjectTag;
-  int? get linkedEventId => _linkedEventId;
-  bool get isBreakPending => _breakPending;
-  int? get pendingSessionNoteId => _pendingSessionNoteId;
-
-  bool get isRunning =>
-      _phase == PomodoroPhase.focusing ||
-      _phase == PomodoroPhase.shortBreak ||
-      _phase == PomodoroPhase.longBreak;
-
-  String get formattedTime {
-    final m = (_remainingSeconds ~/ 60).toString().padLeft(2, '0');
-    final s = (_remainingSeconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-
-  // ── Init ──
-  Future<void> init() async {
-    await _initNotifications();
-    await _restoreState();
-  }
-
-  Future<void> _initNotifications() async {
-    if (_notifInit) return;
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    await _notifications.initialize(const InitializationSettings(android: android));
-    _notifInit = true;
-  }
-
-  // ── Custom Preset Resolver ──
-  Future<PomodoroPreset> _resolvePreset(PomodoroPreset preset) async {
-    if (preset.name != 'Custom') return preset;
-    final fs = FocusSettingsService.instance;
-    return PomodoroPreset(
-      name: 'Custom',
-      focusMinutes: await fs.getCustomFocusMinutes(),
-      shortBreakMinutes: await fs.getCustomShortBreakMinutes(),
-      longBreakMinutes: await fs.getCustomLongBreakMinutes(),
-      sessionsBeforeLongBreak: await fs.getCustomSessionsBeforeLongBreak(),
+  /// Initialize background updates - call this in main.dart
+  static Future<void> initializeBackgroundUpdates() async {
+    // Register more frequent periodic task for widget updates (every 15 minutes minimum)
+    await Workmanager().registerPeriodicTask(
+      kWidgetBackgroundUpdateTask,
+      kWidgetBackgroundUpdateTask,
+      frequency: const Duration(minutes: 15), // More frequent than 4 hours
+      constraints: Constraints(
+        networkType: NetworkType.not_required,
+        requiresBatteryNotLow: false, // Update even on low battery
+        requiresCharging: false,
+        requiresDeviceIdle: false,
+        requiresStorageNotLow: false,
+      ),
+      existingWorkPolicy: ExistingWorkPolicy.replace, // Replace to ensure fresh schedule
+      backoffPolicy: BackoffPolicy.linear,
+      backoffPolicyDelay: const Duration(minutes: 1),
     );
   }
 
-  // ── Widget Sync ──
-  /// Writes current timer state to SharedPreferences and triggers a native
-  /// widget update so the home-screen widget shows live data.
-  Future<void> _syncWidgetState() async {
+  /// Call from background task dispatcher
+  static Future<bool> handleBackgroundUpdate(String task) async {
+    if (task == kWidgetBackgroundUpdateTask) {
+      try {
+        await refreshWidget();
+        await refreshPomodoroWidget();
+        return true;
+      } catch (e) {
+        debugPrint('Background widget update failed: $e');
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Refresh the event countdown widget with the nearest upcoming event.
+  static Future<void> refreshWidget() async {
+    // Throttle: max once per 30 seconds
+    if (_lastEventWidgetUpdate != null &&
+        DateTime.now().difference(_lastEventWidgetUpdate!).inSeconds < 30) {
+      return;
+    }
+    _lastEventWidgetUpdate = DateTime.now();
+
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      String subject = _subjectTag ?? 'Ready to Focus';
-      String timerText = formattedTime;
-      String status;
-
-      switch (_phase) {
-        case PomodoroPhase.focusing:
-          status = 'Focus';
-          break;
-        case PomodoroPhase.shortBreak:
-          status = 'Short Break';
-          break;
-        case PomodoroPhase.longBreak:
-          status = 'Long Break';
-          break;
-        case PomodoroPhase.paused:
-          status = 'Paused';
-          break;
-        case PomodoroPhase.idle:
-          status = 'Ready to Focus';
-          timerText = 'Tap to start';
-          break;
-      }
-
-      await prefs.setString('pomodoro_subject', subject);
-      await prefs.setString('pomodoro_timer_text', timerText);
-      await prefs.setString('pomodoro_status', status);
-      await prefs.setInt('pomodoro_completed_sessions', _completedFocusSessions);
-
-      await WidgetService.refreshPomodoroWidget();
-    } catch (e) {
-      debugPrint('Pomodoro widget sync error: $e');
-    }
-  }
-
-  // ── Persistence ──
-  Future<void> _saveState() async {
-    final p = await SharedPreferences.getInstance();
-    await p.setString('pomodoro_phase', _phase.name);
-    if (_phaseBeforePause != null) {
-      await p.setString('pomodoro_phase_before_pause', _phaseBeforePause!.name);
-    } else {
-      await p.remove('pomodoro_phase_before_pause');
-    }
-    await p.setInt('pomodoro_end_time', _endTime?.millisecondsSinceEpoch ?? 0);
-    await p.setInt('pomodoro_remaining_seconds', _remainingSeconds);
-    await p.setInt('pomodoro_completed_sessions', _completedFocusSessions);
-    await p.setString('pomodoro_preset_name', _preset.name);
-    await p.setString('pomodoro_subject', _subjectTag ?? '');
-    await p.setInt('pomodoro_event_id', _linkedEventId ?? -1);
-
-    // New fields
-    await p.setBool('pomodoro_break_pending', _breakPending);
-    await p.setInt('pomodoro_pending_break_minutes', _pendingBreakMinutes);
-    await p.setInt('pomodoro_pending_note_id', _pendingSessionNoteId ?? -1);
-  }
-
-  Future<void> _clearSavedState() async {
-    final p = await SharedPreferences.getInstance();
-    await p.remove('pomodoro_phase');
-    await p.remove('pomodoro_phase_before_pause');
-    await p.remove('pomodoro_end_time');
-    await p.remove('pomodoro_remaining_seconds');
-    await p.remove('pomodoro_completed_sessions');
-    await p.remove('pomodoro_preset_name');
-    await p.remove('pomodoro_subject');
-    await p.remove('pomodoro_event_id');
-
-    await p.remove('pomodoro_break_pending');
-    await p.remove('pomodoro_pending_break_minutes');
-    await p.remove('pomodoro_pending_note_id');
-  }
-
-  Future<void> _restoreState() async {
-    final p = await SharedPreferences.getInstance();
-    final phaseName = p.getString('pomodoro_phase');
-    final presetName = p.getString('pomodoro_preset_name');
-
-    if (phaseName == null || presetName == null) {
-      await _syncWidgetState();
-      return;
-    }
-
-    _preset = PomodoroPreset.all.firstWhere(
-      (c) => c.name == presetName,
-      orElse: () => PomodoroPreset.classic,
-    );
-    _preset = await _resolvePreset(_preset);
-
-    _completedFocusSessions = p.getInt('pomodoro_completed_sessions') ?? 0;
-    _subjectTag = p.getString('pomodoro_subject');
-    if (_subjectTag?.isEmpty ?? false) _subjectTag = null;
-    final eid = p.getInt('pomodoro_event_id');
-    _linkedEventId = (eid == null || eid < 0) ? null : eid;
-
-    // Restore break-pending state
-    _breakPending = p.getBool('pomodoro_break_pending') ?? false;
-    _pendingBreakMinutes = p.getInt('pomodoro_pending_break_minutes') ?? 0;
-    final noteId = p.getInt('pomodoro_pending_note_id');
-    _pendingSessionNoteId = (noteId == null || noteId < 0) ? null : noteId;
-
-    // Restore last subject from FocusSettingsService if none saved
-    if (_subjectTag == null || _subjectTag!.isEmpty) {
-      final lastId = await FocusSettingsService.instance.getLastSubjectId();
-      if (lastId != null) {
-        final subj = await DatabaseHelper.instance.getStudySubject(lastId);
-        if (subj != null) _subjectTag = subj.name;
-      }
-      if (_subjectTag == null) {
-        final lastName = await FocusSettingsService.instance.getLastSubjectName();
-        if (lastName != null && lastName.isNotEmpty) _subjectTag = lastName;
-      }
-    }
-
-    final prev = p.getString('pomodoro_phase_before_pause');
-    if (prev != null) {
-      _phaseBeforePause = PomodoroPhase.values.firstWhere(
-        (e) => e.name == prev,
-        orElse: () => PomodoroPhase.focusing,
-      );
-    }
-
-    _phase = PomodoroPhase.values.firstWhere(
-      (e) => e.name == phaseName,
-      orElse: () => PomodoroPhase.idle,
-    );
-
-    if (_phase == PomodoroPhase.paused) {
-      _remainingSeconds = p.getInt('pomodoro_remaining_seconds') ?? 0;
-      _syncNotifiers();
-      notifyListeners();
-      await _syncWidgetState();
-      return;
-    }
-
-    if (_phase == PomodoroPhase.idle) {
-      _remainingSeconds = 0;
-      _syncNotifiers();
-      notifyListeners();
-      await _syncWidgetState();
-      return;
-    }
-
-    final endMillis = p.getInt('pomodoro_end_time');
-    if (endMillis == null || endMillis <= 0) {
-      await _clearSavedState();
-      await _syncWidgetState();
-      return;
-    }
-
-    final end = DateTime.fromMillisecondsSinceEpoch(endMillis);
-    final now = DateTime.now();
-
-    if (end.isAfter(now)) {
-      _endTime = end;
-      _remainingSeconds = end.difference(now).inSeconds;
-      _startTickTimer();
-    } else {
-      // Expired while app was closed — clear stale state.
-      await _clearSavedState();
-      await _syncWidgetState();
-      return;
-    }
-
-    _syncNotifiers();
-    notifyListeners();
-    await _syncWidgetState();
-  }
-
-  void _syncNotifiers() {
-    phaseNotifier.value = _phase;
-    remainingSecondsNotifier.value = _remainingSeconds;
-    completedSessionsNotifier.value = _completedFocusSessions;
-  }
-
-  // ── Timer Engine ──
-  void _startTickTimer() {
-    _tickTimer?.cancel();
-    _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_endTime == null) return;
+      final rawEvents = await DatabaseHelper.instance.getAllEventsSorted();
       final now = DateTime.now();
-      if (_endTime!.isAfter(now)) {
-        _remainingSeconds = _endTime!.difference(now).inSeconds;
-        remainingSecondsNotifier.value = _remainingSeconds;
-        notifyListeners();
-        _syncWidgetState();
+      final expanded = RecurrenceService.expandEvents(rawEvents, now);
+
+      final activeEvent = CountdownService.getActiveEvent(expanded, now);
+
+      String title;
+      String countdown;
+      String? bgColor;
+      String textColor = '#FFFFFF';
+      int progressPercent = 0;
+      String? urgencyColorName;
+      String? subjectTag;
+      String? priorityLabel;
+      bool isAssignment = false;
+
+      if (activeEvent != null) {
+        // FIX: Detect assignments (events with subjectTag)
+        subjectTag = activeEvent.subjectTag;
+        isAssignment = subjectTag != null && subjectTag.isNotEmpty;
+
+        // FIX: Show subject tag in title for assignments
+        if (isAssignment) {
+          title = '${activeEvent.title} • $subjectTag';
+        } else {
+          title = activeEvent.title;
+        }
+
+        final result = CountdownService.buildCountdownText(
+          activeEvent,
+          now,
+          smartFormatEnabled: prefs.getBool('smart_countdown_format') ?? false,
+        );
+        countdown = result.text;
+
+        // Theme color
+        final themeName = prefs.getString('selected_theme') ?? 'auroraBorealis';
+        final theme = AppThemes.fromName(themeName);
+        final colors = AppThemes.gradientColorsFor(theme);
+        if (colors != null && colors.isNotEmpty) {
+          bgColor = '#${colors[0].value.toRadixString(16).substring(2)}';
+        }
+
+        // Progress calculation
+        if (activeEvent.startTimeMillis != null && activeEvent.deadlineMillis != null) {
+          final total = activeEvent.deadlineMillis! - activeEvent.startTimeMillis!;
+          final elapsed = now.millisecondsSinceEpoch - activeEvent.startTimeMillis!;
+          if (total > 0) {
+            progressPercent = ((elapsed / total) * 100).round().clamp(0, 100);
+          }
+        } else if (activeEvent.deadlineMillis != null) {
+          // For deadline-only events, calculate progress from start of deadline day
+          final deadline = DateTime.fromMillisecondsSinceEpoch(activeEvent.deadlineMillis!);
+          final startOfDeadlineDay = DateTime(deadline.year, deadline.month, deadline.day);
+          final total = deadline.difference(startOfDeadlineDay).inMilliseconds;
+          final elapsed = now.difference(startOfDeadlineDay).inMilliseconds;
+          if (total > 0) {
+            progressPercent = ((elapsed / total) * 100).round().clamp(0, 100);
+          }
+        } else {
+          // For date-only events, progress through the day
+          final eventDate = DateTime.fromMillisecondsSinceEpoch(activeEvent.dateMillis);
+          final startOfDay = DateTime(eventDate.year, eventDate.month, eventDate.day);
+          final endOfDay = DateTime(eventDate.year, eventDate.month, eventDate.day, 23, 59, 59);
+          final total = endOfDay.difference(startOfDay).inMilliseconds;
+          final elapsed = now.difference(startOfDay).inMilliseconds;
+          if (total > 0) {
+            progressPercent = ((elapsed / total) * 100).round().clamp(0, 100);
+          }
+        }
+
+        // FIX: Priority-based urgency detection for assignments
+        if (isAssignment && activeEvent.priority != null) {
+          switch (activeEvent.priority) {
+            case 'high':
+              urgencyColorName = 'red';
+              priorityLabel = 'High Priority';
+              break;
+            case 'medium':
+              urgencyColorName = 'orange';
+              priorityLabel = 'Medium Priority';
+              break;
+            case 'low':
+              urgencyColorName = 'green';
+              priorityLabel = 'Low Priority';
+              break;
+            default:
+              final urgency = activeEvent.getUrgencyColor(now);
+              urgencyColorName = _colorToName(urgency);
+          }
+        } else {
+          final urgency = activeEvent.getUrgencyColor(now);
+          urgencyColorName = _colorToName(urgency);
+        }
       } else {
-        _onTimerComplete();
+        title = 'No upcoming events';
+        countdown = 'Tap to add one';
+        final themeName = prefs.getString('selected_theme') ?? 'auroraBorealis';
+        final theme = AppThemes.fromName(themeName);
+        final colors = AppThemes.gradientColorsFor(theme);
+        if (colors != null && colors.isNotEmpty) {
+          bgColor = '#${colors[0].value.toRadixString(16).substring(2)}';
+        }
       }
-    });
-  }
 
-  // ── Controls ──
-  Future<void> start({
-    required PomodoroPreset preset,
-    String? subjectTag,
-    int? eventId,
-  }) async {
-    _preset = await _resolvePreset(preset);
-    _subjectTag = subjectTag;
-    _linkedEventId = eventId;
-    _completedFocusSessions = 0;
-    _phaseBeforePause = null;
-    _breakPending = false;
-    _pendingBreakMinutes = 0;
-    _pendingSessionNoteId = null;
-
-    // Persist last subject for next launch
-    if (subjectTag != null && subjectTag.isNotEmpty) {
-      await FocusSettingsService.instance.setLastSubjectName(subjectTag);
-      final subjects = await DatabaseHelper.instance.getAllStudySubjects();
-      final match = subjects.where((s) => s.name == subjectTag).firstOrNull;
-      if (match != null) {
-        await FocusSettingsService.instance.setLastSubjectId(match.id);
-      }
-    }
-
-    _transitionTo(PomodoroPhase.focusing, minutes: _preset.focusMinutes);
-    await _saveState();
-  }
-
-  Future<void> startBreak() async {
-    if (!_breakPending) return;
-    final isLongBreak = _pendingBreakMinutes == _preset.longBreakMinutes;
-    _breakPending = false;
-    _transitionTo(
-      isLongBreak ? PomodoroPhase.longBreak : PomodoroPhase.shortBreak,
-      minutes: _pendingBreakMinutes,
-    );
-    await _saveState();
-  }
-
-  Future<void> pause() async {
-    if (!isRunning) return;
-    _tickTimer?.cancel();
-    _phaseBeforePause = _phase;
-    _remainingSeconds = _endTime?.difference(DateTime.now()).inSeconds ?? 0;
-    _phase = PomodoroPhase.paused;
-    await _saveState();
-    _syncNotifiers();
-    notifyListeners();
-    await _syncWidgetState();
-  }
-
-  Future<void> resume() async {
-    if (_phase != PomodoroPhase.paused || _phaseBeforePause == null) return;
-    _endTime = DateTime.now().add(Duration(seconds: _remainingSeconds.clamp(1, 99999)));
-    _phase = _phaseBeforePause!;
-    _phaseBeforePause = null;
-    _startTickTimer();
-    await _saveState();
-    _syncNotifiers();
-    notifyListeners();
-    await _syncWidgetState();
-  }
-
-  Future<void> stop() async {
-    _tickTimer?.cancel();
-    _phase = PomodoroPhase.idle;
-    _phaseBeforePause = null;
-    _endTime = null;
-    _remainingSeconds = 0;
-    _completedFocusSessions = 0;
-    _breakPending = false;
-    _pendingBreakMinutes = 0;
-    _pendingSessionNoteId = null;
-    await _clearSavedState();
-    await _notifications.cancel(9999);
-    _syncNotifiers();
-    notifyListeners();
-    await _syncWidgetState();
-  }
-
-  Future<void> skipBreak() async {
-    if (_phase != PomodoroPhase.shortBreak && _phase != PomodoroPhase.longBreak) return;
-    _tickTimer?.cancel();
-    _transitionTo(PomodoroPhase.focusing, minutes: _preset.focusMinutes);
-    await _saveState();
-  }
-
-  void dismissSessionNote() {
-    _pendingSessionNoteId = null;
-    notifyListeners();
-  }
-
-  void _transitionTo(PomodoroPhase newPhase, {required int minutes}) {
-    _phase = newPhase;
-    _endTime = DateTime.now().add(Duration(minutes: minutes));
-    _remainingSeconds = minutes * 60;
-    _startTickTimer();
-    _syncNotifiers();
-    notifyListeners();
-    _syncWidgetState();
-  }
-
-  // ── Completion Handler ──
-  Future<void> _onTimerComplete() async {
-    _tickTimer?.cancel();
-
-    if (_phase == PomodoroPhase.focusing) {
-      _completedFocusSessions++;
-      final sessionId = await _logSession(_preset.focusMinutes);
-
-      final autoStart = await FocusSettingsService.instance.getAutoStartBreak();
-      final isLongBreak = _completedFocusSessions % _preset.sessionsBeforeLongBreak == 0;
-      final breakMinutes = isLongBreak ? _preset.longBreakMinutes : _preset.shortBreakMinutes;
-
-      if (autoStart) {
-        await _notify(
-          isLongBreak ? 'Long Break! ☕' : 'Short Break! 🍵',
-          'Take a ${breakMinutes}-minute break.',
-        );
-        _transitionTo(
-          isLongBreak ? PomodoroPhase.longBreak : PomodoroPhase.shortBreak,
-          minutes: breakMinutes,
-        );
+      // FIX: Save ALL widget data to SharedPreferences for native widget provider
+      await prefs.setString('widget_event_title', title);
+      await prefs.setString('widget_countdown_text', countdown);
+      await prefs.setString('widget_bg_color', bgColor ?? '#00BFA5');
+      await prefs.setString('widget_text_color', textColor);
+      await prefs.setInt('widget_progress_percent', progressPercent);
+      await prefs.setBool('widget_is_assignment', isAssignment);
+      
+      if (subjectTag != null) {
+        await prefs.setString('widget_subject_tag', subjectTag);
       } else {
-        _phase = PomodoroPhase.idle;
-        _breakPending = true;
-        _pendingBreakMinutes = breakMinutes;
-        _endTime = null;
-        _remainingSeconds = 0;
-        await _notify(
-          'Focus Complete! 🎉',
-          'Great job${subjectTag != null ? ' on $subjectTag' : ''}. Open the app to start your break.',
-        );
-        await _saveState();
-        _syncNotifiers();
-        notifyListeners();
-        await _syncWidgetState();
-        return;
+        await prefs.remove('widget_subject_tag');
       }
-    } else if (_phase == PomodoroPhase.shortBreak || _phase == PomodoroPhase.longBreak) {
-      await _notify(
-        'Break Over!',
-        'Time to focus${subjectTag != null ? ' on $subjectTag' : ''}.',
-      );
-      _transitionTo(PomodoroPhase.focusing, minutes: _preset.focusMinutes);
-    }
-
-    await _saveState();
-  }
-
-  // ── Database & Goals ──
-  Future<int> _logSession(int minutes) async {
-    final session = StudySession(
-      eventId: _linkedEventId,
-      subjectTag: _subjectTag,
-      durationMinutes: minutes,
-      completedAtMillis: DateTime.now().millisecondsSinceEpoch,
-      sessionType: _preset.name.toLowerCase().replaceAll(' ', '_'),
-    );
-    final id = await DatabaseHelper.instance.insertStudySession(session);
-
-    final now = DateTime.now();
-    final startOfDay = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
-    await DatabaseHelper.instance.addAchievedMinutes(startOfDay, minutes);
-    await DatabaseHelper.instance.addAchievedPomodoro(startOfDay);
-
-    // Update subject total focus time
-    if (_subjectTag != null && _subjectTag!.isNotEmpty) {
-      final subjects = await DatabaseHelper.instance.getAllStudySubjects();
-      final match = subjects.where((s) => s.name == _subjectTag).firstOrNull;
-      if (match != null && match.id != null) {
-        await DatabaseHelper.instance.addSubjectFocusMinutes(match.id!, minutes);
+      if (priorityLabel != null) {
+        await prefs.setString('widget_priority_label', priorityLabel);
+      } else {
+        await prefs.remove('widget_priority_label');
       }
-    }
+      if (urgencyColorName != null) {
+        await prefs.setString('widget_urgency_color', urgencyColorName);
+      } else {
+        await prefs.remove('widget_urgency_color');
+      }
 
-    // Session notes prompt
-    if (await FocusSettingsService.instance.getSessionNotesEnabled()) {
-      _pendingSessionNoteId = id;
+      // FIX: Trigger native widget update with complete data including assignment fields
+      await _channel.invokeMethod('updateWidget', {
+        'title': title,
+        'countdown': countdown,
+        'bgColor': bgColor,
+        'textColor': textColor,
+        'progressPercent': progressPercent,
+        'urgencyColor': urgencyColorName,
+        'isAssignment': isAssignment,
+        'subjectTag': subjectTag,
+        'priorityLabel': priorityLabel,
+      });
+    } catch (e, stackTrace) {
+      debugPrint('Widget refresh error: $e');
+      debugPrint(stackTrace.toString());
     }
-
-    return id;
   }
 
-  // ── Notifications ──
-  Future<void> _notify(String title, String body) async {
-    // Respect existing Quiet Hours setting
-    final quiet = await SettingsService.instance.isInQuietHours(DateTime.now());
-    if (quiet) return;
+  /// Refresh the Pomodoro widget with current timer state.
+  static Future<void> refreshPomodoroWidget() async {
+    // Throttle: max once per 15 seconds
+    if (_lastPomodoroWidgetUpdate != null &&
+        DateTime.now().difference(_lastPomodoroWidgetUpdate!).inSeconds < 15) {
+      return;
+    }
+    _lastPomodoroWidgetUpdate = DateTime.now();
 
-    const androidDetails = AndroidNotificationDetails(
-      'pomodoro_channel',
-      'Pomodoro Timer',
-      channelDescription: 'Focus timer alerts',
-      importance: Importance.max,
-      priority: Priority.max,
-      playSound: true,
-      icon: '@mipmap/ic_launcher',
-    );
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
-    await _notifications.show(
-      9999,
-      title,
-      body,
-      const NotificationDetails(android: androidDetails),
-    );
+      // Read Pomodoro state from SharedPreferences (written by PomodoroService)
+      String subject = prefs.getString('pomodoro_subject') ?? 'Ready to Focus';
+      String timerText = prefs.getString('pomodoro_timer_text') ?? 'Tap to start';
+      String status = prefs.getString('pomodoro_status') ?? 'Focus';
+      // FIX: Read as double since PomodoroService saves progressPercent via setDouble
+      double rawProgress = prefs.getDouble('pomodoro_progress_percent') ?? 0.0;
+      int progressPercent = (rawProgress * 100).round().clamp(0, 100);
+      int completedSessions = prefs.getInt('pomodoro_completed_sessions') ?? 0;
+
+      // Get theme color
+      String? bgColor;
+      final themeName = prefs.getString('selected_theme') ?? 'auroraBorealis';
+      final theme = AppThemes.fromName(themeName);
+      final colors = AppThemes.gradientColorsFor(theme);
+      if (colors != null && colors.isNotEmpty) {
+        bgColor = '#${colors[0].value.toRadixString(16).substring(2)}';
+      }
+
+      // FIX: Phase-specific colors for Pomodoro widget
+      String phaseColor;
+      switch (status) {
+        case 'Focus':
+          phaseColor = '#FF6B6B'; // Red for focus
+          break;
+        case 'Short Break':
+          phaseColor = '#4ECDC4'; // Teal for short break
+          break;
+        case 'Long Break':
+          phaseColor = '#45B7D1'; // Blue for long break
+          break;
+        case 'Paused':
+          phaseColor = '#FFD93D'; // Yellow for paused
+          break;
+        default:
+          phaseColor = bgColor ?? '#00BFA5';
+      }
+
+      // FIX: Save all Pomodoro widget data to SharedPreferences with consistent keys
+      await prefs.setString('pomodoro_widget_subject', subject);
+      await prefs.setString('pomodoro_widget_timer_text', timerText);
+      await prefs.setString('pomodoro_widget_status', status);
+      await prefs.setInt('pomodoro_widget_progress_percent', progressPercent);
+      await prefs.setInt('pomodoro_widget_completed_sessions', completedSessions);
+      await prefs.setString('pomodoro_widget_phase_color', phaseColor);
+
+      // FIX: Trigger native widget update with complete Pomodoro data
+      await _channel.invokeMethod('updatePomodoroWidget', {
+        'subject': subject,
+        'timerText': timerText,
+        'status': status,
+        'bgColor': phaseColor,
+        'progressPercent': progressPercent,
+        'completedSessions': completedSessions,
+      });
+    } catch (e, stackTrace) {
+      debugPrint('Pomodoro widget refresh error: $e');
+      debugPrint(stackTrace.toString());
+    }
   }
 
-  @override
-  void dispose() {
-    _tickTimer?.cancel();
-    phaseNotifier.dispose();
-    remainingSecondsNotifier.dispose();
-    completedSessionsNotifier.dispose();
-    super.dispose();
+  /// Helper to convert Color to string name for widget
+  static String? _colorToName(Color? color) {
+    if (color == null) return null;
+    if (color == Colors.red) return 'red';
+    if (color == Colors.orange) return 'orange';
+    if (color == Colors.deepOrange) return 'deepOrange';
+    if (color == Colors.green) return 'green';
+    if (color == Colors.yellow) return 'yellow';
+    if (color == Colors.blue) return 'blue';
+    return null;
   }
 }
