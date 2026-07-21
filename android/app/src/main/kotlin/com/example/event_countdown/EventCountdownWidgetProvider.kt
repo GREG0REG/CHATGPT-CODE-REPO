@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.graphics.Color
 import android.widget.RemoteViews
+import org.json.JSONArray
 
 class EventCountdownWidgetProvider : AppWidgetProvider() {
     companion object {
@@ -16,6 +17,13 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         private const val KEY_TEXT_COLOR = "widget_text_color"
         private const val KEY_PROGRESS = "widget_progress_percent"
         private const val KEY_URGENCY_COLOR = "widget_urgency_color"
+        
+        // NEW: Grade and Tasks keys
+        private const val KEY_GRADE_CURRENT = "grade_current"
+        private const val KEY_GRADE_LETTER = "grade_letter"
+        private const val KEY_TASKS_DATA = "tasks_data"
+        private const val KEY_TASKS_URGENT = "tasks_urgent_count"
+        private const val KEY_TASKS_TOTAL = "tasks_total_count"
 
         fun parseColorOrDefault(colorStr: String?, defaultColor: Int): Int {
             return try {
@@ -70,7 +78,6 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                         "orange" -> Color.parseColor("#FF9800")
                         else -> Color.parseColor("#FF9800")
                     }
-                    // FIX: Set text color on bullet TextView instead of background on View
                     views.setTextColor(R.id.widget_urgency_dot, urgencyColor)
                     val urgencyLabel = when (urgencyColorName) {
                         "red" -> "URGENT"
@@ -117,6 +124,16 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             val textColorStr = prefs.getString(KEY_TEXT_COLOR, null)
             val progressPercent = prefs.getInt(KEY_PROGRESS, 65)
             val urgencyColorName = prefs.getString(KEY_URGENCY_COLOR, null)
+
+            // NEW: Read grade and tasks data (available for display if needed)
+            val gradeCurrent = prefs.getFloat(KEY_GRADE_CURRENT, 0f)
+            val gradeLetter = prefs.getString(KEY_GRADE_LETTER, "N/A") ?: "N/A"
+            val tasksData = prefs.getString(KEY_TASKS_DATA, "[]") ?: "[]"
+            val tasksUrgent = prefs.getInt(KEY_TASKS_URGENT, 0)
+            val tasksTotal = prefs.getInt(KEY_TASKS_TOTAL, 0)
+
+            // Log grade/tasks data for debugging
+            android.util.Log.d("EventWidget", "Grade: $gradeCurrent ($gradeLetter), Tasks: $tasksUrgent urgent / $tasksTotal total")
 
             for (widgetId in appWidgetIds) {
                 updateWidgetDirectly(context, appWidgetManager, widgetId, title, countdown, bgColorStr, textColorStr, progressPercent, urgencyColorName)
