@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:workmanager/workmanager.dart';
 import 'database_helper.dart';
+import 'services/battery_service.dart';
 import 'services/export_import_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/main_screen.dart';
@@ -25,8 +26,27 @@ void callbackDispatcher() {
     // Initialize minimal Flutter binding for background execution
     WidgetsFlutterBinding.ensureInitialized();
 
-    if (task == kWidgetRefreshTaskName || task == kWidgetRefreshFrequentTaskName) {
+    if (task == kWidgetRefreshFrequentTaskName) {
       try {
+        // FIXED: Respect adaptive refresh setting — skip frequent updates on low battery
+        final prefs = await SettingsService.instance.getAdaptiveRefreshEnabled();
+        if (prefs) {
+          final shouldReduce = await BatteryService.instance.shouldReduceRefresh();
+          if (shouldReduce) {
+            debugPrint('Adaptive refresh: skipping frequent update due to low battery');
+            return true; // Skip but don't fail
+          }
+        }
+        await WidgetService.refreshWidget();
+        await WidgetService.refreshPomodoroWidget();
+        return true;
+      } catch (e) {
+        debugPrint('Background widget refresh error: $e');
+        return false;
+      }
+    } else if (task == kWidgetRefreshTaskName) {
+      try {
+        // 4-hour fallback always runs regardless of battery
         await WidgetService.refreshWidget();
         await WidgetService.refreshPomodoroWidget();
         return true;
@@ -43,6 +63,10 @@ void callbackDispatcher() {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // FIXED: Initialize battery monitoring for adaptive refresh (Issue 50)
+  await BatteryService.instance.initialize();
+
   await NotificationService.instance.init();
   await PomodoroService.instance.init();
 
