@@ -197,7 +197,7 @@ class WidgetService {
       else if (grade >= 60) letter = 'D-';
       else letter = 'F';
 
-      await prefs.setDouble('grade_current', grade);
+      await prefs.setDouble('grade_current', grade.toDouble());
       await prefs.setString('grade_letter', letter);
 
       // Count urgent tasks
