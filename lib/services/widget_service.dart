@@ -1,232 +1,371 @@
 // CHATGPT-CODE-REPO-TEST/lib/services/widget_service.dart
-// COMPLETE FILE - Fixed type errors and added grade/tasks widget support
+// COMPLETE FILE - Fixed ThemeInfo type mismatch + Added Grade & Task Widgets
 
-import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:home_widget/home_widget.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../database_helper.dart';
 import '../models/event.dart';
 import '../services/countdown_service.dart';
-import '../services/settings_service.dart';
 import '../theme/app_themes.dart';
 
 class WidgetService {
-  WidgetService._();
-  static final WidgetService instance = WidgetService._();
+  static const MethodChannel _channel =
+      MethodChannel('com.example.event_countdown/widget');
 
-  // ── SharedPreferences keys (must match Android WidgetProvider) ──
-  static const _kTitle = 'event_title';
-  static const _kCountdown = 'countdown_text';
-  static const _kBgColor = 'widget_bg_color';
-  static const _kTextColor = 'widget_text_color';
-  static const _kProgress = 'widget_progress_percent';
-  static const _kUrgencyColor = 'widget_urgency_color';
+  static DateTime? _lastWidgetUpdate;
+  static DateTime? _lastPomodoroWidgetUpdate;
 
-  // Pomodoro widget keys
-  static const _kPomodoroSubject = 'pomodoro_subject';
-  static const _kPomodoroTimer = 'pomodoro_timer_text';
-  static const _kPomodoroStatus = 'pomodoro_status';
-  static const _kPomodoroBgColor = 'pomodoro_bg_color';
-  static const _kPomodoroProgress = 'pomodoro_progress_percent';
-  static const _kPomodoroSessions = 'pomodoro_completed_sessions';
-
-  // NEW: Grade widget keys
-  static const _kGradeData = 'grade_data';
-  static const _kGradeCurrent = 'grade_current';
-  static const _kGradeLetter = 'grade_letter';
-
-  // NEW: Tasks/Assignments widget keys
-  static const _kTasksData = 'tasks_data';
-  static const _kTasksUrgentCount = 'tasks_urgent_count';
-  static const _kTasksTotalCount = 'tasks_total_count';
-
-  // ── Refresh both widgets ──
+  /// Refresh the home screen widget with the next upcoming event.
   static Future<void> refreshWidget() async {
+    // Throttle: max once per 15 seconds
+    if (_lastWidgetUpdate != null &&
+        DateTime.now().difference(_lastWidgetUpdate!).inSeconds < 15) {
+      return;
+    }
+    _lastWidgetUpdate = DateTime.now();
+
     try {
+      final prefs = await SharedPreferences.getInstance();
       final events = await DatabaseHelper.instance.getAllEventsSorted();
       final now = DateTime.now();
-      final active = CountdownService.getActiveEvent(events, now);
 
-      final smartFormat = await SettingsService.instance.getSmartFormatEnabled();
-      // FIX: Use getSelectedTheme() which returns AppThemeOption directly
-      final themeOption = await SettingsService.instance.getSelectedTheme();
+      String title = 'No upcoming events';
+      String countdown = 'Tap to add one';
+      String? bgColor;
+      String textColor = '#FFFFFF';
+      int progressPercent = 65;
+      bool isAssignment = false;
+      String? subjectTag;
+      String? priorityLabel;
+      String? urgencyColorName;
 
-      if (active != null) {
+      final activeEvent = _getActiveEvent(events, now);
+
+      if (activeEvent != null) {
+        isAssignment = activeEvent.subjectTag != null &&
+            activeEvent.subjectTag!.isNotEmpty;
+        subjectTag = activeEvent.subjectTag;
+
+        if (isAssignment) {
+          title = '${activeEvent.title} • $subjectTag';
+        } else {
+          title = activeEvent.title;
+        }
+
         final result = CountdownService.buildCountdownText(
-          active,
+          activeEvent,
           now,
-          smartFormatEnabled: smartFormat,
+          smartFormatEnabled: prefs.getBool('smart_countdown_format') ?? false,
         );
+        countdown = result.text;
 
-        final urgencyColorName = _colorName(active.getUrgencyColor(now));
-        final progressPercent = _calculateProgress(active, now);
+        // Theme color - FIX: Use theme.option to get AppThemeOption from ThemeInfo
+        final themeName = prefs.getString('selected_theme') ?? 'auroraBorealis';
+        final theme = AppThemes.fromName(themeName);
+        final colors = AppThemes.gradientColorsFor(theme.option);
+        if (colors != null && colors.isNotEmpty) {
+          bgColor = '#${colors[0].value.toRadixString(16).substring(2)}';
+        }
 
-        // FIX: Pass AppThemeOption directly, not ThemeInfo
-        final colors = AppThemes.gradientColorsFor(themeOption);
-        final bgHex = _colorToHex(colors.first);
-        final textHex = '#FFFFFF';
+        // Progress calculation
+        if (activeEvent.deadlineMillis != null &&
+            activeEvent.startTimeMillis != null) {
+          final deadline = DateTime.fromMillisecondsSinceEpoch(
+              activeEvent.deadlineMillis!);
+          final startOfDeadlineDay =
+              DateTime(deadline.year, deadline.month, deadline.day);
+          final total = deadline.difference(startOfDeadlineDay).inMilliseconds;
+          final elapsed = now.difference(startOfDeadlineDay).inMilliseconds;
+          if (total > 0) {
+            progressPercent = ((elapsed / total) * 100).round().clamp(0, 100);
+          }
+        } else {
+          // For date-only events, progress through the day
+          final eventDate =
+              DateTime.fromMillisecondsSinceEpoch(activeEvent.dateMillis);
+          final startOfDay =
+              DateTime(eventDate.year, eventDate.month, eventDate.day);
+          final endOfDay = DateTime(
+              eventDate.year, eventDate.month, eventDate.day, 23, 59, 59);
+          final total = endOfDay.difference(startOfDay).inMilliseconds;
+          final elapsed = now.difference(startOfDay).inMilliseconds;
+          if (total > 0) {
+            progressPercent = ((elapsed / total) * 100).round().clamp(0, 100);
+          }
+        }
 
-        await HomeWidget.saveWidgetData<String>(_kTitle, active.title);
-        await HomeWidget.saveWidgetData<String>(_kCountdown, result.text);
-        await HomeWidget.saveWidgetData<String>(_kBgColor, bgHex);
-        await HomeWidget.saveWidgetData<String>(_kTextColor, textHex);
-        await HomeWidget.saveWidgetData<int>(_kProgress, progressPercent);
-        await HomeWidget.saveWidgetData<String>(_kUrgencyColor, urgencyColorName);
+        // Urgency color
+        if (activeEvent.isCompleted) {
+          urgencyColorName = 'grey';
+          priorityLabel = 'Completed';
+        } else {
+          switch (activeEvent.priority) {
+            case 4:
+              urgencyColorName = 'red';
+              priorityLabel = 'Urgent';
+              break;
+            case 3:
+              urgencyColorName = 'deepOrange';
+              priorityLabel = 'High Priority';
+              break;
+            case 2:
+              urgencyColorName = 'orange';
+              priorityLabel = 'Normal';
+              break;
+            case 1:
+              urgencyColorName = 'green';
+              priorityLabel = 'Low Priority';
+              break;
+            default:
+              final urgency = activeEvent.getUrgencyColor(now);
+              urgencyColorName = _colorToName(urgency);
+          }
+        }
       } else {
-        // No upcoming events
-        // FIX: Pass AppThemeOption directly
-        final colors = AppThemes.gradientColorsFor(themeOption);
-        final bgHex = _colorToHex(colors.first);
-
-        await HomeWidget.saveWidgetData<String>(_kTitle, 'No upcoming events');
-        await HomeWidget.saveWidgetData<String>(_kCountdown, '');
-        await HomeWidget.saveWidgetData<String>(_kBgColor, bgHex);
-        await HomeWidget.saveWidgetData<String>(_kTextColor, '#FFFFFF');
-        await HomeWidget.saveWidgetData<int>(_kProgress, 0);
-        await HomeWidget.saveWidgetData<String?>(_kUrgencyColor, null);
+        title = 'No upcoming events';
+        countdown = 'Tap to add one';
+        // FIX: Use theme.option to get AppThemeOption from ThemeInfo
+        final themeName = prefs.getString('selected_theme') ?? 'auroraBorealis';
+        final theme = AppThemes.fromName(themeName);
+        final colors = AppThemes.gradientColorsFor(theme.option);
+        if (colors != null && colors.isNotEmpty) {
+          bgColor = '#${colors[0].value.toRadixString(16).substring(2)}';
+        }
       }
 
-      // NEW: Save grade data to widget
-      await _refreshGradeWidget();
+      // Save ALL widget data to SharedPreferences for native widget provider
+      await prefs.setString('widget_event_title', title);
+      await prefs.setString('widget_countdown_text', countdown);
+      await prefs.setString('widget_bg_color', bgColor ?? '#00BFA5');
+      await prefs.setString('widget_text_color', textColor);
+      await prefs.setInt('widget_progress_percent', progressPercent);
+      await prefs.setBool('widget_is_assignment', isAssignment);
 
-      // NEW: Save tasks/assignments data to widget
-      await _refreshTasksWidget();
+      if (subjectTag != null) {
+        await prefs.setString('widget_subject_tag', subjectTag);
+      } else {
+        await prefs.remove('widget_subject_tag');
+      }
+      if (priorityLabel != null) {
+        await prefs.setString('widget_priority_label', priorityLabel);
+      } else {
+        await prefs.remove('widget_priority_label');
+      }
+      if (urgencyColorName != null) {
+        await prefs.setString('widget_urgency_color', urgencyColorName);
+      } else {
+        await prefs.remove('widget_urgency_color');
+      }
 
-      await HomeWidget.updateWidget(
-        name: 'EventCountdownWidgetProvider',
-        androidName: 'EventCountdownWidgetProvider',
-        iOSName: 'EventCountdownWidget',
-        qualifiedAndroidName: 'com.example.event_countdown.EventCountdownWidgetProvider',
-      );
-    } catch (e) {
+      // Trigger native widget update with complete data including assignment fields
+      await _channel.invokeMethod('updateWidget', {
+        'title': title,
+        'countdown': countdown,
+        'bgColor': bgColor,
+        'textColor': textColor,
+        'progressPercent': progressPercent,
+        'urgencyColor': urgencyColorName,
+        'isAssignment': isAssignment,
+        'subjectTag': subjectTag,
+        'priorityLabel': priorityLabel,
+      });
+    } catch (e, stackTrace) {
       debugPrint('Widget refresh error: $e');
+      debugPrint(stackTrace.toString());
     }
   }
 
-  // NEW: Refresh grade widget data
-  static Future<void> _refreshGradeWidget() async {
+  /// Refresh the Pomodoro widget with current timer state.
+  static Future<void> refreshPomodoroWidget() async {
+    // Throttle: max once per 15 seconds
+    if (_lastPomodoroWidgetUpdate != null &&
+        DateTime.now().difference(_lastPomodoroWidgetUpdate!).inSeconds < 15) {
+      return;
+    }
+    _lastPomodoroWidgetUpdate = DateTime.now();
+
     try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Read Pomodoro state from SharedPreferences (written by PomodoroService)
+      String subject = prefs.getString('pomodoro_subject') ?? 'Ready to Focus';
+      String timerText =
+          prefs.getString('pomodoro_timer_text') ?? 'Tap to start';
+      String status = prefs.getString('pomodoro_status') ?? 'Focus';
+      // FIX: Read as double since PomodoroService saves progressPercent via setDouble
+      double rawProgress = prefs.getDouble('pomodoro_progress_percent') ?? 0.0;
+      int progressPercent = (rawProgress * 100).round().clamp(0, 100);
+      int completedSessions = prefs.getInt('pomodoro_completed_sessions') ?? 0;
+
+      // Get theme color - FIX: Use theme.option
+      String? bgColor;
+      final themeName = prefs.getString('selected_theme') ?? 'auroraBorealis';
+      final theme = AppThemes.fromName(themeName);
+      final colors = AppThemes.gradientColorsFor(theme.option);
+      if (colors != null && colors.isNotEmpty) {
+        bgColor = '#${colors[0].value.toRadixString(16).substring(2)}';
+      }
+
+      // Phase-specific colors for Pomodoro widget
+      String phaseColor;
+      switch (status) {
+        case 'Focus':
+          phaseColor = '#FF6B6B'; // Red for focus
+          break;
+        case 'Short Break':
+          phaseColor = '#4ECDC4'; // Teal for short break
+          break;
+        case 'Long Break':
+          phaseColor = '#45B7D1'; // Blue for long break
+          break;
+        case 'Paused':
+          phaseColor = '#FFA726'; // Orange for paused
+          break;
+        default:
+          phaseColor = bgColor ?? '#00BFA5';
+      }
+
+      // Save Pomodoro widget data
+      await prefs.setString('pomodoro_widget_subject', subject);
+      await prefs.setString('pomodoro_widget_timer', timerText);
+      await prefs.setString('pomodoro_widget_status', status);
+      await prefs.setString('pomodoro_widget_bg_color', phaseColor);
+      await prefs.setInt('pomodoro_widget_progress_percent', progressPercent);
+      await prefs.setInt('pomodoro_widget_completed_sessions', completedSessions);
+
+      await _channel.invokeMethod('updatePomodoroWidget', {
+        'subject': subject,
+        'timerText': timerText,
+        'status': status,
+        'bgColor': phaseColor,
+        'progressPercent': progressPercent,
+        'completedSessions': completedSessions,
+      });
+    } catch (e, stackTrace) {
+      debugPrint('Pomodoro widget refresh error: $e');
+      debugPrint(stackTrace.toString());
+    }
+  }
+
+  /// Refresh Grade widget with current grade data
+  static Future<void> refreshGradeWidget() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
       final components = await DatabaseHelper.instance.getAllGradeComponents();
-      
+
       double weightedScore = 0;
       double totalWeight = 0;
       for (final c in components) {
-        weightedScore += ((c['score'] as num) / (c['totalPoints'] as num)) * (c['weight'] as num);
+        weightedScore +=
+            ((c['score'] as num) / (c['totalPoints'] as num)) *
+                (c['weight'] as num);
         totalWeight += (c['weight'] as num);
       }
-      
-      final currentGrade = totalWeight > 0 ? (weightedScore / totalWeight) * 100 : 0.0;
-      
+      final grade = totalWeight > 0 ? (weightedScore / totalWeight) * 100 : 0.0;
+
       String letterGrade;
-      final g = currentGrade;
-      if (g >= 97) letterGrade = 'A+';
-      else if (g >= 93) letterGrade = 'A';
-      else if (g >= 90) letterGrade = 'A-';
-      else if (g >= 87) letterGrade = 'B+';
-      else if (g >= 83) letterGrade = 'B';
-      else if (g >= 80) letterGrade = 'B-';
-      else if (g >= 77) letterGrade = 'C+';
-      else if (g >= 73) letterGrade = 'C';
-      else if (g >= 70) letterGrade = 'C-';
-      else if (g >= 67) letterGrade = 'D+';
-      else if (g >= 63) letterGrade = 'D';
-      else if (g >= 60) letterGrade = 'D-';
+      if (grade >= 97) letterGrade = 'A+';
+      else if (grade >= 93) letterGrade = 'A';
+      else if (grade >= 90) letterGrade = 'A-';
+      else if (grade >= 87) letterGrade = 'B+';
+      else if (grade >= 83) letterGrade = 'B';
+      else if (grade >= 80) letterGrade = 'B-';
+      else if (grade >= 77) letterGrade = 'C+';
+      else if (grade >= 73) letterGrade = 'C';
+      else if (grade >= 70) letterGrade = 'C-';
+      else if (grade >= 67) letterGrade = 'D+';
+      else if (grade >= 63) letterGrade = 'D';
+      else if (grade >= 60) letterGrade = 'D-';
       else letterGrade = 'F';
 
-      await HomeWidget.saveWidgetData<String>(_kGradeData, jsonEncode(components));
-      await HomeWidget.saveWidgetData<double>(_kGradeCurrent, currentGrade);
-      await HomeWidget.saveWidgetData<String>(_kGradeLetter, letterGrade);
+      // Save to SharedPreferences for native widget
+      await prefs.setDouble('grade_widget_current_grade', grade);
+      await prefs.setString('grade_widget_letter_grade', letterGrade);
+      await prefs.setInt('grade_widget_component_count', components.length);
+
+      await _channel.invokeMethod('updateGradeWidget', {
+        'grade': grade.toStringAsFixed(1),
+        'letterGrade': letterGrade,
+        'componentCount': components.length,
+      });
     } catch (e) {
       debugPrint('Grade widget refresh error: $e');
     }
   }
 
-  // NEW: Refresh tasks/assignments widget data
-  static Future<void> _refreshTasksWidget() async {
-    try {
-      final events = await DatabaseHelper.instance.getAllEventsSorted();
-      final now = DateTime.now();
-      final nowMillis = now.millisecondsSinceEpoch;
-
-      final assignments = events.where((e) {
-        return e.subjectTag != null &&
-               e.subjectTag!.isNotEmpty &&
-               !e.isCompleted &&
-               e.finalMillis > nowMillis;
-      }).toList();
-
-      final urgentCount = assignments.where((a) => a.priority == 4).length;
-      final totalCount = assignments.length;
-
-      // Build task list JSON for widget
-      final taskList = assignments.take(5).map((a) => {
-        'title': a.title,
-        'subject': a.subjectTag,
-        'priority': a.priority,
-        'priorityLabel': a.priorityLabel,
-        'daysLeft': ((a.finalMillis - nowMillis) ~/ 86400000).clamp(0, 999),
-      }).toList();
-
-      await HomeWidget.saveWidgetData<String>(_kTasksData, jsonEncode(taskList));
-      await HomeWidget.saveWidgetData<int>(_kTasksUrgentCount, urgentCount);
-      await HomeWidget.saveWidgetData<int>(_kTasksTotalCount, totalCount);
-    } catch (e) {
-      debugPrint('Tasks widget refresh error: $e');
-    }
-  }
-
-  static Future<void> refreshPomodoroWidget() async {
+  /// Refresh Task widget with upcoming assignments
+  static Future<void> refreshTaskWidget() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final subject = prefs.getString('pomodoro_subject') ?? 'Ready to Focus';
-      final timerText = prefs.getString('pomodoro_timer_text') ?? 'Tap to start';
-      final status = prefs.getString('pomodoro_status') ?? 'Focus';
-      // FIX: Use getSelectedTheme() which returns AppThemeOption directly
-      final themeOption = await SettingsService.instance.getSelectedTheme();
-      // FIX: Pass AppThemeOption directly
-      final colors = AppThemes.gradientColorsFor(themeOption);
-      final bgHex = _colorToHex(colors.first);
-      final progressPercent = prefs.getDouble('pomodoro_progress_percent')?.round() ?? 0;
-      final completedSessions = prefs.getInt('pomodoro_completed_sessions_total') ?? 0;
+      final events = await DatabaseHelper.instance.getAllEventsSorted();
+      final now = DateTime.now();
 
-      await HomeWidget.saveWidgetData<String>(_kPomodoroSubject, subject);
-      await HomeWidget.saveWidgetData<String>(_kPomodoroTimer, timerText);
-      await HomeWidget.saveWidgetData<String>(_kPomodoroStatus, status);
-      await HomeWidget.saveWidgetData<String>(_kPomodoroBgColor, bgHex);
-      await HomeWidget.saveWidgetData<int>(_kPomodoroProgress, progressPercent);
-      await HomeWidget.saveWidgetData<int>(_kPomodoroSessions, completedSessions);
+      // Get upcoming assignments (events with subject tags, not completed, future)
+      final assignments = events.where((e) {
+        return e.subjectTag != null &&
+            e.subjectTag!.isNotEmpty &&
+            !e.isCompleted &&
+            e.finalMillis > now.millisecondsSinceEpoch;
+      }).toList();
+      assignments.sort((a, b) => a.finalMillis.compareTo(b.finalMillis));
 
-      await HomeWidget.updateWidget(
-        name: 'PomodoroWidgetProvider',
-        androidName: 'PomodoroWidgetProvider',
-        iOSName: 'PomodoroWidget',
-        qualifiedAndroidName: 'com.example.event_countdown.PomodoroWidgetProvider',
-      );
+      // Take top 3 upcoming
+      final topTasks = assignments.take(3).toList();
+
+      // Build task list for widget
+      List<Map<String, dynamic>> taskList = [];
+      for (final task in topTasks) {
+        final diff = DateTime.fromMillisecondsSinceEpoch(task.finalMillis)
+            .difference(now);
+        String timeLeft;
+        if (diff.inDays > 0) {
+          timeLeft = '${diff.inDays}d left';
+        } else if (diff.inHours > 0) {
+          timeLeft = '${diff.inHours}h left';
+        } else {
+          timeLeft = '${diff.inMinutes}m left';
+        }
+
+        taskList.add({
+          'title': task.title,
+          'subject': task.subjectTag,
+          'priority': task.priority,
+          'timeLeft': timeLeft,
+        });
+      }
+
+      // Save to SharedPreferences
+      await prefs.setString('task_widget_json', taskList.toString());
+      await prefs.setInt('task_widget_count', topTasks.length);
+
+      await _channel.invokeMethod('updateTaskWidget', {
+        'tasks': taskList,
+        'totalCount': assignments.length,
+      });
     } catch (e) {
-      debugPrint('Pomodoro widget refresh error: $e');
+      debugPrint('Task widget refresh error: $e');
     }
   }
 
-  // ── Helpers ──
+  // ─── Helpers ─────────────────────────────────────────────
 
-  static int _calculateProgress(Event event, DateTime now) {
-    if (event.startTimeMillis == null || event.deadlineMillis == null) return 65;
-    final total = event.deadlineMillis! - event.startTimeMillis!;
-    final elapsed = now.millisecondsSinceEpoch - event.startTimeMillis!;
-    if (total <= 0) return 65;
-    return ((elapsed / total) * 100).clamp(0, 100).round();
+  static Event? _getActiveEvent(List<Event> sortedEvents, DateTime now) {
+    final nowMillis = now.millisecondsSinceEpoch;
+    for (final e in sortedEvents) {
+      if (e.finalMillis > nowMillis && !e.isCompleted) return e;
+    }
+    return sortedEvents.isNotEmpty ? sortedEvents.first : null;
   }
 
-  static String _colorName(Color color) {
+  static String _colorToName(Color color) {
     if (color == Colors.red) return 'red';
-    if (color == Colors.deepOrange) return 'deepOrange';
     if (color == Colors.orange) return 'orange';
+    if (color == Colors.deepOrange) return 'deepOrange';
     if (color == Colors.green) return 'green';
-    return 'grey';
-  }
-
-  static String _colorToHex(Color color) {
-    return '#${color.value.toRadixString(16).substring(2).toUpperCase().padLeft(6, '0')}';
+    if (color == Colors.grey) return 'grey';
+    return 'green';
   }
 }
