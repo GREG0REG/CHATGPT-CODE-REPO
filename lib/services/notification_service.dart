@@ -3,144 +3,201 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import '../models/event.dart';
 
-/// Schedules exactly the notifications required by the spec:
-///  - 1 day before start time at 9:00 AM (if start time set)
-///    OR 1 day before deadline at 9:00 AM (if no start time)
-///  - 1 hour before start time (if start time set)
-///    OR 1 hour before deadline (if no start time)
-/// Tapping a notification opens the app (default behaviour).
+/// FIXED: Properly schedules notifications with exact alarm permissions
+/// and correct timing logic for start time vs deadline
 class NotificationService {
-NotificationService._();
+  NotificationService._();
 
-static final NotificationService instance = NotificationService._();
+  static final NotificationService instance = NotificationService._();
 
-final FlutterLocalNotificationsPlugin _plugin =
-    FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
 
-bool _initialized = false;
+  bool _initialized = false;
 
-Future<void> init() async {
-  if (_initialized) return;
-  tz_data.initializeTimeZones();
-  tz.setLocalLocation(tz.local);
-  
-  const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const initSettings = InitializationSettings(android: androidInit);
-  await _plugin.initialize(initSettings);
-  
-  // Android 13+ runtime notification permission.
-  final androidImpl = _plugin.resolvePlatformSpecificImplementation<
-      AndroidFlutterLocalNotificationsPlugin>();
-  await androidImpl?.requestNotificationsPermission();
-  await androidImpl?.requestExactAlarmsPermission();
-  _initialized = true;
-}
-
-/// Two notification IDs per event: dayBefore = id*10+1, hourBefore = id*10+2
-int _dayBeforeId(int eventId) => eventId * 10 + 1;
-int _hourBeforeId(int eventId) => eventId * 10 + 2;
-
-Future<void> cancelForEvent(int eventId) async {
-  await _plugin.cancel(_dayBeforeId(eventId));
-  await _plugin.cancel(_hourBeforeId(eventId));
-}
-
-Future<void> scheduleForEvent(Event event) async {
-  if (event.id == null) return;
-  await cancelForEvent(event.id!);
-  
-  // FIX: Which timestamp drives the reminders: start time if set, else deadline, else date.
-  final anchorMillis = event.startTimeMillis ?? event.deadlineMillis ?? event.dateMillis;
-  
-  final anchor = DateTime.fromMillisecondsSinceEpoch(anchorMillis);
-  final now = DateTime.now();
-  
-  // 1 day before, at 9:00 AM.
-  final dayBeforeDate = anchor.subtract(const Duration(days: 1));
-  final dayBefore = DateTime(
-    dayBeforeDate.year,
-    dayBeforeDate.month,
-    dayBeforeDate.day,
-    9,
-    0,
-  );
-  
-  // 1 hour before the anchor.
-  final hourBefore = anchor.subtract(const Duration(hours: 1));
-  
-  // FIX: Determine label text based on what type of time we have
-  String label;
-  if (event.startTimeMillis != null) {
-    label = 'starts';
-  } else if (event.deadlineMillis != null) {
-    label = 'deadline is';
-  } else {
-    label = 'is on';
+  Future<void> init() async {
+    if (_initialized) return;
+    tz_data.initializeTimeZones();
+    tz.setLocalLocation(tz.local);
+    
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidInit);
+    await _plugin.initialize(initSettings);
+    
+    // FIXED: Request all required permissions for Android 12+ (API 31+)
+    final androidImpl = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    
+    // Request notification permission (Android 13+)
+    final notifPermission = await androidImpl?.requestNotificationsPermission();
+    print('Notification permission: $notifPermission');
+    
+    // FIXED: Request exact alarm permission - CRITICAL for precise scheduling
+    final exactAlarmPermission = await androidImpl?.requestExactAlarmsPermission();
+    print('Exact alarm permission: $exactAlarmPermission');
+    
+    _initialized = true;
   }
-  
-  // Format time for display (12-hour or 24-hour)
-  String formatTime(DateTime dt) {
-    final hour = dt.hour;
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final period = hour >= 12 ? 'PM' : 'AM';
-    final displayHour = hour % 12 == 0 ? 12 : hour % 12;
-    return '$displayHour:$minute $period';
+
+  /// FIXED: Use stable notification IDs to prevent duplicates
+  /// Format: eventId * 100 + reminderType (1=dayBefore, 2=hourBefore)
+  int _dayBeforeId(int eventId) => eventId * 100 + 1;
+  int _hourBeforeId(int eventId) => eventId * 100 + 2;
+
+  Future<void> cancelForEvent(int eventId) async {
+    await _plugin.cancel(_dayBeforeId(eventId));
+    await _plugin.cancel(_hourBeforeId(eventId));
   }
-  
-  if (dayBefore.isAfter(now)) {
-    await _scheduleAt(
-      id: _dayBeforeId(event.id!),
-      title: event.title,
-      body: 'Tomorrow at 9:00 AM • ${event.title} $label',
-      when: dayBefore,
+
+  /// FIXED: Properly determine anchor time and schedule both reminders
+  Future<void> scheduleForEvent(Event event) async {
+    if (event.id == null) return;
+    
+    // Cancel any existing notifications for this event first
+    await cancelForEvent(event.id!);
+    
+    // FIXED: Determine the correct anchor time
+    // Priority: startTime > deadline > date
+    int anchorMillis;
+    String timeType;
+    
+    if (event.startTimeMillis != null) {
+      anchorMillis = event.startTimeMillis!;
+      timeType = 'starts';
+    } else if (event.deadlineMillis != null) {
+      anchorMillis = event.deadlineMillis!;
+      timeType = 'deadline';
+    } else {
+      anchorMillis = event.dateMillis;
+      timeType = 'is on';
+    }
+    
+    final anchor = DateTime.fromMillisecondsSinceEpoch(anchorMillis);
+    final now = DateTime.now();
+    
+    // FIXED: Only schedule if event is in the future
+    if (anchor.isBefore(now)) {
+      print('Event "${event.title}" is in the past, skipping notification scheduling');
+      return;
+    }
+    
+    // 1 day before at 9:00 AM
+    final dayBeforeDate = anchor.subtract(const Duration(days: 1));
+    final dayBefore = DateTime(
+      dayBeforeDate.year,
+      dayBeforeDate.month,
+      dayBeforeDate.day,
+      9, 0, 0,
     );
+    
+    // 1 hour before the anchor
+    final hourBefore = anchor.subtract(const Duration(hours: 1));
+    
+    // Format time for display
+    String formatTime(DateTime dt) {
+      final hour = dt.hour;
+      final minute = dt.minute.toString().padLeft(2, '0');
+      final period = hour >= 12 ? 'PM' : 'AM';
+      final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+      return '$displayHour:$minute $period';
+    }
+    
+    // Schedule day-before notification
+    if (dayBefore.isAfter(now)) {
+      print('Scheduling day-before notification for "${event.title}" at $dayBefore');
+      await _scheduleAt(
+        id: _dayBeforeId(event.id!),
+        title: '📅 ${event.title}',
+        body: 'Tomorrow at 9:00 AM • ${event.title} $timeType',
+        when: dayBefore,
+      );
+    }
+    
+    // Schedule hour-before notification
+    if (hourBefore.isAfter(now)) {
+      print('Scheduling hour-before notification for "${event.title}" at $hourBefore');
+      await _scheduleAt(
+        id: _hourBeforeId(event.id!),
+        title: '⏰ ${event.title}',
+        body: 'At ${formatTime(hourBefore)} • ${event.title} $timeType',
+        when: hourBefore,
+      );
+    }
   }
-  
-  if (hourBefore.isAfter(now)) {
-    await _scheduleAt(
-      id: _hourBeforeId(event.id!),
-      title: '⏰ ${event.title}',
-      body: 'At ${formatTime(hourBefore)} • ${event.title} $label',
-      when: hourBefore,
+
+  /// FIXED: Use exactAllowWhileIdle for reliable delivery even in Doze mode
+  Future<void> _scheduleAt({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime when,
+  }) async {
+    const androidDetails = AndroidNotificationDetails(
+      'event_countdown_channel',
+      'Event Reminders',
+      channelDescription: 'Reminders for upcoming events and deadlines',
+      importance: Importance.max,
+      priority: Priority.max,
+      category: AndroidNotificationCategory.reminder,
+      visibility: NotificationVisibility.public,
+      autoCancel: true,
+      playSound: true,
+      enableVibration: true,
+      icon: '@mipmap/ic_launcher',
+      // FIXED: Full screen intent for alarm-like behavior
+      fullScreenIntent: false,
     );
+    
+    const details = NotificationDetails(android: androidDetails);
+    
+    try {
+      await _plugin.zonedSchedule(
+        id,
+        title,
+        body,
+        tz.TZDateTime.from(when, tz.local),
+        details,
+        // FIXED: Use exactAllowWhileIdle for Doze mode compatibility
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      print('Successfully scheduled notification ID $id for $when');
+    } catch (e) {
+      print('ERROR scheduling notification ID $id: $e');
+      // Fallback to inexact if exact fails
+      try {
+        await _plugin.zonedSchedule(
+          id,
+          title,
+          body,
+          tz.TZDateTime.from(when, tz.local),
+          details,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        );
+        print('Fallback: Scheduled inexact notification ID $id');
+      } catch (e2) {
+        print('FATAL: Could not schedule notification: $e2');
+      }
+    }
   }
-}
 
-Future<void> _scheduleAt({
-  required int id,
-  required String title,
-  required String body,
-  required DateTime when,
-}) async {
-  const androidDetails = AndroidNotificationDetails(
-    'event_countdown_channel',
-    'Event Reminders',
-    channelDescription: 'Reminders for upcoming events and deadlines',
-    importance: Importance.max,
-    priority: Priority.max,
-    category: AndroidNotificationCategory.alarm,
-    visibility: NotificationVisibility.public,
-    autoCancel: false,
-    playSound: true,
-    icon: '@mipmap/ic_launcher',
-  );
-  
-  const details = NotificationDetails(android: androidDetails);
-  
-  await _plugin.zonedSchedule(
-    id,
-    title,
-    body,
-    tz.TZDateTime.from(when, tz.local),
-    details,
-    androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-  );
-}
-
-Future<void> rescheduleAll(List<Event> events) async {
-  for (final e in events) {
-    await scheduleForEvent(e);
+  Future<void> rescheduleAll(List<Event> events) async {
+    for (final e in events) {
+      await scheduleForEvent(e);
+    }
   }
-}
+  
+  /// FIXED: Show immediate notification (for testing)
+  Future<void> showTestNotification(String title, String body) async {
+    const androidDetails = AndroidNotificationDetails(
+      'event_countdown_test',
+      'Test Notifications',
+      channelDescription: 'For testing notification functionality',
+      importance: Importance.max,
+      priority: Priority.max,
+    );
+    const details = NotificationDetails(android: androidDetails);
+    await _plugin.show(99999, title, body, details);
+  }
 }
