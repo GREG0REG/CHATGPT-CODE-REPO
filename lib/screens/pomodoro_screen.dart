@@ -1,6 +1,3 @@
-// CHATGPT-CODE-REPO-TEST/lib/screens/pomodoro_screen.dart
-// FIXED - Added import for PomodoroService (PomodoroPhase & PomodoroPreset)
-
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +8,7 @@ import '../main.dart';
 import '../models/event.dart';
 import '../models/study_subject.dart';
 import '../services/focus_settings_service.dart';
-import '../services/pomodoro_service.dart'; // FIXED: Added this import
+import '../services/pomodoro_service.dart';
 import '../services/widget_service.dart';
 import '../theme/app_themes.dart';
 import '../WIDGET/subject_picker_sheet.dart';
@@ -34,13 +31,11 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   StudySubject? _selectedStudySubject;
   int? _selectedEventId;
 
-  // Custom duration values (loaded from FocusSettings, no longer shown as sliders)
   int _customFocus = 25;
   int _customShortBreak = 5;
   int _customLongBreak = 15;
   int _customSessions = 4;
 
-  // Daily goal progress
   int _dailyGoalMinutes = 120;
   int _todayMinutes = 0;
 
@@ -59,7 +54,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
 
     _loadSettings();
 
-    // Listen to service changes
     _service.phaseNotifier.addListener(_onServiceUpdate);
     _service.remainingSecondsNotifier.addListener(_onServiceUpdate);
     _service.completedSessionsNotifier.addListener(_onServiceUpdate);
@@ -82,7 +76,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     final customSess = await fs.getCustomSessionsBeforeLongBreak();
     final goalMin = await fs.getDailyGoalMinutes();
 
-    // Restore last subject
     final lastName = await fs.getLastSubjectName();
     StudySubject? lastSubject;
     if (lastName != null) {
@@ -262,7 +255,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       ),
       builder: (ctx) => const FocusSettingsSheet(),
     );
-    // Reload settings after sheet closes
     await _loadSettings();
   }
 
@@ -355,7 +347,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
           ),
         ),
         actions: [
-          // Settings gear
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: _openFocusSettings,
@@ -405,7 +396,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
             children: [
               const SizedBox(height: 12),
 
-              // ── Subject Selector (tappable card) ──
               if (_service.phase == PomodoroPhase.idle) ...[
                 _buildSubjectSelector(scheme),
                 const SizedBox(height: 16),
@@ -443,7 +433,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                 const SizedBox(height: 16),
               ],
 
-              // ── Daily Goal Progress ──
               if (_service.phase == PomodoroPhase.idle || _service.phase == PomodoroPhase.paused) ...[
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -489,22 +478,18 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                 const SizedBox(height: 16),
               ],
 
-              // ── Preset Pills (only when idle) ──
               if (_service.phase == PomodoroPhase.idle) _buildPresets(scheme),
 
               const Spacer(),
 
-              // ── Timer Display ──
               _buildTimerDisplay(scheme),
 
               const Spacer(),
 
-              // ── Controls ──
               _buildControls(scheme),
 
               const SizedBox(height: 32),
 
-              // ── Phase Label ──
               Text(
                 _phaseLabel(),
                 style: TextStyle(
@@ -624,7 +609,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Background ring
                 SizedBox(
                   width: 280,
                   height: 280,
@@ -635,7 +619,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                     valueColor: const AlwaysStoppedAnimation(Colors.transparent),
                   ),
                 ),
-                // Progress ring
                 SizedBox(
                   width: 280,
                   height: 280,
@@ -647,7 +630,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                     strokeCap: StrokeCap.round,
                   ),
                 ),
-                // Glass center
                 ClipOval(
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
@@ -761,7 +743,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       );
     }
 
-    // Running (focus or break)
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
