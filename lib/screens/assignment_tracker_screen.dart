@@ -77,7 +77,8 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen> {
     _dueDate = DateTime.now().add(const Duration(days: 7));
     
     await _loadAssignments();
-
+    await WidgetService.refreshGradeWidget();
+    await WidgetService.refreshTaskWidget();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
