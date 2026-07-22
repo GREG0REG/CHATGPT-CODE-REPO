@@ -1070,6 +1070,69 @@ class DatabaseHelper {
   }
 
   // ============================================
+  // COMPREHENSIVE EXPORT/IMPORT (FIX for Issue 56)
+  // ============================================
+
+  /// Exports all database tables as raw maps.
+  /// Returns a map where keys are table names and values are lists of row maps.
+  Future<Map<String, List<Map<String, dynamic>>>> exportAllTables() async {
+    final db = await database;
+    final result = <String, List<Map<String, dynamic>>>{};
+
+    const tables = [
+      'events',
+      'custom_reminders',
+      'notification_history',
+      'study_sessions',
+      'subtasks',
+      'flashcards',
+      'study_schedules',
+      'daily_goals',
+      'study_subjects',
+      'flashcard_review_history',
+      'daily_card_goals',
+      'grade_components',
+      'quick_notes',
+    ];
+
+    for (final table in tables) {
+      try {
+        final rows = await db.query(table);
+        result[table] = rows;
+      } catch (e) {
+        // Table might not exist in older database versions
+        result[table] = [];
+      }
+    }
+
+    return result;
+  }
+
+  /// Imports all database tables from raw maps.
+  /// Runs inside a transaction — if any table fails, the entire import rolls back.
+  Future<void> importAllTables(Map<String, List<Map<String, dynamic>>> data) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final entry in data.entries) {
+        final table = entry.key;
+        final rows = entry.value;
+
+        // Check if table exists before operating
+        final tableCheck = await txn.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+          [table],
+        );
+        if (tableCheck.isEmpty) continue;
+
+        await txn.delete(table);
+        for (final row in rows) {
+          await txn.insert(table, row);
+        }
+      }
+    });
+  }
+
+  // ============================================
   // UTILITY
   // ============================================
   Future<void> vacuum() async {
