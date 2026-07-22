@@ -252,8 +252,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // ==================== BACKUP & RESTORE (FIXED) ====================
 
-  /// Exports events via system share sheet — user picks Downloads, Drive, email, etc.
-  /// The file survives app storage clear because it's saved to a location the user chose.
+  /// Share events via system share sheet — WhatsApp, Gmail, Drive, etc.
   Future<void> _exportEvents() async {
     setState(() => _busy = true);
     try {
@@ -265,7 +264,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Exports ALL data (events, flashcards, notes, grades, etc.) via share sheet.
+  /// Save events export to a user-chosen location via file picker dialog.
+  Future<void> _saveEventsToDevice() async {
+    setState(() => _busy = true);
+    try {
+      final path = await ExportImportService.saveExportToDevice();
+      if (path != null) {
+        _showSnack('Saved to: ${path.split('/').last}');
+      }
+    } catch (e) {
+      _showSnack('Save failed: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Share full backup via system share sheet.
   Future<void> _exportAllData() async {
     setState(() => _busy = true);
     try {
@@ -277,8 +291,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Imports events from a JSON file picked by the user.
-  /// The service handles file picker, validation, and backup/rollback.
+  /// Save full backup to a user-chosen location via file picker dialog.
+  Future<void> _saveAllDataToDevice() async {
+    setState(() => _busy = true);
+    try {
+      final path = await ExportImportService.saveFullExportToDevice();
+      if (path != null) {
+        _showSnack('Saved to: ${path.split('/').last}');
+      }
+    } catch (e) {
+      _showSnack('Save failed: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Import events from a JSON file picked by the user.
   Future<void> _importEvents() async {
     setState(() => _busy = true);
     try {
@@ -294,7 +322,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Imports full backup (all tables) from a JSON file picked by the user.
+  /// Import full backup from a JSON file picked by the user.
   Future<void> _importAllData() async {
     setState(() => _busy = true);
     try {
@@ -573,16 +601,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 // ==================== BACKUP & RESTORE UI (FIXED) ====================
                 const _SectionHeader('Backup & Restore'),
                 ListTile(
-                  leading: const Icon(Icons.upload_file),
-                  title: const Text('Export Events'),
-                  subtitle: const Text('Share via Downloads, email, Drive, etc.'),
+                  leading: const Icon(Icons.share),
+                  title: const Text('Share Events Export'),
+                  subtitle: const Text('Send via WhatsApp, Gmail, Drive, etc.'),
                   onTap: _exportEvents,
                 ),
                 ListTile(
+                  leading: const Icon(Icons.save_alt),
+                  title: const Text('Save Events to Device'),
+                  subtitle: const Text('Choose Downloads or any folder'),
+                  onTap: _saveEventsToDevice,
+                ),
+                const Divider(),
+                ListTile(
                   leading: const Icon(Icons.cloud_upload),
-                  title: const Text('Export All Data'),
+                  title: const Text('Share Full Backup'),
                   subtitle: const Text('Everything: events, flashcards, notes, grades...'),
                   onTap: _exportAllData,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.save),
+                  title: const Text('Save Full Backup to Device'),
+                  subtitle: const Text('Choose Downloads or any folder'),
+                  onTap: _saveAllDataToDevice,
                 ),
                 const Divider(),
                 ListTile(
