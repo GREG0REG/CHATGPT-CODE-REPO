@@ -250,14 +250,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // ==================== BACKUP & RESTORE (FIXED) ====================
+
+  /// Exports events via system share sheet — user picks Downloads, Drive, email, etc.
+  /// The file survives app storage clear because it's saved to a location the user chose.
   Future<void> _exportEvents() async {
     setState(() => _busy = true);
     try {
-      final path = await ExportImportService.exportToJson();
-      if (!mounted) return;
-      final isDownloads = path.contains('/Download/');
-      _showSnack(
-          '${isDownloads ? 'Exported to Downloads' : 'Exported to app storage'}\nFile: ${path.split('/').last}');
+      await ExportImportService.exportAndShareEvents();
     } catch (e) {
       _showSnack('Export failed: $e');
     } finally {
@@ -265,43 +265,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _importEvents() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['json'],
-      allowMultiple: false,
-      withData: false,
-    );
-
-    if (result == null || result.files.single.path == null) return;
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text('Import events?'),
-        content: Text(
-            'Import ${result.files.single.name}?\nThis will replace ALL current events. This cannot be undone.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Import')),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
+  /// Exports ALL data (events, flashcards, notes, grades, etc.) via share sheet.
+  Future<void> _exportAllData() async {
     setState(() => _busy = true);
     try {
-      final count = await ExportImportService.importFromJson(result.files.single.path!);
+      await ExportImportService.exportAndShareAllData();
+    } catch (e) {
+      _showSnack('Export failed: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Imports events from a JSON file picked by the user.
+  /// The service handles file picker, validation, and backup/rollback.
+  Future<void> _importEvents() async {
+    setState(() => _busy = true);
+    try {
+      final count = await ExportImportService.importEventsFromPicker();
       final events = await DatabaseHelper.instance.getAllEventsSorted();
       await NotificationService.instance.rescheduleAll(events);
       await WidgetService.refreshWidget();
       _showSnack('Imported $count event(s)');
+    } catch (e) {
+      _showSnack('Import failed: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Imports full backup (all tables) from a JSON file picked by the user.
+  Future<void> _importAllData() async {
+    setState(() => _busy = true);
+    try {
+      await ExportImportService.importAllDataFromPicker();
+      final events = await DatabaseHelper.instance.getAllEventsSorted();
+      await NotificationService.instance.rescheduleAll(events);
+      await WidgetService.refreshWidget();
+      _showSnack('All data imported successfully');
     } catch (e) {
       _showSnack('Import failed: $e');
     } finally {
@@ -569,18 +570,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _runVacuum,
                 ),
                 const Divider(),
-                const _SectionHeader('Backup'),
+                // ==================== BACKUP & RESTORE UI (FIXED) ====================
+                const _SectionHeader('Backup & Restore'),
                 ListTile(
                   leading: const Icon(Icons.upload_file),
-                  title: const Text('Export events to JSON'),
-                  subtitle: const Text('Saves to Downloads + opens share sheet'),
+                  title: const Text('Export Events'),
+                  subtitle: const Text('Share via Downloads, email, Drive, etc.'),
                   onTap: _exportEvents,
                 ),
                 ListTile(
+                  leading: const Icon(Icons.cloud_upload),
+                  title: const Text('Export All Data'),
+                  subtitle: const Text('Everything: events, flashcards, notes, grades...'),
+                  onTap: _exportAllData,
+                ),
+                const Divider(),
+                ListTile(
                   leading: const Icon(Icons.download),
-                  title: const Text('Import events from JSON'),
-                  subtitle: const Text('Pick a .json file from your device'),
+                  title: const Text('Import Events'),
+                  subtitle: const Text('Restore events from a JSON file'),
                   onTap: _importEvents,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.cloud_download),
+                  title: const Text('Import All Data'),
+                  subtitle: const Text('Restore full backup (events + study data)'),
+                  onTap: _importAllData,
                 ),
                 const SizedBox(height: 24),
               ],
