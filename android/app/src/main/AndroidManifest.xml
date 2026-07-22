@@ -57,6 +57,7 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
+        <!-- Boot receiver to restore timer after device reboot -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
@@ -70,6 +71,7 @@
             </intent-filter>
         </receiver>
 
+        <!-- Event Countdown Widget -->
         <receiver
             android:name=".EventCountdownWidgetProvider"
             android:exported="true"
@@ -84,12 +86,15 @@
                 android:resource="@xml/event_widget_info" />
         </receiver>
 
+        <!-- Pomodoro Widget with LIVE timer support -->
         <receiver
             android:name=".PomodoroWidgetProvider"
             android:exported="true"
             android:label="Focus Timer">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.event_countdown.WIDGET_UPDATE" />
+                <action android:name="com.example.event_countdown.WIDGET_TICK" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
