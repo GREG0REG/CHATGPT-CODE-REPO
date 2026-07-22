@@ -3,8 +3,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/app_themes.dart';
 
-// REMOVED: WidgetBackgroundType enum - now imported from app_themes.dart
-
 class SettingsService {
   SettingsService._();
   static final SettingsService instance = SettingsService._();
@@ -26,10 +24,10 @@ class SettingsService {
   static const _kLastVacuum = 'last_vacuum_millis';
   static const _kFirstLaunch = 'first_launch';
   static const _kDefaultReminderMinutes = 'default_reminder_minutes';
+  static const _kBatteryOptPrompted = 'battery_opt_prompted';
 
   Future<SharedPreferences> get _prefs async => SharedPreferences.getInstance();
 
-  // ── Smart Format ──
   Future<bool> getSmartFormatEnabled() async {
     final p = await _prefs;
     return p.getBool(_kSmartFormat) ?? false;
@@ -40,7 +38,6 @@ class SettingsService {
     await p.setBool(_kSmartFormat, v);
   }
 
-  // ── 24-Hour Time ──
   Future<bool> getUse24HourFormat() async {
     final p = await _prefs;
     return p.getBool(_kUse24Hour) ?? true;
@@ -51,7 +48,6 @@ class SettingsService {
     await p.setBool(_kUse24Hour, v);
   }
 
-  // ── Theme ──
   Future<AppThemeOption> getSelectedTheme() async {
     final p = await _prefs;
     final name = p.getString(_kThemeName) ?? 'auroraBorealis';
@@ -66,7 +62,6 @@ class SettingsService {
     await p.setString(_kThemeName, option.name);
   }
 
-  // ── Widget Background Type ──
   Future<WidgetBackgroundType> getWidgetBackgroundType() async {
     final p = await _prefs;
     final name = p.getString(_kWidgetBgType) ?? 'themeColor';
@@ -81,7 +76,6 @@ class SettingsService {
     await p.setString(_kWidgetBgType, type.name);
   }
 
-  // ── Widget Image Path ──
   Future<String?> getWidgetImagePath() async {
     final p = await _prefs;
     return p.getString(_kWidgetImagePath);
@@ -96,7 +90,6 @@ class SettingsService {
     }
   }
 
-  // ── Theme Mode ──
   Future<ThemeMode> getThemeMode() async {
     final p = await _prefs;
     final name = p.getString(_kThemeMode) ?? 'system';
@@ -111,7 +104,6 @@ class SettingsService {
     await p.setString(_kThemeMode, mode.name);
   }
 
-  // ── Custom Color ──
   Future<Color?> getCustomColor() async {
     final p = await _prefs;
     final value = p.getInt(_kCustomColor);
@@ -124,7 +116,6 @@ class SettingsService {
     await p.setInt(_kCustomColor, color.value);
   }
 
-  // ── High Contrast ──
   Future<bool> getHighContrast() async {
     final p = await _prefs;
     return p.getBool(_kHighContrast) ?? false;
@@ -135,7 +126,6 @@ class SettingsService {
     await p.setBool(_kHighContrast, v);
   }
 
-  // ── Widget Progress Bar ──
   Future<bool> getWidgetProgressBar() async {
     final p = await _prefs;
     return p.getBool(_kWidgetProgressBar) ?? false;
@@ -146,7 +136,6 @@ class SettingsService {
     await p.setBool(_kWidgetProgressBar, v);
   }
 
-  // ── Widget Pulse Animation ──
   Future<bool> getWidgetPulseAnimation() async {
     final p = await _prefs;
     return p.getBool(_kWidgetPulseAnimation) ?? false;
@@ -157,7 +146,6 @@ class SettingsService {
     await p.setBool(_kWidgetPulseAnimation, v);
   }
 
-  // ── Quiet Hours ──
   Future<bool> getQuietHoursEnabled() async {
     final p = await _prefs;
     return p.getBool(_kQuietHoursEnabled) ?? false;
@@ -170,7 +158,7 @@ class SettingsService {
 
   Future<int> getQuietHoursStart() async {
     final p = await _prefs;
-    return p.getInt(_kQuietHoursStart) ?? 1320; // 22:00
+    return p.getInt(_kQuietHoursStart) ?? 1320;
   }
 
   Future<void> setQuietHoursStart(int minutes) async {
@@ -180,7 +168,7 @@ class SettingsService {
 
   Future<int> getQuietHoursEnd() async {
     final p = await _prefs;
-    return p.getInt(_kQuietHoursEnd) ?? 420; // 07:00
+    return p.getInt(_kQuietHoursEnd) ?? 420;
   }
 
   Future<void> setQuietHoursEnd(int minutes) async {
@@ -188,7 +176,6 @@ class SettingsService {
     await p.setInt(_kQuietHoursEnd, minutes);
   }
 
-  // ── Adaptive Refresh ──
   Future<bool> getAdaptiveRefreshEnabled() async {
     final p = await _prefs;
     return p.getBool(_kAdaptiveRefresh) ?? true;
@@ -199,7 +186,6 @@ class SettingsService {
     await p.setBool(_kAdaptiveRefresh, v);
   }
 
-  // ── Last Vacuum ──
   Future<DateTime?> getLastVacuum() async {
     final p = await _prefs;
     final millis = p.getInt(_kLastVacuum);
@@ -212,7 +198,6 @@ class SettingsService {
     await p.setInt(_kLastVacuum, dt.millisecondsSinceEpoch);
   }
 
-  // ── First Launch ──
   Future<bool> isFirstLaunch() async {
     final p = await _prefs;
     return p.getBool(_kFirstLaunch) ?? true;
@@ -223,7 +208,6 @@ class SettingsService {
     await p.setBool(_kFirstLaunch, v);
   }
 
-  // ── Default Reminder Minutes ──
   Future<int> getDefaultReminderMinutes() async {
     final p = await _prefs;
     return p.getInt(_kDefaultReminderMinutes) ?? 60;
@@ -232,5 +216,15 @@ class SettingsService {
   Future<void> setDefaultReminderMinutes(int v) async {
     final p = await _prefs;
     await p.setInt(_kDefaultReminderMinutes, v);
+  }
+
+  Future<bool> getBatteryOptPrompted() async {
+    final p = await _prefs;
+    return p.getBool(_kBatteryOptPrompted) ?? false;
+  }
+
+  Future<void> setBatteryOptPrompted(bool v) async {
+    final p = await _prefs;
+    await p.setBool(_kBatteryOptPrompted, v);
   }
 }
