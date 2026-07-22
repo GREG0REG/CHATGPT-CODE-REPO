@@ -1,12 +1,14 @@
 // CHATGPT-CODE-REPO-TEST/lib/screens/flashcard_screen.dart
 // ENHANCED VERSION - Dedicated Flashcards Section with Unique Features
 // FIXED: Card saving/answering logic, index bounds checking, createdAtMillis required
+// FIXED: Integrated StreakService for real daily study streak tracking (Issue 43)
 
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database_helper.dart';
 import '../models/flashcard.dart';
+import '../services/streak_service.dart';
 import '../theme/app_themes.dart';
 
 class FlashcardScreen extends StatefulWidget {
@@ -105,11 +107,8 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     final mastered = allCards.where((c) => c.boxLevel >= 4).length;
     final avgBox = allCards.isEmpty ? 0.0 : allCards.map((c) => c.boxLevel).reduce((a, b) => a + b) / allCards.length;
     
-    final last7Days = now.subtract(const Duration(days: 7)).millisecondsSinceEpoch;
-    final recentReviews = allCards.where((c) => 
-      c.lastReviewedMillis != null && c.lastReviewedMillis! > last7Days
-    ).length;
-    final streak = min(recentReviews > 0 ? (recentReviews / allCards.length * 7).round() : 0, 7);
+    // FIXED: Use real StreakService instead of fake calculation
+    final streakInfo = await StreakService.instance.getStreakInfo();
 
     setState(() {
       _allCards = allCards;
@@ -119,7 +118,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       _totalCards = allCards.length;
       _dueTodayCount = dueToday;
       _masteredCount = mastered;
-      _currentStreak = streak;
+      _currentStreak = streakInfo.currentStreak;
       _overallMastery = avgBox / 5.0;
       _loading = false;
       _showingBack = false;
@@ -236,6 +235,10 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     );
 
     await DatabaseHelper.instance.updateFlashcard(updated);
+
+    // FIXED: Record study session for streak tracking (Issue 43)
+    final streakInfo = await StreakService.instance.recordStudySession();
+    setState(() => _currentStreak = streakInfo.currentStreak);
 
     HapticFeedback.mediumImpact();
 
@@ -445,6 +448,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         debugPrint('Flashcard inserted with ID: $insertedId');
       }
       
+      // FIXED: Force full refresh so new card appears in deck list immediately
       await _loadData();
       
       if (mounted) {
@@ -702,7 +706,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
           const SizedBox(height: 4),
           Text(
             value,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface),
+            style: TextStyle(fontSize: 18, FontWeight.bold, color: cs.onSurface),
           ),
           Text(
             label,
@@ -759,7 +763,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
             children: [
               Text(
                 'Your Decks',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface),
+                style: TextStyle(fontSize: 18, FontWeight.bold, color: cs.onSurface),
               ),
               const Spacer(),
               SegmentedButton<String>(
@@ -832,7 +836,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                               Center(
                                 child: Text(
                                   '${(progress * 100).round()}%',
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary),
+                                  style: TextStyle(fontSize: 12, FontWeight.bold, color: cs.primary),
                                 ),
                               ),
                             ],
@@ -845,7 +849,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                             children: [
                               Text(
                                 subject,
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                style: const TextStyle(fontSize: 16, FontWeight.bold),
                               ),
                               const SizedBox(height: 4),
                               Text(
@@ -922,7 +926,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 children: [
                   Text(
                     'Card ${_currentCardIndex + 1} of ${_filteredCards.length}',
-                    style: TextStyle(fontSize: 13, color: cs.outline, fontWeight: FontWeight.w500),
+                    style: TextStyle(fontSize: 13, color: cs.outline, FontWeight.w500),
                   ),
                   const Spacer(),
                   Container(
@@ -933,7 +937,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                     ),
                     child: Text(
                       _studyMode == 'cram' ? 'Cram Mode' : _studyMode == 'shuffle' ? 'Shuffle' : 'Due Cards',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onPrimaryContainer),
+                      style: TextStyle(fontSize: 11, FontWeight.w600, color: cs.onPrimaryContainer),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1003,7 +1007,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                       child: AnimatedBuilder(
                         animation: _flipController,
                         builder: (context, child) {
-                          final angle = _flipController.value * 3.1415926535897932;
+                                                    final angle = _flipController.value * 3.1415926535897932;
                           final isFrontVisible = angle < 1.5708;
 
                           return Transform(
@@ -1322,3 +1326,4 @@ class _ConfettiParticle {
     required this.angle,
   });
 }
+
