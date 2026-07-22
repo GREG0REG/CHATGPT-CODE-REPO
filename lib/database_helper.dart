@@ -31,7 +31,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 8, // BUMPED: was 7, now 8 for new tables
+      version: 9, // BUMPED: was 8, now 9 for flashcard column fix
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -55,7 +55,10 @@ class DatabaseHelper {
           await _migrateV6ToV7(db);
         }
         if (oldVersion < 8) {
-          await _migrateV7ToV8(db); // NEW: v7→v8 migration
+          await _migrateV7ToV8(db);
+        }
+        if (oldVersion < 9) {
+          await _migrateV8ToV9(db); // NEW: v8→v9 adds missing flashcard columns
         }
       },
     );
@@ -123,6 +126,7 @@ class DatabaseHelper {
         orderIndex INTEGER DEFAULT 0
       )
     """);
+    // FIXED: flashcards table now includes ALL columns from Flashcard model
     await db.execute("""
       CREATE TABLE flashcards (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,7 +135,17 @@ class DatabaseHelper {
         backText TEXT NOT NULL,
         boxLevel INTEGER DEFAULT 1,
         lastReviewedMillis INTEGER,
-        nextReviewMillis INTEGER
+        nextReviewMillis INTEGER,
+        imagePath TEXT,
+        audioFrontPath TEXT,
+        audioBackPath TEXT,
+        tagsJson TEXT DEFAULT '[]',
+        totalReviews INTEGER DEFAULT 0,
+        consecutiveCorrect INTEGER DEFAULT 0,
+        createdAtMillis INTEGER NOT NULL,
+        isFavorite INTEGER DEFAULT 0,
+        difficultyRating REAL DEFAULT 2.5,
+        reviewHistoryJson TEXT
       )
     """);
     await db.execute("""
@@ -313,7 +327,7 @@ class DatabaseHelper {
     await db.execute('ALTER TABLE study_sessions ADD COLUMN notes TEXT');
   }
 
-  // NEW: v7 -> v8 migration (flashcard review history + daily card goals + grade components + quick notes)
+  // v7 -> v8 migration (flashcard review history + daily card goals + grade components + quick notes)
   Future<void> _migrateV7ToV8(Database db) async {
     await db.execute("""
       CREATE TABLE flashcard_review_history (
@@ -358,6 +372,25 @@ class DatabaseHelper {
         updatedAtMillis INTEGER
       )
     """);
+  }
+
+  // NEW: v8 -> v9 migration — add missing flashcard columns that were in the model but not the table
+  Future<void> _migrateV8ToV9(Database db) async {
+    // Add all missing columns to flashcards table
+    await db.execute('ALTER TABLE flashcards ADD COLUMN imagePath TEXT');
+    await db.execute('ALTER TABLE flashcards ADD COLUMN audioFrontPath TEXT');
+    await db.execute('ALTER TABLE flashcards ADD COLUMN audioBackPath TEXT');
+    await db.execute('ALTER TABLE flashcards ADD COLUMN tagsJson TEXT DEFAULT "[]"');
+    await db.execute('ALTER TABLE flashcards ADD COLUMN totalReviews INTEGER DEFAULT 0');
+    await db.execute('ALTER TABLE flashcards ADD COLUMN consecutiveCorrect INTEGER DEFAULT 0');
+    await db.execute('ALTER TABLE flashcards ADD COLUMN createdAtMillis INTEGER');
+    await db.execute('ALTER TABLE flashcards ADD COLUMN isFavorite INTEGER DEFAULT 0');
+    await db.execute('ALTER TABLE flashcards ADD COLUMN difficultyRating REAL DEFAULT 2.5');
+    await db.execute('ALTER TABLE flashcards ADD COLUMN reviewHistoryJson TEXT');
+    
+    // Set createdAtMillis for existing cards that don't have it
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.execute('UPDATE flashcards SET createdAtMillis = ? WHERE createdAtMillis IS NULL', [now]);
   }
 
   // ============================================
@@ -536,7 +569,7 @@ class DatabaseHelper {
     final db = await database;
     final rows = await db.query(
       'subtasks',
-      where: 'eventId = ?',
+      where: 'eventTag = ?',
       whereArgs: [eventId],
       orderBy: 'orderIndex ASC',
     );
