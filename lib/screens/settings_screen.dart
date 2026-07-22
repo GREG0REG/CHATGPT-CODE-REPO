@@ -4,6 +4,7 @@ import 'package:battery_plus/battery_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import '../database_helper.dart';
 import '../main.dart';
@@ -43,16 +44,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _loading = true;
   bool _busy = false;
 
-  // Battery state for live UI updates
   String _batteryStatus = 'Unknown';
   bool _batteryLow = false;
   StreamSubscription<BatteryState>? _batterySub;
+
+  bool _batteryOptIgnored = false;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
     _listenToBattery();
+    _checkBatteryOptimization();
   }
 
   @override
@@ -61,7 +64,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  /// Listen to battery state changes for live UI updates in SettingsScreen.
   void _listenToBattery() {
     _updateBatteryStatus();
     _batterySub = BatteryService.instance.onBatteryStateChanged.listen((_) {
@@ -78,6 +80,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _batteryStatus = '${charging ? '⚡ Charging' : '🔋 On battery'} • $level%';
       _batteryLow = low;
     });
+  }
+
+  Future<void> _checkBatteryOptimization() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final status = await Permission.ignoreBatteryOptimizations.status;
+      if (mounted) {
+        setState(() => _batteryOptIgnored = status.isGranted);
+      }
+    } catch (e) {
+      debugPrint('Battery opt check failed: $e');
+    }
+  }
+
+  Future<void> _requestBatteryOptimization() async {
+    if (!Platform.isAndroid) {
+      _showSnack('Battery optimization settings are only available on Android');
+      return;
+    }
+
+    final alreadyPrompted = await SettingsService.instance.getBatteryOptPrompted();
+
+    if (!alreadyPrompted) {
+      final shouldPrompt = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Keep Widget Updated?'),
+          content: const Text(
+            'To keep your countdown widget updating even when the app is closed, '
+            'you need to disable battery optimization for Event Countdown. '
+            'This allows background updates to run reliably.\n\n'
+            'Battery impact is minimal — updates are adaptive and slow down when battery is low.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Not Now'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldPrompt == true) {
+        await SettingsService.instance.setBatteryOptPrompted(true);
+      } else {
+        return;
+      }
+    }
+
+    try {
+      final status = await Permission.ignoreBatteryOptimizations.request();
+      if (status.isGranted) {
+        if (mounted) {
+          setState(() => _batteryOptIgnored = true);
+          _showSnack('Battery optimization disabled — widget will update reliably');
+        }
+      } else if (status.isPermanentlyDenied) {
+        await openAppSettings();
+      } else {
+        _showSnack('Permission denied — widget may stop updating when app is closed');
+      }
+    } catch (e) {
+      _showSnack('Could not open battery settings: $e');
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -250,9 +320,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // ==================== BACKUP & RESTORE (FIXED) ====================
-
-  /// Share events via system share sheet — WhatsApp, Gmail, Drive, etc.
   Future<void> _exportEvents() async {
     setState(() => _busy = true);
     try {
@@ -264,7 +331,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Save events export to a user-chosen location via file picker dialog.
   Future<void> _saveEventsToDevice() async {
     setState(() => _busy = true);
     try {
@@ -279,7 +345,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Share full backup via system share sheet.
   Future<void> _exportAllData() async {
     setState(() => _busy = true);
     try {
@@ -291,7 +356,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Save full backup to a user-chosen location via file picker dialog.
   Future<void> _saveAllDataToDevice() async {
     setState(() => _busy = true);
     try {
@@ -306,7 +370,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Import events from a JSON file picked by the user.
   Future<void> _importEvents() async {
     setState(() => _busy = true);
     try {
@@ -322,7 +385,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Import full backup from a JSON file picked by the user.
   Future<void> _importAllData() async {
     setState(() => _busy = true);
     try {
@@ -575,7 +637,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
                 const Divider(),
                 const _SectionHeader('Performance'),
-                // FIXED: BatteryService integration — live battery status in subtitle
                 SwitchListTile(
                   secondary: Icon(
                     Icons.speed,
@@ -598,7 +659,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _runVacuum,
                 ),
                 const Divider(),
-                // ==================== BACKUP & RESTORE UI (FIXED) ====================
+                const _SectionHeader('Background Updates'),
+                ListTile(
+                  leading: Icon(
+                    _batteryOptIgnored ? Icons.battery_charging_full : Icons.battery_alert,
+                    color: _batteryOptIgnored ? Colors.green : Colors.orange,
+                  ),
+                  title: const Text('Battery Optimization'),
+                  subtitle: Text(
+                    _batteryOptIgnored
+                        ? 'Disabled — widget updates run reliably in background'
+                        : 'Enabled — widget may stop updating when app is closed',
+                  ),
+                  trailing: TextButton(
+                    onPressed: _requestBatteryOptimization,
+                    child: Text(_batteryOptIgnored ? 'Change' : 'Disable'),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Disabling battery optimization allows the widget to update even when the app is closed. '
+                    'Updates are adaptive and slow down when your battery is low.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
+                const Divider(),
                 const _SectionHeader('Backup & Restore'),
                 ListTile(
                   leading: const Icon(Icons.share),
@@ -641,40 +727,4 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 24),
               ],
             ),
-            if (_busy) const Center(child: CircularProgressIndicator()),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _themeModeLabel(ThemeMode mode) {
-    switch (mode) {
-      case ThemeMode.light:
-        return 'Always light';
-      case ThemeMode.dark:
-        return 'Always dark';
-      case ThemeMode.system:
-        return 'Follow system';
-    }
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-
-  const _SectionHeader(this.title);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-      child: Text(
-        title,
-        style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.primary),
-      ),
-    );
-  }
-}
+            if (_busy) const Center(child: CircularProgressIndicator
