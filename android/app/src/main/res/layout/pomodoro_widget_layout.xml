@@ -12,43 +12,64 @@
         android:orientation="vertical"
         android:gravity="center_vertical">
 
-        <TextView
-            android:id="@+id/pomodoro_widget_subject"
-            android:layout_width="wrap_content"
+        <!-- Top row: Subject + Live indicator -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Ready to Focus"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFF"
-            android:alpha="0.95" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/pomodoro_widget_subject"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Ready to Focus"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF"
+                android:alpha="0.95"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <!-- Live indicator dot -->
+            <ImageView
+                android:id="@+id/live_indicator"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/live_indicator_dot"
+                android:visibility="gone" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/pomodoro_widget_timer"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Tap to start"
-            android:textSize="42sp"
+            android:textSize="40sp"
             android:textStyle="bold"
             android:textColor="#FFFFFF"
-            android:layout_marginTop="8dp"
-            android:letterSpacing="0.02" />
+            android:layout_marginTop="6dp"
+            android:letterSpacing="0.02"
+            android:fontFamily="monospace" />
 
         <TextView
             android:id="@+id/pomodoro_widget_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Focus"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textColor="#FFFFFF"
             android:alpha="0.7"
-            android:layout_marginTop="4dp" />
+            android:layout_marginTop="2dp" />
 
         <ProgressBar
             android:id="@+id/pomodoro_progress_ring"
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
             android:layout_height="4dp"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="10dp"
             android:progressDrawable="@drawable/widget_progress_drawable"
             android:max="100"
             android:progress="45" />
