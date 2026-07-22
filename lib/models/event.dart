@@ -328,6 +328,74 @@ class Event {
     );
   }
 
+  // ============================================
+  // VALIDATION (FIX for Issue 55)
+  // ============================================
+  /// Validates that a raw map contains valid Event data with detailed errors.
+  static void _validateMap(Map<String, dynamic> map) {
+    final errors = <String>[];
+
+    // Required fields
+    if (map['title'] == null) {
+      errors.add('missing required field "title"');
+    } else if (map['title'] is! String) {
+      errors.add('"title" must be a String, got ${map['title'].runtimeType}');
+    } else if ((map['title'] as String).trim().isEmpty) {
+      errors.add('"title" cannot be empty');
+    }
+
+    if (map['dateMillis'] == null) {
+      errors.add('missing required field "dateMillis"');
+    } else if (map['dateMillis'] is! int) {
+      errors.add('"dateMillis" must be an int (milliseconds since epoch), got ${map['dateMillis'].runtimeType}');
+    }
+
+    // Optional fields — validate type if present
+    if (map['id'] != null && map['id'] is! int) {
+      errors.add('"id" must be an int or null, got ${map['id'].runtimeType}');
+    }
+    if (map['startTimeMillis'] != null && map['startTimeMillis'] is! int) {
+      errors.add('"startTimeMillis" must be an int or null, got ${map['startTimeMillis'].runtimeType}');
+    }
+    if (map['deadlineMillis'] != null && map['deadlineMillis'] is! int) {
+      errors.add('"deadlineMillis" must be an int or null, got ${map['deadlineMillis'].runtimeType}');
+    }
+    if (map['notes'] != null && map['notes'] is! String) {
+      errors.add('"notes" must be a String or null, got ${map['notes'].runtimeType}');
+    }
+    if (map['recurrence'] != null && map['recurrence'] is! int) {
+      errors.add('"recurrence" must be an int or null, got ${map['recurrence'].runtimeType}');
+    }
+    if (map['recurrenceInterval'] != null && map['recurrenceInterval'] is! int) {
+      errors.add('"recurrenceInterval" must be an int or null, got ${map['recurrenceInterval'].runtimeType}');
+    }
+    if (map['yearlyUseSpecificDates'] != null && map['yearlyUseSpecificDates'] is! int) {
+      errors.add('"yearlyUseSpecificDates" must be an int or null, got ${map['yearlyUseSpecificDates'].runtimeType}');
+    }
+    if (map['yearlySpecificDatesJson'] != null && map['yearlySpecificDatesJson'] is! String) {
+      errors.add('"yearlySpecificDatesJson" must be a String or null, got ${map['yearlySpecificDatesJson'].runtimeType}');
+    }
+    if (map['excludedDatesJson'] != null && map['excludedDatesJson'] is! String) {
+      errors.add('"excludedDatesJson" must be a String or null, got ${map['excludedDatesJson'].runtimeType}');
+    }
+    if (map['iconName'] != null && map['iconName'] is! String) {
+      errors.add('"iconName" must be a String or null, got ${map['iconName'].runtimeType}');
+    }
+    if (map['priority'] != null && map['priority'] is! int) {
+      errors.add('"priority" must be an int or null, got ${map['priority'].runtimeType}');
+    }
+    if (map['subjectTag'] != null && map['subjectTag'] is! String) {
+      errors.add('"subjectTag" must be a String or null, got ${map['subjectTag'].runtimeType}');
+    }
+    if (map['isCompleted'] != null && map['isCompleted'] is! int) {
+      errors.add('"isCompleted" must be an int or null, got ${map['isCompleted'].runtimeType}');
+    }
+
+    if (errors.isNotEmpty) {
+      throw FormatException(errors.join('; '));
+    }
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -349,6 +417,7 @@ class Event {
   }
 
   factory Event.fromMap(Map<String, dynamic> map) {
+    _validateMap(map);
     return Event(
       id: map['id'] as int?,
       title: map['title'] as String,
@@ -373,5 +442,11 @@ class Event {
 
   Map<String, dynamic> toJson() => toMap();
 
-  factory Event.fromJson(Map<String, dynamic> json) => Event.fromMap(json);
+  factory Event.fromJson(Map<String, dynamic> json) {
+    try {
+      return Event.fromMap(json);
+    } catch (e) {
+      throw FormatException('Failed to parse Event from JSON: $e\nReceived: $json');
+    }
+  }
 }
