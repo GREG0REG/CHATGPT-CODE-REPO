@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,24 +9,24 @@ import '../services/countdown_service.dart';
 import '../services/settings_service.dart';
 import '../theme/app_themes.dart';
 
-/// Service that updates Android home screen widgets via MethodChannel.
-/// Also persists widget data to SharedPreferences so the native widget
-/// provider can read it when the app is not running.
 class WidgetService {
   WidgetService._();
   static final WidgetService instance = WidgetService._();
 
   static const MethodChannel _channel = MethodChannel('com.example.event_countdown/widget');
 
-  // SharedPreferences keys (must match Android Kotlin code)
   static const String _kEventTitle = 'event_title';
   static const String _kCountdownText = 'countdown_text';
   static const String _kBgColor = 'widget_bg_color';
   static const String _kTextColor = 'widget_text_color';
   static const String _kProgress = 'widget_progress_percent';
   static const String _kUrgencyColor = 'widget_urgency_color';
+  static const String _kSmartFormat = 'smart_countdown_format';
+  static const String _kEventDateMillis = 'widget_event_date_millis';
+  static const String _kEventStartMillis = 'widget_event_start_millis';
+  static const String _kEventDeadlineMillis = 'widget_event_deadline_millis';
+  static const String _kEventIsCompleted = 'widget_event_is_completed';
 
-  // Pomodoro widget keys
   static const String _kPomodoroSubject = 'pomodoro_subject';
   static const String _kPomodoroTimer = 'pomodoro_timer_text';
   static const String _kPomodoroStatus = 'pomodoro_status';
@@ -33,14 +34,12 @@ class WidgetService {
   static const String _kPomodoroProgress = 'pomodoro_progress_percent';
   static const String _kPomodoroSessions = 'pomodoro_completed_sessions';
 
-  /// Refresh the Event Countdown widget with the next upcoming event.
   static Future<void> refreshWidget() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final events = await DatabaseHelper.instance.getAllEventsSorted();
       final now = DateTime.now();
 
-      // Find next non-completed event
       Event? nextEvent;
       for (final e in events) {
         if (!e.isCompleted && e.finalMillis > now.millisecondsSinceEpoch) {
@@ -70,7 +69,6 @@ class WidgetService {
         final result = CountdownService.buildCountdownText(nextEvent, now, smartFormatEnabled: smartFormat);
         countdownText = result.text;
 
-        // Calculate progress percentage
         if (nextEvent.startTimeMillis != null && nextEvent.deadlineMillis != null) {
           final total = nextEvent.deadlineMillis! - nextEvent.startTimeMillis!;
           final elapsed = now.millisecondsSinceEpoch - nextEvent.startTimeMillis!;
@@ -79,17 +77,14 @@ class WidgetService {
           progressPercent = 65;
         }
 
-        // Get urgency color name for widget indicator
         final urgencyColor = nextEvent.getUrgencyColor(now);
         urgencyColorName = _colorToName(urgencyColor);
 
-        // Theme colors
         final themeColors = _getThemeColors(theme, customColor);
         bgColor = themeColors['bg'];
         textColor = themeColors['text'];
       }
 
-      // Persist to SharedPreferences for native widget to read
       await prefs.setString(_kEventTitle, title);
       await prefs.setString(_kCountdownText, countdownText);
       if (bgColor != null) await prefs.setString(_kBgColor, bgColor);
@@ -101,10 +96,30 @@ class WidgetService {
         await prefs.remove(_kUrgencyColor);
       }
 
-      // Also persist grade and tasks data if available
+      await prefs.setBool(_kSmartFormat, smartFormat);
+
+      if (nextEvent != null) {
+        await prefs.setInt(_kEventDateMillis, nextEvent.dateMillis);
+        if (nextEvent.startTimeMillis != null) {
+          await prefs.setInt(_kEventStartMillis, nextEvent.startTimeMillis!);
+        } else {
+          await prefs.remove(_kEventStartMillis);
+        }
+        if (nextEvent.deadlineMillis != null) {
+          await prefs.setInt(_kEventDeadlineMillis, nextEvent.deadlineMillis!);
+        } else {
+          await prefs.remove(_kEventDeadlineMillis);
+        }
+        await prefs.setBool(_kEventIsCompleted, nextEvent.isCompleted);
+      } else {
+        await prefs.remove(_kEventDateMillis);
+        await prefs.remove(_kEventStartMillis);
+        await prefs.remove(_kEventDeadlineMillis);
+        await prefs.remove(_kEventIsCompleted);
+      }
+
       await _persistGradeAndTasksData(prefs);
 
-      // Notify native widget via MethodChannel
       await _channel.invokeMethod('updateWidget', {
         'title': title,
         'countdown': countdownText,
@@ -112,42 +127,37 @@ class WidgetService {
         'textColor': textColor,
         'progressPercent': progressPercent,
         'urgencyColor': urgencyColorName,
+        'smartFormat': smartFormat,
       });
     } catch (e) {
       debugPrint('WidgetService.refreshWidget error: $e');
     }
   }
 
-  /// Refresh the Pomodoro widget with current timer state.
   static Future<void> refreshPomodoroWidget() async {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Read current pomodoro state from SharedPreferences
       final phaseName = prefs.getString('pomodoro_phase') ?? 'idle';
       final remainingSeconds = prefs.getInt('pomodoro_remaining_seconds') ?? 0;
       final completedSessions = prefs.getInt('pomodoro_completed_sessions') ?? 0;
       final subject = prefs.getString('pomodoro_subject') ?? 'Ready to Focus';
       final status = prefs.getString('pomodoro_status') ?? 'Focus';
 
-      // Format timer text
       final minutes = (remainingSeconds ~/ 60).toString().padLeft(2, '0');
       final seconds = (remainingSeconds % 60).toString().padLeft(2, '0');
       final timerText = phaseName == 'idle' ? 'Tap to start' : '$minutes:$seconds';
 
-      // Calculate progress
       final progressPercent = prefs.getDouble('pomodoro_progress_percent') ?? 0.0;
       final progressInt = (progressPercent * 100).round().clamp(0, 100);
 
-      // Determine background color based on phase
       String? bgColor;
       if (phaseName == 'focusing' || phaseName == 'idle' || phaseName == 'paused') {
-        bgColor = '#FF6B6B'; // Coral/red for focus
+        bgColor = '#FF6B6B';
       } else {
-        bgColor = '#00BFA5'; // Teal for break
+        bgColor = '#00BFA5';
       }
 
-      // Persist for native widget
       await prefs.setString(_kPomodoroSubject, subject);
       await prefs.setString(_kPomodoroTimer, timerText);
       await prefs.setString(_kPomodoroStatus, status);
@@ -155,7 +165,6 @@ class WidgetService {
       await prefs.setInt(_kPomodoroProgress, progressInt);
       await prefs.setInt(_kPomodoroSessions, completedSessions);
 
-      // Notify native widget
       await _channel.invokeMethod('updatePomodoroWidget', {
         'subject': subject,
         'timerText': timerText,
@@ -169,10 +178,8 @@ class WidgetService {
     }
   }
 
-  /// Persist grade and tasks data for widget display
   static Future<void> _persistGradeAndTasksData(SharedPreferences prefs) async {
     try {
-      // Get grade components
       final components = await DatabaseHelper.instance.getAllGradeComponents();
       double weightedScore = 0;
       double totalWeight = 0;
@@ -182,7 +189,6 @@ class WidgetService {
       }
       final grade = totalWeight > 0 ? (weightedScore / totalWeight) * 100 : 0;
 
-      // Determine letter grade
       String letter;
       if (grade >= 93) letter = 'A';
       else if (grade >= 90) letter = 'A-';
@@ -200,7 +206,6 @@ class WidgetService {
       await prefs.setDouble('grade_current', grade.toDouble());
       await prefs.setString('grade_letter', letter);
 
-      // Count urgent tasks
       final events = await DatabaseHelper.instance.getAllEventsSorted();
       final now = DateTime.now();
       int urgentCount = 0;
@@ -222,7 +227,6 @@ class WidgetService {
     }
   }
 
-  /// Convert a Color to a named urgency color for the widget
   static String? _colorToName(Color color) {
     if (color == Colors.red) return 'red';
     if (color == Colors.deepOrange) return 'deepOrange';
@@ -232,7 +236,6 @@ class WidgetService {
     return null;
   }
 
-  /// Get theme colors as hex strings
   static Map<String, String> _getThemeColors(AppThemeOption theme, Color? customColor) {
     switch (theme) {
       case AppThemeOption.auroraBorealis:
