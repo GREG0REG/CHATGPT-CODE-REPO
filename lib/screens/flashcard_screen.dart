@@ -706,7 +706,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
           const SizedBox(height: 4),
           Text(
             value,
-            style: TextStyle(fontSize: 18, FontWeight.bold, color: cs.onSurface),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface),
           ),
           Text(
             label,
@@ -763,7 +763,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
             children: [
               Text(
                 'Your Decks',
-                style: TextStyle(fontSize: 18, FontWeight.bold, color: cs.onSurface),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface),
               ),
               const Spacer(),
               SegmentedButton<String>(
@@ -836,7 +836,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                               Center(
                                 child: Text(
                                   '${(progress * 100).round()}%',
-                                  style: TextStyle(fontSize: 12, FontWeight.bold, color: cs.primary),
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary),
                                 ),
                               ),
                             ],
@@ -849,7 +849,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                             children: [
                               Text(
                                 subject,
-                                style: const TextStyle(fontSize: 16, FontWeight.bold),
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                               ),
                               const SizedBox(height: 4),
                               Text(
@@ -926,7 +926,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 children: [
                   Text(
                     'Card ${_currentCardIndex + 1} of ${_filteredCards.length}',
-                    style: TextStyle(fontSize: 13, color: cs.outline, FontWeight.w500),
+                    style: TextStyle(fontSize: 13, color: cs.outline, fontWeight: FontWeight.w500),
                   ),
                   const Spacer(),
                   Container(
@@ -937,7 +937,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                     ),
                     child: Text(
                       _studyMode == 'cram' ? 'Cram Mode' : _studyMode == 'shuffle' ? 'Shuffle' : 'Due Cards',
-                      style: TextStyle(fontSize: 11, FontWeight.w600, color: cs.onPrimaryContainer),
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onPrimaryContainer),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1007,7 +1007,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                       child: AnimatedBuilder(
                         animation: _flipController,
                         builder: (context, child) {
-                                                    final angle = _flipController.value * 3.1415926535897932;
+                          final angle = _flipController.value * 3.1415926535897932;
                           final isFrontVisible = angle < 1.5708;
 
                           return Transform(
@@ -1326,4 +1326,3 @@ class _ConfettiParticle {
     required this.angle,
   });
 }
-
