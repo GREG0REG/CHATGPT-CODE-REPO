@@ -14,7 +14,7 @@ import '../models/event.dart';
 /// IMPORTANT: [exportToJson] and [exportAllData] save files to the app's
 /// private documents directory. These files are DELETED when the user clears
 /// app storage. For persistent exports, use [exportAndShareEvents],
-/// [exportAndShareAllData], [exportAndSaveEvents], or [exportAndSaveAllData].
+/// [exportAndShareAllData], [saveExportToDevice], or [saveFullExportToDevice].
 class ExportImportService {
   ExportImportService._();
 
@@ -22,7 +22,7 @@ class ExportImportService {
 
   /// Writes all events to a JSON file in the app's private documents directory.
   /// WARNING: This file is deleted when app storage is cleared. Use
-  /// [exportAndShareEvents] or [exportAndSaveEvents] for persistent exports.
+  /// [exportAndShareEvents] or [saveExportToDevice] for persistent exports.
   static Future<String> exportToJson() async {
     final events = await DatabaseHelper.instance.getAllEventsSorted();
     final jsonList = events.map((e) => e.toJson()).toList();
@@ -39,7 +39,7 @@ class ExportImportService {
 
   /// Exports ALL database tables to a JSON file in the app's private documents directory.
   /// WARNING: This file is deleted when app storage is cleared. Use
-  /// [exportAndShareAllData] or [exportAndSaveAllData] for persistent exports.
+  /// [exportAndShareAllData] or [saveFullExportToDevice] for persistent exports.
   static Future<String> exportAllData() async {
     final allData = await DatabaseHelper.instance.exportAllTables();
 
@@ -61,7 +61,7 @@ class ExportImportService {
     return appFile.path;
   }
 
-  // ==================== SHARE EXPORT (recommended for UI) ====================
+  // ==================== SHARE EXPORT (system share sheet) ====================
 
   /// Exports events and immediately opens the system share sheet.
   /// The user can save to Downloads, email, cloud storage, etc.
@@ -89,12 +89,12 @@ class ExportImportService {
   static Future<void> shareExport() => exportAndShareEvents();
   static Future<void> shareFullExport() => exportAndShareAllData();
 
-  // ==================== SAVE EXPORT (file picker dialog) ====================
+  // ==================== SAVE TO DEVICE (file picker save dialog) ====================
 
   /// Exports events and opens a system save dialog so the user can choose
   /// exactly where to save the file (e.g., Downloads folder).
   /// Returns the path where the file was saved, or null if cancelled.
-  static Future<String?> exportAndSaveEvents() async {
+  static Future<String?> saveExportToDevice() async {
     final exportPath = await exportToJson();
     final fileName = p.basename(exportPath);
 
@@ -115,7 +115,7 @@ class ExportImportService {
   /// Exports all data and opens a system save dialog so the user can choose
   /// exactly where to save the file (e.g., Downloads folder).
   /// Returns the path where the file was saved, or null if cancelled.
-  static Future<String?> exportAndSaveAllData() async {
+  static Future<String?> saveFullExportToDevice() async {
     final exportPath = await exportAllData();
     final fileName = p.basename(exportPath);
 
@@ -128,7 +128,7 @@ class ExportImportService {
 
     if (outputPath == null) return null;
 
-    final bytes = await File(exportPath).readAsBytes();
+    final bytes = await File(exportPath).readAsBytes(bytes);
     await File(outputPath).writeAsBytes(bytes);
     return outputPath;
   }
