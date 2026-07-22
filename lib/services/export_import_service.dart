@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -8,22 +9,20 @@ import 'package:file_picker/file_picker.dart';
 import '../database_helper.dart';
 import '../models/event.dart';
 
-/// Exports/imports events to/from a local JSON file. Purely local - no
-/// network calls, no cloud storage.
+/// Exports/imports events to/from JSON files.
 ///
-/// FIXES:
-/// - Issue 53: Removed deprecated Permission.storage usage.
-/// - Issue 54: Removed hardcoded /storage/emulated/0/Download path.
-/// - Issue 55: Validates ALL events BEFORE replacing database. Backup + rollback.
-/// - Issue 56: Added comprehensive exportAllData() / importAllData() for all tables.
-/// - Issue 57: Completed shareExport() with Share.shareXFiles().
+/// IMPORTANT: [exportToJson] and [exportAllData] save files to the app's
+/// private documents directory. These files are DELETED when the user clears
+/// app storage. For persistent exports, use [exportAndShareEvents],
+/// [exportAndShareAllData], [exportAndSaveEvents], or [exportAndSaveAllData].
 class ExportImportService {
   ExportImportService._();
 
-  // ==================== EVENT-ONLY EXPORT/IMPORT ====================
+  // ==================== INTERNAL EXPORT (app-private storage) ====================
 
-  /// Writes all events to a JSON file in the app's documents directory
-  /// and returns the file path. The file can then be shared via shareExport().
+  /// Writes all events to a JSON file in the app's private documents directory.
+  /// WARNING: This file is deleted when app storage is cleared. Use
+  /// [exportAndShareEvents] or [exportAndSaveEvents] for persistent exports.
   static Future<String> exportToJson() async {
     final events = await DatabaseHelper.instance.getAllEventsSorted();
     final jsonList = events.map((e) => e.toJson()).toList();
@@ -38,11 +37,104 @@ class ExportImportService {
     return appFile.path;
   }
 
-  /// Reads events from a JSON file at [filePath] and replaces the current
-  /// database contents with them.
-  ///
-  /// Validates every event BEFORE touching the database. If validation or
-  /// import fails, the original database is restored from backup.
+  /// Exports ALL database tables to a JSON file in the app's private documents directory.
+  /// WARNING: This file is deleted when app storage is cleared. Use
+  /// [exportAndShareAllData] or [exportAndSaveAllData] for persistent exports.
+  static Future<String> exportAllData() async {
+    final allData = await DatabaseHelper.instance.exportAllTables();
+
+    final exportMap = {
+      'exportVersion': 1,
+      'appName': 'event_countdown',
+      'exportedAt': DateTime.now().toUtc().toIso8601String(),
+      'tables': allData,
+    };
+
+    final jsonString = const JsonEncoder.withIndent('  ').convert(exportMap);
+
+    final dir = await getApplicationDocumentsDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = 'event_countdown_full_export_$timestamp.json';
+    final appFile = File('${dir.path}/$fileName');
+    await appFile.writeAsString(jsonString);
+
+    return appFile.path;
+  }
+
+  // ==================== SHARE EXPORT (recommended for UI) ====================
+
+  /// Exports events and immediately opens the system share sheet.
+  /// The user can save to Downloads, email, cloud storage, etc.
+  static Future<void> exportAndShareEvents() async {
+    final path = await exportToJson();
+    await Share.shareXFiles(
+      [XFile(path)],
+      subject: 'Event Countdown Export',
+      text: 'Here is my Event Countdown export file.',
+    );
+  }
+
+  /// Exports all data and immediately opens the system share sheet.
+  /// The user can save to Downloads, email, cloud storage, etc.
+  static Future<void> exportAndShareAllData() async {
+    final path = await exportAllData();
+    await Share.shareXFiles(
+      [XFile(path)],
+      subject: 'Event Countdown Full Export',
+      text: 'Here is my complete Event Countdown data export.',
+    );
+  }
+
+  // Legacy aliases
+  static Future<void> shareExport() => exportAndShareEvents();
+  static Future<void> shareFullExport() => exportAndShareAllData();
+
+  // ==================== SAVE EXPORT (file picker dialog) ====================
+
+  /// Exports events and opens a system save dialog so the user can choose
+  /// exactly where to save the file (e.g., Downloads folder).
+  /// Returns the path where the file was saved, or null if cancelled.
+  static Future<String?> exportAndSaveEvents() async {
+    final exportPath = await exportToJson();
+    final fileName = p.basename(exportPath);
+
+    final String? outputPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save Event Export',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+
+    if (outputPath == null) return null;
+
+    final bytes = await File(exportPath).readAsBytes();
+    await File(outputPath).writeAsBytes(bytes);
+    return outputPath;
+  }
+
+  /// Exports all data and opens a system save dialog so the user can choose
+  /// exactly where to save the file (e.g., Downloads folder).
+  /// Returns the path where the file was saved, or null if cancelled.
+  static Future<String?> exportAndSaveAllData() async {
+    final exportPath = await exportAllData();
+    final fileName = p.basename(exportPath);
+
+    final String? outputPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save Full Export',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+
+    if (outputPath == null) return null;
+
+    final bytes = await File(exportPath).readAsBytes();
+    await File(outputPath).writeAsBytes(bytes);
+    return outputPath;
+  }
+
+  // ==================== EVENT-ONLY IMPORT ====================
+
   static Future<int> importFromJson(String filePath) async {
     final file = File(filePath);
     if (!await file.exists()) {
@@ -100,35 +192,8 @@ class ExportImportService {
     return events.length;
   }
 
-  // ==================== COMPREHENSIVE EXPORT/IMPORT ====================
+  // ==================== COMPREHENSIVE IMPORT ====================
 
-  /// Exports ALL database tables (events, study data, flashcards, notes, etc.)
-  /// into a single JSON file and returns its path.
-  static Future<String> exportAllData() async {
-    final allData = await DatabaseHelper.instance.exportAllTables();
-
-    final exportMap = {
-      'exportVersion': 1,
-      'appName': 'event_countdown',
-      'exportedAt': DateTime.now().toUtc().toIso8601String(),
-      'tables': allData,
-    };
-
-    final jsonString = const JsonEncoder.withIndent('  ').convert(exportMap);
-
-    final dir = await getApplicationDocumentsDirectory();
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = 'event_countdown_full_export_$timestamp.json';
-    final appFile = File('${dir.path}/$fileName');
-    await appFile.writeAsString(jsonString);
-
-    return appFile.path;
-  }
-
-  /// Imports ALL database tables from a comprehensive export file.
-  ///
-  /// Validates the export format and event data BEFORE touching the database.
-  /// If anything fails, the original database is restored from backup.
   static Future<void> importAllData(String filePath) async {
     final file = File(filePath);
     if (!await file.exists()) {
@@ -191,28 +256,6 @@ class ExportImportService {
       throw Exception(
           'Import failed. Database restored from backup. Error: $e');
     }
-  }
-
-  // ==================== SHARE ====================
-
-  /// Share the event-only export file using the system share sheet.
-  static Future<void> shareExport() async {
-    final path = await exportToJson();
-    await Share.shareXFiles(
-      [XFile(path)],
-      subject: 'Event Countdown Export',
-      text: 'Here is my Event Countdown export file.',
-    );
-  }
-
-  /// Share the comprehensive export file using the system share sheet.
-  static Future<void> shareFullExport() async {
-    final path = await exportAllData();
-    await Share.shareXFiles(
-      [XFile(path)],
-      subject: 'Event Countdown Full Export',
-      text: 'Here is my complete Event Countdown data export.',
-    );
   }
 
   // ==================== FILE PICKER IMPORT ====================
