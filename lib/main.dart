@@ -18,23 +18,23 @@ import 'theme/app_themes.dart';
 
 const String kWidgetRefreshTaskName = 'event_countdown_widget_refresh';
 const String kWidgetRefreshFrequentTaskName = 'event_countdown_widget_frequent';
+const String kWidgetRefreshAggressiveTaskName = 'event_countdown_widget_aggressive';
 const String kBackupTaskName = 'event_countdown_weekly_backup';
+const String kBootCompletedTask = 'event_countdown_boot_completed';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    // Initialize minimal Flutter binding for background execution
     WidgetsFlutterBinding.ensureInitialized();
 
     if (task == kWidgetRefreshFrequentTaskName) {
       try {
-        // FIXED: Respect adaptive refresh setting — skip frequent updates on low battery
         final prefs = await SettingsService.instance.getAdaptiveRefreshEnabled();
         if (prefs) {
           final shouldReduce = await BatteryService.instance.shouldReduceRefresh();
           if (shouldReduce) {
             debugPrint('Adaptive refresh: skipping frequent update due to low battery');
-            return true; // Skip but don't fail
+            return true;
           }
         }
         await WidgetService.refreshWidget();
@@ -46,12 +46,33 @@ void callbackDispatcher() {
       }
     } else if (task == kWidgetRefreshTaskName) {
       try {
-        // 4-hour fallback always runs regardless of battery
         await WidgetService.refreshWidget();
         await WidgetService.refreshPomodoroWidget();
         return true;
       } catch (e) {
         debugPrint('Background widget refresh error: $e');
+        return false;
+      }
+    } else if (task == kWidgetRefreshAggressiveTaskName) {
+      try {
+        final isCharging = await BatteryService.instance.isCharging();
+        if (!isCharging) {
+          debugPrint('Aggressive refresh: skipped — not charging');
+          return true;
+        }
+        await WidgetService.refreshWidget();
+        await WidgetService.refreshPomodoroWidget();
+        return true;
+      } catch (e) {
+        debugPrint('Aggressive widget refresh error: $e');
+        return false;
+      }
+    } else if (task == kBootCompletedTask) {
+      try {
+        await _registerBackgroundTasks();
+        return true;
+      } catch (e) {
+        debugPrint('Boot completed task error: $e');
         return false;
       }
     } else if (task == kBackupTaskName) {
@@ -61,10 +82,47 @@ void callbackDispatcher() {
   });
 }
 
+Future<void> _registerBackgroundTasks() async {
+  await Workmanager().registerPeriodicTask(
+    kWidgetRefreshFrequentTaskName,
+    kWidgetRefreshFrequentTaskName,
+    frequency: const Duration(minutes: 15),
+    constraints: Constraints(
+      networkType: NetworkType.not_required,
+      requiresBatteryNotLow: false,
+      requiresCharging: false,
+      requiresDeviceIdle: false,
+      requiresStorageNotLow: false,
+    ),
+    existingWorkPolicy: ExistingWorkPolicy.replace,
+    backoffPolicy: BackoffPolicy.linear,
+    backoffPolicyDelay: const Duration(minutes: 1),
+  );
+
+  await Workmanager().registerPeriodicTask(
+    kWidgetRefreshTaskName,
+    kWidgetRefreshTaskName,
+    frequency: const Duration(hours: 4),
+    constraints: Constraints(networkType: NetworkType.not_required),
+    existingWorkPolicy: ExistingWorkPolicy.keep,
+  );
+
+  await Workmanager().registerPeriodicTask(
+    kWidgetRefreshAggressiveTaskName,
+    kWidgetRefreshAggressiveTaskName,
+    frequency: const Duration(minutes: 5),
+    constraints: Constraints(
+      networkType: NetworkType.not_required,
+      requiresCharging: true,
+      requiresBatteryNotLow: false,
+    ),
+    existingWorkPolicy: ExistingWorkPolicy.keep,
+  );
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // FIXED: Initialize battery monitoring for adaptive refresh (Issue 50)
   await BatteryService.instance.initialize();
 
   await NotificationService.instance.init();
@@ -75,35 +133,9 @@ Future<void> main() async {
     isInDebugMode: false,
   );
 
-  // Register frequent widget updates (every 15 minutes for active countdown)
-  // This ensures the widget stays current even when the app is closed
-  await Workmanager().registerPeriodicTask(
-    kWidgetRefreshFrequentTaskName,
-    kWidgetRefreshFrequentTaskName,
-    frequency: const Duration(minutes: 15), // Much more frequent than 4 hours
-    constraints: Constraints(
-      networkType: NetworkType.not_required,
-      requiresBatteryNotLow: false, // Update even on low battery
-      requiresCharging: false,
-      requiresDeviceIdle: false,
-      requiresStorageNotLow: false,
-    ),
-    existingWorkPolicy: ExistingWorkPolicy.replace, // Replace to ensure fresh schedule
-    backoffPolicy: BackoffPolicy.linear,
-    backoffPolicyDelay: const Duration(minutes: 1),
-  );
-
-  // Keep the 4-hour task as a fallback / safety net
-  await Workmanager().registerPeriodicTask(
-    kWidgetRefreshTaskName,
-    kWidgetRefreshTaskName,
-    frequency: const Duration(hours: 4),
-    constraints: Constraints(networkType: NetworkType.not_required),
-    existingWorkPolicy: ExistingWorkPolicy.keep,
-  );
-
+  await _registerBackgroundTasks();
   await BackupService.registerWeeklyBackup();
-  
+
   try {
     await WidgetService.refreshWidget();
     await WidgetService.refreshPomodoroWidget();
@@ -128,7 +160,6 @@ class EventCountdownAppState extends State<EventCountdownApp>
   Color? _customColor;
   bool _highContrast = false;
 
-  // PUBLIC GETTER so other screens can read the current theme
   AppThemeOption get theme => _theme;
 
   @override
