@@ -727,4 +727,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 24),
               ],
             ),
-            if (_busy) const Center(child: CircularProgressIndicator
+            if (_busy) const Center(child: CircularProgressIndicator()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _themeModeLabel(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return 'Always light';
+      case ThemeMode.dark:
+        return 'Always dark';
+      case ThemeMode.system:
+        return 'Follow system';
+    }
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+
+  const _SectionHeader(this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Text(
+        title,
+        style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.primary),
+      ),
+    );
+  }
+}
