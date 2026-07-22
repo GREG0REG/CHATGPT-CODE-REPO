@@ -9,20 +9,11 @@ import 'package:file_picker/file_picker.dart';
 import '../database_helper.dart';
 import '../models/event.dart';
 
-/// Exports/imports events to/from JSON files.
-///
-/// IMPORTANT: [exportToJson] and [exportAllData] save files to the app's
-/// private documents directory. These files are DELETED when the user clears
-/// app storage. For persistent exports, use [exportAndShareEvents],
-/// [exportAndShareAllData], [saveExportToDevice], or [saveFullExportToDevice].
 class ExportImportService {
   ExportImportService._();
 
-  // ==================== INTERNAL EXPORT (app-private storage) ====================
+  // ==================== INTERNAL EXPORT ====================
 
-  /// Writes all events to a JSON file in the app's private documents directory.
-  /// WARNING: This file is deleted when app storage is cleared. Use
-  /// [exportAndShareEvents] or [saveExportToDevice] for persistent exports.
   static Future<String> exportToJson() async {
     final events = await DatabaseHelper.instance.getAllEventsSorted();
     final jsonList = events.map((e) => e.toJson()).toList();
@@ -37,9 +28,6 @@ class ExportImportService {
     return appFile.path;
   }
 
-  /// Exports ALL database tables to a JSON file in the app's private documents directory.
-  /// WARNING: This file is deleted when app storage is cleared. Use
-  /// [exportAndShareAllData] or [saveFullExportToDevice] for persistent exports.
   static Future<String> exportAllData() async {
     final allData = await DatabaseHelper.instance.exportAllTables();
 
@@ -61,10 +49,8 @@ class ExportImportService {
     return appFile.path;
   }
 
-  // ==================== SHARE EXPORT (system share sheet) ====================
+  // ==================== SHARE EXPORT ====================
 
-  /// Exports events and immediately opens the system share sheet.
-  /// The user can save to Downloads, email, cloud storage, etc.
   static Future<void> exportAndShareEvents() async {
     final path = await exportToJson();
     await Share.shareXFiles(
@@ -74,8 +60,6 @@ class ExportImportService {
     );
   }
 
-  /// Exports all data and immediately opens the system share sheet.
-  /// The user can save to Downloads, email, cloud storage, etc.
   static Future<void> exportAndShareAllData() async {
     final path = await exportAllData();
     await Share.shareXFiles(
@@ -85,15 +69,11 @@ class ExportImportService {
     );
   }
 
-  // Legacy aliases
   static Future<void> shareExport() => exportAndShareEvents();
   static Future<void> shareFullExport() => exportAndShareAllData();
 
-  // ==================== SAVE TO DEVICE (file picker save dialog) ====================
+  // ==================== SAVE TO DEVICE ====================
 
-  /// Exports events and opens a system save dialog so the user can choose
-  /// exactly where to save the file (e.g., Downloads folder).
-  /// Returns the path where the file was saved, or null if cancelled.
   static Future<String?> saveExportToDevice() async {
     final exportPath = await exportToJson();
     final fileName = p.basename(exportPath);
@@ -107,14 +87,11 @@ class ExportImportService {
 
     if (outputPath == null) return null;
 
-    final bytes = await File(exportPath).readAsBytes();
-    await File(outputPath).writeAsBytes(bytes);
+    final fileBytes = await File(exportPath).readAsBytes();
+    await File(outputPath).writeAsBytes(fileBytes);
     return outputPath;
   }
 
-  /// Exports all data and opens a system save dialog so the user can choose
-  /// exactly where to save the file (e.g., Downloads folder).
-  /// Returns the path where the file was saved, or null if cancelled.
   static Future<String?> saveFullExportToDevice() async {
     final exportPath = await exportAllData();
     final fileName = p.basename(exportPath);
@@ -128,12 +105,12 @@ class ExportImportService {
 
     if (outputPath == null) return null;
 
-    final bytes = await File(exportPath).readAsBytes(bytes);
-    await File(outputPath).writeAsBytes(bytes);
+    final fileBytes = await File(exportPath).readAsBytes();
+    await File(outputPath).writeAsBytes(fileBytes);
     return outputPath;
   }
 
-  // ==================== EVENT-ONLY IMPORT ====================
+  // ==================== IMPORT ====================
 
   static Future<int> importFromJson(String filePath) async {
     final file = File(filePath);
@@ -148,7 +125,6 @@ class ExportImportService {
 
     final decoded = jsonDecode(contents);
 
-    // Support both old format (List) and new comprehensive format
     List<dynamic> eventList;
     if (decoded is List) {
       eventList = decoded;
@@ -161,7 +137,6 @@ class ExportImportService {
           'Invalid JSON format: expected a list of events or a comprehensive export');
     }
 
-    // Validate ALL events BEFORE touching the database
     final events = <Event>[];
     for (var i = 0; i < eventList.length; i++) {
       final item = eventList[i];
@@ -177,13 +152,11 @@ class ExportImportService {
       }
     }
 
-    // Backup existing events before replacing
     final backup = await DatabaseHelper.instance.getAllEventsSorted();
 
     try {
       await DatabaseHelper.instance.replaceAllEvents(events);
     } catch (e) {
-      // Rollback on failure
       await DatabaseHelper.instance.replaceAllEvents(backup);
       throw Exception(
           'Import failed. Database restored from backup. Error: $e');
@@ -191,8 +164,6 @@ class ExportImportService {
 
     return events.length;
   }
-
-  // ==================== COMPREHENSIVE IMPORT ====================
 
   static Future<void> importAllData(String filePath) async {
     final file = File(filePath);
@@ -232,7 +203,6 @@ class ExportImportService {
       typedTables[key] = value.cast<Map<String, dynamic>>();
     }
 
-    // Validate events specifically if present
     if (typedTables.containsKey('events')) {
       final eventList = typedTables['events']!;
       for (var i = 0; i < eventList.length; i++) {
@@ -245,22 +215,17 @@ class ExportImportService {
       }
     }
 
-    // Backup before import
     final backup = await DatabaseHelper.instance.exportAllTables();
 
     try {
       await DatabaseHelper.instance.importAllTables(typedTables);
     } catch (e) {
-      // Rollback
       await DatabaseHelper.instance.importAllTables(backup);
       throw Exception(
           'Import failed. Database restored from backup. Error: $e');
     }
   }
 
-  // ==================== FILE PICKER IMPORT ====================
-
-  /// Let the user pick a JSON file and import events only.
   static Future<int> importEventsFromPicker() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -281,7 +246,6 @@ class ExportImportService {
     return importFromJson(path);
   }
 
-  /// Let the user pick a JSON file and import all data comprehensively.
   static Future<void> importAllDataFromPicker() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
