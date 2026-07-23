@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     
     <application
         android:label="event_countdown"
@@ -27,6 +28,7 @@
             </intent-filter>
         </activity>
         
+        <!-- Event Countdown Widget -->
         <receiver
             android:name=".EventCountdownWidgetProvider"
             android:exported="true">
@@ -41,13 +43,14 @@
                 android:resource="@xml/event_widget_info" />
         </receiver>
 
+        <!-- Pomodoro Widget -->
         <receiver
             android:name=".PomodoroWidgetProvider"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.example.event_countdown.WIDGET_UPDATE" />
-                <action android:name="com.example.event_countdown.WIDGET_TICK" />
+                <action android:name="com.example.event_countdown.POMODORO_WIDGET_UPDATE" />
+                <action android:name="com.example.event_countdown.POMODORO_WIDGET_TICK" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
             <meta-data
