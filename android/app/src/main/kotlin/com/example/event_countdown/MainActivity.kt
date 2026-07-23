@@ -13,38 +13,29 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-            android.util.Log.d("MainActivity", "Method call received: ${call.method}")
+            android.util.Log.i("MainActivity", "Method: ${call.method}")
             when (call.method) {
                 "updateWidget" -> {
                     try {
-                        val intent = Intent(this, EventCountdownWidgetProvider::class.java).apply {
-                            action = EventCountdownWidgetProvider.ACTION_WIDGET_UPDATE
-                        }
-                        sendBroadcast(intent)
-                        android.util.Log.d("MainActivity", "Event widget update broadcast sent")
-                        result.success("event_updated")
+                        sendBroadcast(Intent(this, EventCountdownWidgetProvider::class.java).apply {
+                            action = "android.appwidget.action.APPWIDGET_UPDATE"
+                        })
+                        result.success("ok")
                     } catch (e: Exception) {
-                        android.util.Log.e("MainActivity", "Event widget update failed", e)
-                        result.error("UPDATE_ERROR", e.message, null)
+                        result.error("ERR", e.message, null)
                     }
                 }
                 "updatePomodoroWidget" -> {
                     try {
-                        val intent = Intent(this, PomodoroWidgetProvider::class.java).apply {
-                            action = PomodoroWidgetProvider.ACTION_POMODORO_UPDATE
-                        }
-                        sendBroadcast(intent)
-                        android.util.Log.d("MainActivity", "Pomodoro widget update broadcast sent")
-                        result.success("pomodoro_updated")
+                        sendBroadcast(Intent(this, PomodoroWidgetProvider::class.java).apply {
+                            action = "android.appwidget.action.APPWIDGET_UPDATE"
+                        })
+                        result.success("ok")
                     } catch (e: Exception) {
-                        android.util.Log.e("MainActivity", "Pomodoro widget update failed", e)
-                        result.error("UPDATE_ERROR", e.message, null)
+                        result.error("ERR", e.message, null)
                     }
                 }
-                else -> {
-                    android.util.Log.w("MainActivity", "Unknown method: ${call.method}")
-                    result.notImplemented()
-                }
+                else -> result.notImplemented()
             }
         }
     }
