@@ -142,6 +142,7 @@ class EventCountdownAppState extends State<EventCountdownApp>
     if (state == AppLifecycleState.resumed) {
       WidgetService.refreshWidget();
       WidgetService.refreshPomodoroWidget();
+      PomodoroService.instance.recalculateFromEndTime();
     }
   }
 
