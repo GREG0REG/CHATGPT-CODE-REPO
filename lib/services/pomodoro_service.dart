@@ -1,6 +1,5 @@
 // CHATGPT-CODE-REPO-TEST/lib/services/pomodoro_service.dart
-// COMPLETE FILE - Fixed timer state persistence for widget updates
-// Uses SharedPreferences keys that match Kotlin PomodoroWidgetProvider
+// COMPLETE FILE - FIXED: Timer now uses endTime calculation so it doesn't freeze when app is backgrounded
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -73,10 +72,14 @@ class PomodoroService {
   static const String _kTotalDuration = 'flutter.pomodoro_total_duration_seconds';
   static const String _kSubject = 'flutter.pomodoro_subject';
   static const String _kStatus = 'flutter.pomodoro_status';
-  static const String _kBgColor = 'flutter.pomodoro_bg_color';
   static const String _kSessions = 'flutter.pomodoro_completed_sessions';
   static const String _kRemainingSeconds = 'flutter.pomodoro_remaining_seconds';
   static const String _kProgressPercent = 'flutter.pomodoro_progress_percent';
+  static const String _kPresetName = 'flutter.pomodoro_preset_name';
+  static const String _kFocusMinutes = 'flutter.pomodoro_focus_minutes';
+  static const String _kShortBreakMinutes = 'flutter.pomodoro_short_break_minutes';
+  static const String _kLongBreakMinutes = 'flutter.pomodoro_long_break_minutes';
+  static const String _kSessionsBeforeLong = 'flutter.pomodoro_sessions_before_long';
 
   Timer? _timer;
   PomodoroPreset _preset = PomodoroPreset.classic;
@@ -86,6 +89,7 @@ class PomodoroService {
   String? _subjectTag;
   int? _eventId;
   int? _pendingSessionNoteId;
+  int _totalDurationSeconds = 0; // For progress calculation
 
   // Notifiers for UI updates
   final ValueNotifier<PomodoroPhase> phaseNotifier = ValueNotifier(PomodoroPhase.idle);
@@ -113,10 +117,50 @@ class PomodoroService {
     await _restoreState();
   }
 
+  /// CRITICAL FIX: When app returns from background, recalculate from endTime
+  /// instead of relying on timer ticks (which freeze when backgrounded)
+  Future<void> recalculateFromEndTime() async {
+    if (!isRunning && _phase != PomodoroPhase.paused) return;
+    
+    final prefs = await SharedPreferences.getInstance();
+    final endTime = prefs.getInt(_kEndTime) ?? 0;
+    
+    if (endTime > 0) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final remaining = ((endTime - now) / 1000).round();
+      
+      if (remaining > 0) {
+        _remainingSeconds = math.max(0, remaining);
+        remainingSecondsNotifier.value = _remainingSeconds;
+        
+        // Recalculate progress
+        final progress = _totalDurationSeconds > 0 
+            ? ((_totalDurationSeconds - _remainingSeconds) / _totalDurationSeconds * 100).round()
+            : 0;
+        
+        await prefs.setInt(_kRemainingSeconds, _remainingSeconds);
+        await prefs.setInt(_kProgressPercent, progress.clamp(0, 100));
+        
+        debugPrint('🔄 Recalculated from endTime: remaining=$_remainingSeconds, progress=$progress');
+      } else {
+        // Timer expired while in background
+        debugPrint('⏰ Timer expired while in background');
+        await _onTimerComplete();
+      }
+    }
+  }
+
   Future<void> _restoreState() async {
     final prefs = await SharedPreferences.getInstance();
     final savedPhase = prefs.getString(_kPhase) ?? 'idle';
     final endTime = prefs.getInt(_kEndTime) ?? 0;
+    final savedPresetName = prefs.getString(_kPresetName) ?? 'Classic';
+    
+    // Restore preset
+    _preset = PomodoroPreset.all.firstWhere(
+      (p) => p.name == savedPresetName,
+      orElse: () => PomodoroPreset.classic,
+    );
     
     if (endTime > 0) {
       final now = DateTime.now().millisecondsSinceEpoch;
@@ -127,6 +171,7 @@ class PomodoroService {
         _remainingSeconds = math.max(0, remaining);
         _completedFocusSessions = prefs.getInt(_kSessions) ?? 0;
         _subjectTag = prefs.getString(_kSubject);
+        _totalDurationSeconds = prefs.getInt(_kTotalDuration) ?? (_preset.focusMinutes * 60);
         
         phaseNotifier.value = _phase;
         remainingSecondsNotifier.value = _remainingSeconds;
@@ -134,6 +179,9 @@ class PomodoroService {
         
         if (isRunning) {
           _startTimer();
+          debugPrint('✅ Restored running timer: $_remainingSeconds seconds left');
+        } else if (_phase == PomodoroPhase.paused) {
+          debugPrint('✅ Restored paused timer: $_remainingSeconds seconds left');
         }
       } else {
         await _clearState();
@@ -174,11 +222,14 @@ class PomodoroService {
   Future<void> _persistState() async {
     final prefs = await SharedPreferences.getInstance();
     
+    // CRITICAL: Calculate endTime from current time + remaining seconds
+    // This is what allows the widget and app to show correct time even when backgrounded
     final endTime = isRunning 
         ? DateTime.now().millisecondsSinceEpoch + (_remainingSeconds * 1000)
         : 0;
     
     final totalDuration = _preset.focusMinutes * 60;
+    _totalDurationSeconds = totalDuration;
 
     await prefs.setString(_kPhase, _phaseToString(_phase));
     await prefs.setInt(_kEndTime, endTime);
@@ -187,13 +238,18 @@ class PomodoroService {
     await prefs.setString(_kStatus, _getStatusText(_phase));
     await prefs.setInt(_kSessions, _completedFocusSessions);
     await prefs.setInt(_kRemainingSeconds, _remainingSeconds);
+    await prefs.setString(_kPresetName, _preset.name);
+    await prefs.setInt(_kFocusMinutes, _preset.focusMinutes);
+    await prefs.setInt(_kShortBreakMinutes, _preset.shortBreakMinutes);
+    await prefs.setInt(_kLongBreakMinutes, _preset.longBreakMinutes);
+    await prefs.setInt(_kSessionsBeforeLong, _preset.sessionsBeforeLongBreak);
     
     final progress = totalDuration > 0 
         ? ((totalDuration - _remainingSeconds) / totalDuration * 100).round()
         : 0;
     await prefs.setInt(_kProgressPercent, progress.clamp(0, 100));
 
-    debugPrint('Pomodoro state persisted: phase=${_phaseToString(_phase)}, endTime=$endTime, remaining=$_remainingSeconds, progress=$progress');
+    debugPrint('💾 Persisted: phase=${_phaseToString(_phase)}, endTime=$endTime, remaining=$_remainingSeconds, progress=$progress');
   }
 
   Future<void> _clearState() async {
@@ -203,10 +259,14 @@ class PomodoroService {
     await prefs.remove(_kTotalDuration);
     await prefs.remove(_kSubject);
     await prefs.remove(_kStatus);
-    await prefs.remove(_kBgColor);
     await prefs.remove(_kSessions);
     await prefs.remove(_kRemainingSeconds);
     await prefs.remove(_kProgressPercent);
+    await prefs.remove(_kPresetName);
+    await prefs.remove(_kFocusMinutes);
+    await prefs.remove(_kShortBreakMinutes);
+    await prefs.remove(_kLongBreakMinutes);
+    await prefs.remove(_kSessionsBeforeLong);
   }
 
   Future<void> start({
@@ -226,6 +286,7 @@ class PomodoroService {
   Future<void> _startFocus() async {
     _phase = PomodoroPhase.focusing;
     _remainingSeconds = _preset.focusMinutes * 60;
+    _totalDurationSeconds = _remainingSeconds;
     
     phaseNotifier.value = _phase;
     remainingSecondsNotifier.value = _remainingSeconds;
@@ -238,14 +299,26 @@ class PomodoroService {
   void _startTimer() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) async {
-      if (_remainingSeconds > 0) {
-        _remainingSeconds--;
-        remainingSecondsNotifier.value = _remainingSeconds;
+      // CRITICAL FIX: Recalculate from endTime every tick instead of decrementing
+      // This prevents freeze when app is backgrounded
+      final prefs = await SharedPreferences.getInstance();
+      final endTime = prefs.getInt(_kEndTime) ?? 0;
+      
+      if (endTime > 0) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final newRemaining = ((endTime - now) / 1000).round();
         
-        // Persist every 5 seconds to reduce writes but keep widget updated
-        if (_remainingSeconds % 5 == 0) {
-          await _persistState();
-          await WidgetService.refreshPomodoroWidget();
+        if (newRemaining > 0) {
+          _remainingSeconds = math.max(0, newRemaining);
+          remainingSecondsNotifier.value = _remainingSeconds;
+          
+          // Persist every 5 seconds to reduce writes but keep widget updated
+          if (_remainingSeconds % 5 == 0) {
+            await _persistState();
+            await WidgetService.refreshPomodoroWidget();
+          }
+        } else {
+          await _onTimerComplete();
         }
       } else {
         await _onTimerComplete();
@@ -275,6 +348,7 @@ class PomodoroService {
   Future<void> _startShortBreak() async {
     _phase = PomodoroPhase.shortBreak;
     _remainingSeconds = _preset.shortBreakMinutes * 60;
+    _totalDurationSeconds = _remainingSeconds;
     phaseNotifier.value = _phase;
     remainingSecondsNotifier.value = _remainingSeconds;
     await _persistState();
@@ -285,6 +359,7 @@ class PomodoroService {
   Future<void> _startLongBreak() async {
     _phase = PomodoroPhase.longBreak;
     _remainingSeconds = _preset.longBreakMinutes * 60;
+    _totalDurationSeconds = _remainingSeconds;
     phaseNotifier.value = _phase;
     remainingSecondsNotifier.value = _remainingSeconds;
     await _persistState();
@@ -328,6 +403,8 @@ class PomodoroService {
 
   Future<void> resume() async {
     if (_phase == PomodoroPhase.paused) {
+      // CRITICAL FIX: Recalculate endTime based on current remaining seconds
+      // so the timer continues correctly from where it was paused
       _phase = PomodoroPhase.focusing;
       phaseNotifier.value = _phase;
       await _persistState();
