@@ -1,7 +1,5 @@
 package com.example.event_countdown
 
-import android.appwidget.AppWidgetManager
-import android.content.ComponentName
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
