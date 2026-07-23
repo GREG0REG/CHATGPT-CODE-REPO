@@ -1,7 +1,5 @@
 // CHATGPT-CODE-REPO-TEST/lib/services/widget_service.dart
 // COMPLETE FILE - Fixed widget data writing and refresh logic
-// FIXES: Removed duplicate AppThemeOption, removed HomeWidget dependency,
-//        uses path_provider instead, imports AppThemeOption from app_themes.dart
 
 import 'dart:convert';
 import 'dart:io';
@@ -21,7 +19,7 @@ class WidgetService {
   static const String _widgetDataFileName = 'widget_data.json';
   static const String _channel = 'com.example.event_countdown/widget';
 
-  static final MethodChannel _platform = MethodChannel(_channel);
+  static const MethodChannel _platform = MethodChannel(_channel);
 
   /// Write widget data to the JSON file that the Android widget reads.
   static Future<void> refreshWidget() async {
@@ -29,10 +27,11 @@ class WidgetService {
       final events = await DatabaseHelper.instance.getAllEventsSorted();
       final now = DateTime.now();
 
-      // Find the next upcoming event
+      // Find the next upcoming event (NOT completed and deadline in future)
       Event? nextEvent;
       for (final e in events) {
         if (e.isCompleted) continue;
+        // Use finalMillis which is the actual deadline
         if (e.finalMillis > now.millisecondsSinceEpoch) {
           nextEvent = e;
           break;
@@ -90,8 +89,10 @@ class WidgetService {
         data['textColor'] = '#FFFFFF';
       } else {
         data['title'] = 'No upcoming events';
-        data['countdown'] = '';
+        data['countdown'] = 'Add an event to see countdown';
         data['progressPercent'] = 0;
+        data['deadlineMillis'] = 0;
+        data['startMillis'] = 0;
       }
 
       // Write to app files directory where Kotlin can read it
@@ -100,13 +101,19 @@ class WidgetService {
       final file = File(filePath);
       await file.writeAsString(jsonEncode(data));
 
-      debugPrint('Widget data written to: $filePath');
-      debugPrint('Widget data: $data');
+      debugPrint('✅ Widget data written to: $filePath');
+      debugPrint('✅ Widget data: $data');
 
       // Trigger platform widget update
-      await _platform.invokeMethod('updateWidget');
-    } catch (e) {
-      debugPrint('Widget refresh error: $e');
+      try {
+        await _platform.invokeMethod('updateWidget');
+        debugPrint('✅ Platform widget update triggered');
+      } catch (e) {
+        debugPrint('⚠️ Platform channel error (expected in emulator): $e');
+      }
+    } catch (e, stack) {
+      debugPrint('❌ Widget refresh error: $e');
+      debugPrint(stack.toString());
     }
   }
 
@@ -114,8 +121,9 @@ class WidgetService {
   static Future<void> refreshPomodoroWidget() async {
     try {
       await _platform.invokeMethod('updatePomodoroWidget');
+      debugPrint('✅ Pomodoro widget update triggered');
     } catch (e) {
-      debugPrint('Pomodoro widget refresh error: $e');
+      debugPrint('⚠️ Pomodoro widget refresh error (expected in emulator): $e');
     }
   }
 }
