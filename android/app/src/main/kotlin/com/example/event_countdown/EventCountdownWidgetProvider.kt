@@ -3,17 +3,10 @@ package com.example.event_countdown
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
-import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.graphics.Color
-import android.os.Build
 import android.util.Log
 import android.widget.RemoteViews
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
-import java.util.concurrent.TimeUnit
 import android.database.sqlite.SQLiteDatabase
 import android.database.Cursor
 
@@ -37,7 +30,6 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         private const val KEY_GRADE_LETTER = "grade_letter"
         private const val KEY_TASKS_URGENT = "tasks_urgent_count"
         private const val KEY_TASKS_TOTAL = "tasks_total_count"
-        private const val WIDGET_WORK_TAG = "event_countdown_widget_work"
 
         fun parseColorOrDefault(colorStr: String?, defaultColor: Int): Int {
             return try {
@@ -229,44 +221,6 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             }
             return null
         }
-
-        fun scheduleWidgetWork(context: Context) {
-            try {
-                val workRequest = PeriodicWorkRequestBuilder<WidgetRefreshWorker>(15, TimeUnit.MINUTES)
-                    .addTag(WIDGET_WORK_TAG)
-                    .build()
-
-                WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                    WIDGET_WORK_TAG,
-                    ExistingPeriodicWorkPolicy.KEEP,
-                    workRequest
-                )
-                Log.d(TAG, "Scheduled widget background work")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to schedule widget work", e)
-            }
-        }
-
-        fun cancelWidgetWork(context: Context) {
-            try {
-                WorkManager.getInstance(context).cancelUniqueWork(WIDGET_WORK_TAG)
-                Log.d(TAG, "Cancelled widget background work")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to cancel widget work", e)
-            }
-        }
-    }
-
-    override fun onEnabled(context: Context) {
-        super.onEnabled(context)
-        Log.d(TAG, "Widget enabled — scheduling background work")
-        scheduleWidgetWork(context)
-    }
-
-    override fun onDisabled(context: Context) {
-        super.onDisabled(context)
-        Log.d(TAG, "Widget disabled — cancelling background work")
-        cancelWidgetWork(context)
     }
 
     override fun onUpdate(
