@@ -14,14 +14,13 @@ class WidgetService {
 
   static const MethodChannel _channel = MethodChannel('com.example.event_countdown/widget');
 
+  // Keys WITHOUT flutter. prefix — native side reads these directly
   static const String _kEventTitle = 'event_title';
   static const String _kCountdownText = 'countdown_text';
   static const String _kBgColor = 'widget_bg_color';
   static const String _kTextColor = 'widget_text_color';
   static const String _kProgress = 'widget_progress_percent';
   static const String _kUrgencyColor = 'widget_urgency_color';
-  
-  // NEW: Keys for LIVE background updates
   static const String _kEventDeadline = 'widget_event_deadline_millis';
   static const String _kEventStart = 'widget_event_start_millis';
   static const String _kSmartFormat = 'widget_smart_format_enabled';
@@ -57,8 +56,6 @@ class WidgetService {
       String? textColor;
       int progressPercent;
       String? urgencyColorName;
-      
-      // NEW: Store deadline/start for LIVE background calculation
       int? deadlineMillis;
       int? startMillis;
 
@@ -92,14 +89,14 @@ class WidgetService {
         textColor = themeColors['text'];
       }
 
+      // Write all prefs BEFORE calling native update
       await prefs.setString(_kEventTitle, title);
       await prefs.setString(_kCountdownText, countdownText);
       if (bgColor != null) await prefs.setString(_kBgColor, bgColor);
       if (textColor != null) await prefs.setString(_kTextColor, textColor);
       await prefs.setInt(_kProgress, progressPercent);
       await prefs.setBool(_kSmartFormat, smartFormat);
-      
-      // NEW: Persist deadline/start for background LIVE calculation
+
       if (deadlineMillis != null) {
         await prefs.setInt(_kEventDeadline, deadlineMillis);
       } else {
@@ -110,12 +107,15 @@ class WidgetService {
       } else {
         await prefs.remove(_kEventStart);
       }
-      
+
       if (urgencyColorName != null) {
         await prefs.setString(_kUrgencyColor, urgencyColorName);
       } else {
         await prefs.remove(_kUrgencyColor);
       }
+
+      // Force commit to disk before native read
+      await prefs.reload();
 
       await _channel.invokeMethod('updateWidget', {
         'title': title,
@@ -160,6 +160,7 @@ class WidgetService {
       await prefs.setString(_kPomodoroBgColor, bgColor);
       await prefs.setInt(_kPomodoroProgress, progressInt);
       await prefs.setInt(_kPomodoroSessions, completedSessions);
+      await prefs.reload();
 
       await _channel.invokeMethod('updatePomodoroWidget', {
         'subject': subject,
