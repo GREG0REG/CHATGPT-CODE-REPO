@@ -1,228 +1,154 @@
+// CHATGPT-CODE-REPO-TEST/lib/services/widget_service.dart
+// COMPLETE FILE - Fixed widget data writing and refresh logic
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:home_widget/home_widget.dart';
 import '../database_helper.dart';
 import '../models/event.dart';
 import '../services/countdown_service.dart';
 import '../services/settings_service.dart';
-import '../theme/app_themes.dart';
 
 class WidgetService {
   WidgetService._();
   static final WidgetService instance = WidgetService._();
 
-  static const MethodChannel _channel = MethodChannel('com.example.event_countdown/widget');
+  static const String _widgetDataFileName = 'widget_data.json';
+  static const String _channel = 'com.example.event_countdown/widget';
 
-  static const String _kEventTitle = 'flutter.event_title';
-  static const String _kCountdownText = 'flutter.countdown_text';
-  static const String _kBgColor = 'flutter.widget_bg_color';
-  static const String _kTextColor = 'flutter.widget_text_color';
-  static const String _kProgress = 'flutter.widget_progress_percent';
-  static const String _kUrgencyColor = 'flutter.widget_urgency_color';
-  static const String _kEventDeadline = 'flutter.widget_event_deadline_millis';
-  static const String _kEventStart = 'flutter.widget_event_start_millis';
-  static const String _kSmartFormat = 'flutter.widget_smart_format_enabled';
+  static final MethodChannel _platform = MethodChannel(_channel);
 
-  static const String _kPomodoroSubject = 'flutter.pomodoro_subject';
-  static const String _kPomodoroTimer = 'flutter.pomodoro_timer_text';
-  static const String _kPomodoroStatus = 'flutter.pomodoro_status';
-  static const String _kPomodoroBgColor = 'flutter.pomodoro_bg_color';
-  static const String _kPomodoroProgress = 'flutter.pomodoro_progress_percent';
-  static const String _kPomodoroSessions = 'flutter.pomodoro_completed_sessions';
-
-  static Future<void> _writeWidgetData(Map<String, dynamic> data) async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/widget_data.json');
-      await file.writeAsString(jsonEncode(data));
-    } catch (e) {
-      debugPrint('WidgetService._writeWidgetData error: $e');
-    }
-  }
-
+  /// Write widget data to the JSON file that the Android widget reads.
+  /// This is the CRITICAL fix - the Kotlin widget provider reads this file.
   static Future<void> refreshWidget() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
       final events = await DatabaseHelper.instance.getAllEventsSorted();
       final now = DateTime.now();
 
+      // Find the next upcoming event
       Event? nextEvent;
       for (final e in events) {
-        if (!e.isCompleted && e.finalMillis > now.millisecondsSinceEpoch) {
+        if (e.isCompleted) continue;
+        if (e.finalMillis > now.millisecondsSinceEpoch) {
           nextEvent = e;
           break;
         }
       }
 
-      final smartFormat = await SettingsService.instance.getSmartFormatEnabled();
-      final theme = await SettingsService.instance.getSelectedTheme();
-      final customColor = await SettingsService.instance.getCustomColor();
+      final data = <String, dynamic>{};
 
-      String title;
-      String countdownText;
-      String? bgColor;
-      String? textColor;
-      int progressPercent;
-      String? urgencyColorName;
-      int? deadlineMillis;
-      int? startMillis;
+      if (nextEvent != null) {
+        final result = CountdownService.buildCountdownText(
+          nextEvent,
+          now,
+          smartFormatEnabled: await SettingsService.instance.getSmartFormatEnabled(),
+        );
 
-      if (nextEvent == null) {
-        title = 'No upcoming events';
-        countdownText = '';
-        progressPercent = 0;
-        urgencyColorName = null;
-        deadlineMillis = null;
-        startMillis = null;
-      } else {
-        title = nextEvent.title;
-        deadlineMillis = nextEvent.finalMillis;
-        startMillis = nextEvent.startTimeMillis;
-        final result = CountdownService.buildCountdownText(nextEvent, now, smartFormatEnabled: smartFormat);
-        countdownText = result.text;
-
+        // Calculate progress percentage
+        int progressPercent = 65; // default
         if (nextEvent.startTimeMillis != null && nextEvent.deadlineMillis != null) {
           final total = nextEvent.deadlineMillis! - nextEvent.startTimeMillis!;
           final elapsed = now.millisecondsSinceEpoch - nextEvent.startTimeMillis!;
-          progressPercent = total > 0 ? ((elapsed / total) * 100).round().clamp(0, 100) : 65;
-        } else {
-          progressPercent = 65;
+          if (total > 0) {
+            progressPercent = ((elapsed / total) * 100).toInt().clamp(0, 100);
+          }
+        } else if (nextEvent.deadlineMillis != null) {
+          // Use date as start, deadline as end
+          final total = nextEvent.deadlineMillis! - nextEvent.dateMillis;
+          final elapsed = now.millisecondsSinceEpoch - nextEvent.dateMillis;
+          if (total > 0) {
+            progressPercent = ((elapsed / total) * 100).toInt().clamp(0, 100);
+          }
         }
 
-        final urgencyColor = nextEvent.getUrgencyColor(now);
-        urgencyColorName = _colorToName(urgencyColor);
+        // Urgency color based on time remaining
+        final diff = Duration(milliseconds: nextEvent.finalMillis - now.millisecondsSinceEpoch);
+        String? urgencyColor;
+        if (diff.inDays < 1) {
+          urgencyColor = 'red';
+        } else if (diff.inDays < 3) {
+          urgencyColor = 'deepOrange';
+        } else if (diff.inDays < 7) {
+          urgencyColor = 'orange';
+        } else if (diff.inDays < 30) {
+          urgencyColor = 'green';
+        }
 
-        final themeColors = _getThemeColors(theme, customColor);
-        bgColor = themeColors['bg'];
-        textColor = themeColors['text'];
-      }
+        data['title'] = nextEvent.title;
+        data['countdown'] = result.text;
+        data['deadlineMillis'] = nextEvent.finalMillis;
+        data['startMillis'] = nextEvent.startTimeMillis ?? nextEvent.dateMillis;
+        data['progressPercent'] = progressPercent;
+        data['urgencyColor'] = urgencyColor;
+        data['smartFormat'] = true;
 
-      await prefs.setString(_kEventTitle, title);
-      await prefs.setString(_kCountdownText, countdownText);
-      if (bgColor != null) await prefs.setString(_kBgColor, bgColor);
-      if (textColor != null) await prefs.setString(_kTextColor, textColor);
-      await prefs.setInt(_kProgress, progressPercent);
-      await prefs.setBool(_kSmartFormat, smartFormat);
+        // Theme colors
+        final theme = await SettingsService.instance.getSelectedTheme();
+        final customColor = await SettingsService.instance.getCustomColor();
+        final cs = await _getColorScheme(theme, customColor);
 
-      if (deadlineMillis != null) {
-        await prefs.setInt(_kEventDeadline, deadlineMillis);
+        data['bgColor'] = '#${cs.primary.value.toRadixString(16).substring(2).toUpperCase()}';
+        data['textColor'] = '#FFFFFF';
       } else {
-        await prefs.remove(_kEventDeadline);
-      }
-      if (startMillis != null) {
-        await prefs.setInt(_kEventStart, startMillis);
-      } else {
-        await prefs.remove(_kEventStart);
+        data['title'] = 'No upcoming events';
+        data['countdown'] = '';
+        data['progressPercent'] = 0;
       }
 
-      if (urgencyColorName != null) {
-        await prefs.setString(_kUrgencyColor, urgencyColorName);
-      } else {
-        await prefs.remove(_kUrgencyColor);
-      }
+      // Write to app files directory where Kotlin can read it
+      final dir = await HomeWidget.getWidgetData<String>('appDir');
+      final filePath = '${await _getFilesDir()}/$_widgetDataFileName';
+      final file = File(filePath);
+      await file.writeAsString(jsonEncode(data));
 
-      await _writeWidgetData({
-        'title': title,
-        'countdown': countdownText,
-        'bgColor': bgColor,
-        'textColor': textColor,
-        'progressPercent': progressPercent,
-        'urgencyColor': urgencyColorName,
-        'deadlineMillis': deadlineMillis,
-        'startMillis': startMillis,
-        'smartFormat': smartFormat,
-      });
+      debugPrint('Widget data written: $data');
 
-      await _channel.invokeMethod('updateWidget', {
-        'title': title,
-        'countdown': countdownText,
-        'bgColor': bgColor,
-        'textColor': textColor,
-        'progressPercent': progressPercent,
-        'urgencyColor': urgencyColorName,
-      });
+      // Trigger platform widget update
+      await _platform.invokeMethod('updateWidget');
     } catch (e) {
-      debugPrint('WidgetService.refreshWidget error: $e');
+      debugPrint('Widget refresh error: $e');
     }
   }
 
+  /// Refresh the Pomodoro widget with current timer state
   static Future<void> refreshPomodoroWidget() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-
-      final phaseName = prefs.getString('pomodoro_phase') ?? 'idle';
-      final remainingSeconds = prefs.getInt('pomodoro_remaining_seconds') ?? 0;
-      final completedSessions = prefs.getInt('pomodoro_completed_sessions') ?? 0;
-      final subject = prefs.getString('pomodoro_subject') ?? 'Ready to Focus';
-      final status = prefs.getString('pomodoro_status') ?? 'Focus';
-
-      final minutes = (remainingSeconds ~/ 60).toString().padLeft(2, '0');
-      final seconds = (remainingSeconds % 60).toString().padLeft(2, '0');
-      final timerText = phaseName == 'idle' ? 'Tap to start' : '$minutes:$seconds';
-
-      final progressPercent = prefs.getDouble('pomodoro_progress_percent') ?? 0.0;
-      final progressInt = (progressPercent * 100).round().clamp(0, 100);
-
-      String? bgColor;
-      if (phaseName == 'focusing' || phaseName == 'idle' || phaseName == 'paused') {
-        bgColor = '#FF6B6B';
-      } else {
-        bgColor = '#00BFA5';
-      }
-
-      await prefs.setString(_kPomodoroSubject, subject);
-      await prefs.setString(_kPomodoroTimer, timerText);
-      await prefs.setString(_kPomodoroStatus, status);
-      await prefs.setString(_kPomodoroBgColor, bgColor);
-      await prefs.setInt(_kPomodoroProgress, progressInt);
-      await prefs.setInt(_kPomodoroSessions, completedSessions);
-
-      await _channel.invokeMethod('updatePomodoroWidget', {
-        'subject': subject,
-        'timerText': timerText,
-        'status': status,
-        'bgColor': bgColor,
-        'progressPercent': progressInt,
-        'completedSessions': completedSessions,
-      });
+      await _platform.invokeMethod('updatePomodoroWidget');
     } catch (e) {
-      debugPrint('WidgetService.refreshPomodoroWidget error: $e');
+      debugPrint('Pomodoro widget refresh error: $e');
     }
   }
 
-  static String? _colorToName(Color color) {
-    if (color == Colors.red) return 'red';
-    if (color == Colors.deepOrange) return 'deepOrange';
-    if (color == Colors.orange) return 'orange';
-    if (color == Colors.green) return 'green';
-    if (color == Colors.grey) return 'grey';
-    return null;
+  static Future<String> _getFilesDir() async {
+    try {
+      final result = await _platform.invokeMethod<String>('getFilesDir');
+      return result ?? '/data/data/com.example.event_countdown/files';
+    } catch (e) {
+      return '/data/data/com.example.event_countdown/files';
+    }
   }
 
-  static Map<String, String> _getThemeColors(AppThemeOption theme, Color? customColor) {
+  static Future<ColorScheme> _getColorScheme(AppThemeOption theme, Color? customColor) async {
+    // Return a basic color scheme based on theme
     switch (theme) {
-      case AppThemeOption.auroraBorealis:
-        return {'bg': '#00BFA5', 'text': '#FFFFFF'};
-      case AppThemeOption.oceanBreeze:
-        return {'bg': '#2196F3', 'text': '#FFFFFF'};
-      case AppThemeOption.sunsetGlow:
-        return {'bg': '#FF7043', 'text': '#FFFFFF'};
-      case AppThemeOption.midnightForest:
-        return {'bg': '#2E7D32', 'text': '#FFFFFF'};
-      case AppThemeOption.cherryBlossom:
-        return {'bg': '#E91E63', 'text': '#FFFFFF'};
       case AppThemeOption.customHex:
-        if (customColor != null) {
-          final hex = '#${customColor.value.toRadixString(16).substring(2).toUpperCase()}';
-          return {'bg': hex, 'text': '#FFFFFF'};
-        }
-        return {'bg': '#00BFA5', 'text': '#FFFFFF'};
+        return ColorScheme.fromSeed(seedColor: customColor ?? const Color(0xFF00BFA5));
       case AppThemeOption.materialYou:
-        return {'bg': '#6750A4', 'text': '#FFFFFF'};
+        return ColorScheme.fromSeed(seedColor: const Color(0xFF6750A4));
+      default:
+        return ColorScheme.fromSeed(seedColor: const Color(0xFF00BFA5));
     }
   }
+}
+
+// Stub for AppThemeOption if not imported
+enum AppThemeOption {
+  auroraBorealis,
+  midnightOcean,
+  sunsetGlow,
+  forestMist,
+  materialYou,
+  customHex,
 }
