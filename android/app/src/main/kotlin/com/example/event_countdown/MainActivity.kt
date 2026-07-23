@@ -36,6 +36,13 @@ class MainActivity : FlutterActivity() {
                         result.error("WIDGET_UPDATE_ERROR", e.message, null)
                     }
                 }
+                "getFilesDir" -> {
+                    try {
+                        result.success(filesDir.absolutePath)
+                    } catch (e: Exception) {
+                        result.error("FILES_DIR_ERROR", e.message, null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
