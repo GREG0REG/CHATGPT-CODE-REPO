@@ -44,7 +44,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   @override
   void initState() {
     super.initState();
-    // CRITICAL: Register lifecycle observer
     WidgetsBinding.instance.addObserver(this);
     
     _service = PomodoroService.instance;
@@ -62,15 +61,12 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     _service.completedSessionsNotifier.addListener(_onServiceUpdate);
   }
 
-  /// CRITICAL FIX: Handle app lifecycle changes
-  /// When app returns from background, recalculate timer from endTime
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     debugPrint('📱 App lifecycle: $state');
     
     if (state == AppLifecycleState.resumed) {
-      // App came back to foreground - recalculate timer from endTime
       _service.recalculateFromEndTime();
     }
   }
@@ -332,7 +328,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
 
   @override
   void dispose() {
-    // CRITICAL: Remove lifecycle observer
     WidgetsBinding.instance.removeObserver(this);
     _pulseController.dispose();
     _service.phaseNotifier.removeListener(_onServiceUpdate);
