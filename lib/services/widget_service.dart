@@ -74,29 +74,34 @@ class WidgetService {
         data['startMillis'] = 0;
       }
 
+      // Write to app files directory
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/$_widgetDataFileName');
       await file.writeAsString(jsonEncode(data));
 
-      debugPrint('Widget data written: ${file.path}');
-      debugPrint('Data: $data');
+      debugPrint('✅ WIDGET DATA WRITTEN: ${file.path}');
+      debugPrint('✅ DATA: $data');
 
+      // Try method channel but don't depend on it
       try {
         await _platform.invokeMethod('updateWidget');
       } catch (e) {
-        debugPrint('Method channel error: $e');
+        debugPrint('Method channel (optional): $e');
       }
     } catch (e, stack) {
-      debugPrint('Widget refresh error: $e');
+      debugPrint('❌ Widget refresh error: $e');
       debugPrint('$stack');
     }
   }
 
   static Future<void> refreshPomodoroWidget() async {
+    // Pomodoro widget reads from SharedPreferences directly
+    // No file writing needed - pomodoro_service.dart already writes to SharedPreferences
+    debugPrint('✅ Pomodoro widget data is in SharedPreferences');
     try {
       await _platform.invokeMethod('updatePomodoroWidget');
     } catch (e) {
-      debugPrint('Pomodoro widget refresh error: $e');
+      debugPrint('Method channel (optional): $e');
     }
   }
 }
