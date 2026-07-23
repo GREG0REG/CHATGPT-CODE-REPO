@@ -1,6 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     
-    <!-- Add this permission -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
@@ -28,7 +27,6 @@
             </intent-filter>
         </activity>
         
-        <!-- Event Countdown Widget -->
         <receiver
             android:name=".EventCountdownWidgetProvider"
             android:exported="true">
@@ -43,7 +41,6 @@
                 android:resource="@xml/event_widget_info" />
         </receiver>
 
-        <!-- Pomodoro Widget -->
         <receiver
             android:name=".PomodoroWidgetProvider"
             android:exported="true">
