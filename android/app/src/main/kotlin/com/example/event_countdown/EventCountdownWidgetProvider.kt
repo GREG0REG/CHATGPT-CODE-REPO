@@ -13,16 +13,18 @@ import android.widget.RemoteViews
 import java.util.concurrent.TimeUnit
 
 class EventCountdownWidgetProvider : AppWidgetProvider() {
+
     companion object {
-      private const val KEY_TITLE = "flutter.event_title"
-      private const val KEY_COUNTDOWN = "flutter.countdown_text"
-      private const val KEY_BG_COLOR = "flutter.widget_bg_color"
-      private const val KEY_TEXT_COLOR = "flutter.widget_text_color"
-      private const val KEY_PROGRESS = "flutter.widget_progress_percent"
-      private const val KEY_URGENCY_COLOR = "flutter.widget_urgency_color"
-      private const val KEY_EVENT_DEADLINE = "flutter.widget_event_deadline_millis"
-      private const val KEY_EVENT_START = "flutter.widget_event_start_millis"
-      private const val KEY_SMART_FORMAT = "flutter.widget_smart_format_enabled"
+        private const val PREFS_NAME = "FlutterSharedPreferences"
+        private const val KEY_TITLE = "flutter.event_title"
+        private const val KEY_COUNTDOWN = "flutter.countdown_text"
+        private const val KEY_BG_COLOR = "flutter.widget_bg_color"
+        private const val KEY_TEXT_COLOR = "flutter.widget_text_color"
+        private const val KEY_PROGRESS = "flutter.widget_progress_percent"
+        private const val KEY_URGENCY_COLOR = "flutter.widget_urgency_color"
+        private const val KEY_EVENT_DEADLINE = "flutter.widget_event_deadline_millis"
+        private const val KEY_EVENT_START = "flutter.widget_event_start_millis"
+        private const val KEY_SMART_FORMAT = "flutter.widget_smart_format_enabled"
 
         const val ACTION_WIDGET_TICK = "com.example.event_countdown.EVENT_WIDGET_TICK"
         const val ACTION_WIDGET_UPDATE = "com.example.event_countdown.EVENT_WIDGET_UPDATE"
@@ -116,25 +118,17 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
 
                 val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
 
-                // Set text content
                 views.setTextViewText(R.id.widget_title, title)
                 views.setTextViewText(R.id.widget_countdown, countdownText)
-
-                // Progress bar — using your original ProgressBar style
                 views.setProgressBar(R.id.widget_progress_ring, 100, progressPercent.coerceIn(0, 100), false)
 
-                // Parse theme colors
                 val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#00BFA5"))
                 val textColor = parseColorOrDefault(textColorStr, Color.WHITE)
 
-                // Set background color
                 views.setInt(R.id.widget_root, "setBackgroundColor", themeColor)
-
-                // Text colors
                 views.setTextColor(R.id.widget_title, textColor)
                 views.setTextColor(R.id.widget_countdown, textColor)
 
-                // Urgency indicator
                 val showUrgency = urgencyColorName != null &&
                     urgencyColorName != "green" &&
                     urgencyColorName != "grey"
@@ -160,7 +154,6 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.widget_urgency_row, android.view.View.GONE)
                 }
 
-                // Launch intent
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 if (launchIntent != null) {
                     val pendingIntent = PendingIntent.getActivity(
@@ -174,7 +167,6 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
 
                 appWidgetManager.updateAppWidget(widgetId, views)
 
-                // Schedule next tick if active event
                 if (deadlineMillis != null && deadlineMillis > System.currentTimeMillis()) {
                     scheduleWidgetTick(context)
                 }
