@@ -23,18 +23,17 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             return try {
                 val file = File(context.filesDir, "widget_data.json")
                 if (!file.exists()) {
-                    android.util.Log.e("EventWidget", "widget_data.json NOT FOUND at ${file.absolutePath}")
+                    android.util.Log.w("EventWidget", "File not found: ${file.absolutePath}")
                     return emptyMap()
                 }
 
                 val jsonString = file.readText()
                 if (jsonString.isBlank()) {
-                    android.util.Log.e("EventWidget", "widget_data.json is EMPTY")
+                    android.util.Log.w("EventWidget", "File is empty")
                     return emptyMap()
                 }
 
-                android.util.Log.d("EventWidget", "Reading from: ${file.absolutePath}")
-                android.util.Log.d("EventWidget", "Content: $jsonString")
+                android.util.Log.d("EventWidget", "File content: $jsonString")
 
                 val json = JSONObject(jsonString)
                 val result = mutableMapOf<String, Any?>()
@@ -45,7 +44,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 }
                 result
             } catch (e: Exception) {
-                android.util.Log.e("EventWidget", "Failed to read", e)
+                android.util.Log.e("EventWidget", "Read error", e)
                 emptyMap()
             }
         }
@@ -57,6 +56,31 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         ) {
             try {
                 val data = readWidgetData(context)
+
+                // If no data file, show placeholder
+                if (data.isEmpty()) {
+                    val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
+                    views.setTextViewText(R.id.widget_title, "Open app to add events")
+                    views.setTextViewText(R.id.widget_countdown, "No events yet")
+                    views.setViewVisibility(R.id.widget_urgency_row, android.view.View.GONE)
+                    views.setProgressBar(R.id.widget_progress_ring, 100, 0, false)
+                    views.setInt(R.id.widget_root, "setBackgroundColor", Color.parseColor("#00BFA5"))
+                    views.setTextColor(R.id.widget_title, Color.WHITE)
+                    views.setTextColor(R.id.widget_countdown, Color.WHITE)
+
+                    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                    if (launchIntent != null) {
+                        val pendingIntent = PendingIntent.getActivity(
+                            context, 0, launchIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+                        views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+                    }
+
+                    appWidgetManager.updateAppWidget(widgetId, views)
+                    android.util.Log.i("EventWidget", "Widget $widgetId: No data file")
+                    return
+                }
 
                 val title = data["title"] as? String ?: "No upcoming events"
                 val storedCountdown = data["countdown"] as? String ?: ""
@@ -167,7 +191,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 }
 
                 appWidgetManager.updateAppWidget(widgetId, views)
-                android.util.Log.i("EventWidget", "Widget $widgetId updated: $title | $countdownText")
+                android.util.Log.i("EventWidget", "Widget $widgetId: $title | $countdownText")
 
                 if (deadlineMillis != null && deadlineMillis > System.currentTimeMillis()) {
                     scheduleTick(context)
