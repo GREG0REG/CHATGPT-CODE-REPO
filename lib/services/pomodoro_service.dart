@@ -1,5 +1,6 @@
 // CHATGPT-CODE-REPO-TEST/lib/services/pomodoro_service.dart
 // COMPLETE FILE - Fixed timer state persistence for widget updates
+// Uses SharedPreferences keys that match Kotlin PomodoroWidgetProvider
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -66,7 +67,7 @@ class PomodoroService {
   PomodoroService._();
   static final PomodoroService instance = PomodoroService._();
 
-  // SharedPreferences keys - MUST match Kotlin PomodoroWidgetProvider
+  // SharedPreferences keys - MUST match Kotlin PomodoroWidgetProvider exactly
   static const String _kPhase = 'flutter.pomodoro_phase';
   static const String _kEndTime = 'flutter.pomodoro_end_time_millis';
   static const String _kTotalDuration = 'flutter.pomodoro_total_duration_seconds';
@@ -109,7 +110,6 @@ class PomodoroService {
   }
 
   Future<void> init() async {
-    // Restore state if app was killed
     await _restoreState();
   }
 
@@ -136,7 +136,6 @@ class PomodoroService {
           _startTimer();
         }
       } else {
-        // Timer expired while app was closed
         await _clearState();
       }
     }
@@ -175,7 +174,6 @@ class PomodoroService {
   Future<void> _persistState() async {
     final prefs = await SharedPreferences.getInstance();
     
-    // Calculate end time from remaining seconds
     final endTime = isRunning 
         ? DateTime.now().millisecondsSinceEpoch + (_remainingSeconds * 1000)
         : 0;
@@ -190,7 +188,6 @@ class PomodoroService {
     await prefs.setInt(_kSessions, _completedFocusSessions);
     await prefs.setInt(_kRemainingSeconds, _remainingSeconds);
     
-    // Calculate progress percentage
     final progress = totalDuration > 0 
         ? ((totalDuration - _remainingSeconds) / totalDuration * 100).round()
         : 0;
@@ -263,17 +260,14 @@ class PomodoroService {
       _completedFocusSessions++;
       completedSessionsNotifier.value = _completedFocusSessions;
       
-      // Log study session
       await _logSession();
 
-      // Check if we need a long break
       if (_completedFocusSessions % _preset.sessionsBeforeLongBreak == 0) {
         await _startLongBreak();
       } else {
         await _startShortBreak();
       }
     } else {
-      // Break is over, start next focus session
       await _startFocus();
     }
   }
@@ -310,7 +304,6 @@ class PomodoroService {
     final id = await DatabaseHelper.instance.insertStudySession(session);
     _pendingSessionNoteId = id;
 
-    // Update subject focus time
     if (_subjectTag != null) {
       final subjects = await DatabaseHelper.instance.getAllStudySubjects();
       final match = subjects.where((s) => s.name == _subjectTag).firstOrNull;
@@ -319,7 +312,6 @@ class PomodoroService {
       }
     }
 
-    // Update daily goal
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
     await DatabaseHelper.instance.addAchievedMinutes(startOfDay, _preset.focusMinutes);
@@ -336,7 +328,7 @@ class PomodoroService {
 
   Future<void> resume() async {
     if (_phase == PomodoroPhase.paused) {
-      _phase = PomodoroPhase.focusing; // Assume resuming focus for simplicity
+      _phase = PomodoroPhase.focusing;
       phaseNotifier.value = _phase;
       await _persistState();
       _startTimer();
