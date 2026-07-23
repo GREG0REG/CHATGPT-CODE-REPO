@@ -1,11 +1,15 @@
 package com.example.event_countdown
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
+import android.content.Intent
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    
     private val CHANNEL = "com.example.event_countdown/widget"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -15,33 +19,29 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "updateWidget" -> {
                     try {
-                        EventCountdownWidgetProvider.updateAllWidgets(this)
-                        val data = EventCountdownWidgetProvider.readWidgetData(this)
-                        val deadlineMillis = (data["deadlineMillis"] as? Number)?.toLong()?.takeIf { it > 0 }
-                        if (deadlineMillis != null && deadlineMillis > System.currentTimeMillis()) {
-                            EventCountdownWidgetProvider.scheduleWidgetTick(this)
+                        val intent = Intent(this, EventCountdownWidgetProvider::class.java).apply {
+                            action = EventCountdownWidgetProvider.ACTION_WIDGET_UPDATE
                         }
+                        sendBroadcast(intent)
                         result.success(null)
                     } catch (e: Exception) {
-                        result.error("WIDGET_UPDATE_ERROR", e.message, null)
+                        result.error("UPDATE_ERROR", e.message, null)
                     }
                 }
                 "updatePomodoroWidget" -> {
                     try {
-                        PomodoroWidgetProvider.updateAllWidgets(this)
+                        val intent = Intent(this, PomodoroWidgetProvider::class.java).apply {
+                            action = PomodoroWidgetProvider.ACTION_POMODORO_UPDATE
+                        }
+                        sendBroadcast(intent)
                         result.success(null)
                     } catch (e: Exception) {
-                        result.error("WIDGET_UPDATE_ERROR", e.message, null)
+                        result.error("UPDATE_ERROR", e.message, null)
                     }
                 }
-                "getFilesDir" -> {
-                    try {
-                        result.success(filesDir.absolutePath)
-                    } catch (e: Exception) {
-                        result.error("FILES_DIR_ERROR", e.message, null)
-                    }
+                else -> {
+                    result.notImplemented()
                 }
-                else -> result.notImplemented()
             }
         }
     }
