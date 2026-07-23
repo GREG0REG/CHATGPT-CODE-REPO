@@ -471,7 +471,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                           Text(
                             '$_todayMinutes / $_dailyGoalMinutes min',
                             style: TextStyle(
-                              FontSize: 12,
+                              fontSize: 12,
                               fontWeight: FontWeight.w600,
                               color: scheme.primary,
                             ),
