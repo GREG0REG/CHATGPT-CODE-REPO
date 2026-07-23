@@ -89,7 +89,7 @@ class PomodoroService {
   String? _subjectTag;
   int? _eventId;
   int? _pendingSessionNoteId;
-  int _totalDurationSeconds = 0; // For progress calculation
+  int _totalDurationSeconds = 0;
 
   // Notifiers for UI updates
   final ValueNotifier<PomodoroPhase> phaseNotifier = ValueNotifier(PomodoroPhase.idle);
