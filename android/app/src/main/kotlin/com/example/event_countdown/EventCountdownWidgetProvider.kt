@@ -19,18 +19,49 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
     companion object {
         const val ACTION_WIDGET_TICK = "com.example.event_countdown.EVENT_WIDGET_TICK"
 
+        fun ensureTestData(context: Context) {
+            try {
+                val file = File(context.filesDir, "widget_data.json")
+                if (!file.exists()) {
+                    // Create test data so widget shows something
+                    val testData = JSONObject().apply {
+                        put("title", "Open app to add events")
+                        put("countdown", "Event Countdown")
+                        put("deadlineMillis", System.currentTimeMillis() + 86400000)
+                        put("startMillis", System.currentTimeMillis())
+                        put("progressPercent", 25)
+                        put("urgencyColor", "orange")
+                        put("smartFormat", true)
+                        put("bgColor", "#00BFA5")
+                        put("textColor", "#FFFFFF")
+                    }
+                    file.writeText(testData.toString())
+                    android.util.Log.i("EventWidget", "Created test data at ${file.absolutePath}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("EventWidget", "Failed to create test data", e)
+            }
+        }
+
         fun readWidgetData(context: Context): Map<String, Any?> {
             return try {
+                ensureTestData(context)
+
                 val file = File(context.filesDir, "widget_data.json")
                 if (!file.exists()) {
                     android.util.Log.e("EventWidget", "widget_data.json NOT FOUND at ${file.absolutePath}")
                     return emptyMap()
                 }
+
                 val jsonString = file.readText()
                 if (jsonString.isBlank()) {
                     android.util.Log.e("EventWidget", "widget_data.json is EMPTY")
                     return emptyMap()
                 }
+
+                android.util.Log.d("EventWidget", "Reading from: ${file.absolutePath}")
+                android.util.Log.d("EventWidget", "Content: $jsonString")
+
                 val json = JSONObject(jsonString)
                 val result = mutableMapOf<String, Any?>()
                 val keys = json.keys()
@@ -38,64 +69,10 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                     val key = keys.next()
                     result[key] = json.opt(key)
                 }
-                android.util.Log.d("EventWidget", "Read data: $result")
                 result
             } catch (e: Exception) {
-                android.util.Log.e("EventWidget", "Failed to read widget_data.json", e)
+                android.util.Log.e("EventWidget", "Failed to read", e)
                 emptyMap()
-            }
-        }
-
-        fun parseColorOrDefault(colorStr: String?, defaultColor: Int): Int {
-            return try {
-                if (colorStr.isNullOrEmpty()) defaultColor else Color.parseColor(colorStr)
-            } catch (e: Exception) {
-                defaultColor
-            }
-        }
-
-        fun buildLiveCountdown(deadlineMillis: Long, smartFormat: Boolean): String {
-            val now = System.currentTimeMillis()
-            val diff = deadlineMillis - now
-            if (diff <= 0) return "Due now"
-            val days = TimeUnit.MILLISECONDS.toDays(diff)
-            val hours = TimeUnit.MILLISECONDS.toHours(diff) % 24
-            val minutes = TimeUnit.MILLISECONDS.toMinutes(diff) % 60
-            return if (smartFormat) {
-                when {
-                    days > 30 -> "$days days left"
-                    days > 0 -> "$days days ${hours}h left"
-                    hours > 0 -> "$hours hours ${minutes}m left"
-                    else -> "$minutes min left"
-                }
-            } else {
-                when {
-                    days > 0 -> "$days days left"
-                    hours > 0 -> "$hours hours left"
-                    else -> "$minutes min left"
-                }
-            }
-        }
-
-        fun calculateLiveProgress(startMillis: Long?, deadlineMillis: Long?): Int {
-            if (startMillis == null || deadlineMillis == null) return 0
-            val total = deadlineMillis - startMillis
-            if (total <= 0) return 0
-            val now = System.currentTimeMillis()
-            val elapsed = now - startMillis
-            return ((elapsed.toFloat() / total) * 100).toInt().coerceIn(0, 100)
-        }
-
-        fun getLiveUrgencyColorName(deadlineMillis: Long): String? {
-            val now = System.currentTimeMillis()
-            val diff = deadlineMillis - now
-            val days = TimeUnit.MILLISECONDS.toDays(diff)
-            return when {
-                days < 1 -> "red"
-                days < 3 -> "deepOrange"
-                days < 7 -> "orange"
-                days < 30 -> "green"
-                else -> null
             }
         }
 
@@ -118,16 +95,48 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 val startMillis = (data["startMillis"] as? Number)?.toLong()?.takeIf { it > 0 }
                 val smartFormat = data["smartFormat"] as? Boolean ?: true
 
-                android.util.Log.i("EventWidget", "UPDATE: title=$title, deadline=$deadlineMillis")
-
                 val countdownText: String
                 val progressPercent: Int
                 val urgencyColorName: String?
 
                 if (deadlineMillis != null) {
-                    countdownText = buildLiveCountdown(deadlineMillis, smartFormat)
-                    progressPercent = calculateLiveProgress(startMillis, deadlineMillis)
-                    urgencyColorName = getLiveUrgencyColorName(deadlineMillis)
+                    val now = System.currentTimeMillis()
+                    val diff = deadlineMillis - now
+                    if (diff <= 0) {
+                        countdownText = "Due now"
+                    } else {
+                        val days = TimeUnit.MILLISECONDS.toDays(diff)
+                        val hours = TimeUnit.MILLISECONDS.toHours(diff) % 24
+                        val minutes = TimeUnit.MILLISECONDS.toMinutes(diff) % 60
+                        countdownText = if (smartFormat) {
+                            when {
+                                days > 30 -> "$days days left"
+                                days > 0 -> "$days days ${hours}h left"
+                                hours > 0 -> "$hours hours ${minutes}m left"
+                                else -> "$minutes min left"
+                            }
+                        } else {
+                            when {
+                                days > 0 -> "$days days left"
+                                hours > 0 -> "$hours hours left"
+                                else -> "$minutes min left"
+                            }
+                        }
+                    }
+                    val total = deadlineMillis - (startMillis ?: deadlineMillis)
+                    progressPercent = if (total > 0) {
+                        val elapsed = System.currentTimeMillis() - (startMillis ?: deadlineMillis)
+                        ((elapsed.toFloat() / total) * 100).toInt().coerceIn(0, 100)
+                    } else storedProgress
+
+                    val days = TimeUnit.MILLISECONDS.toDays(deadlineMillis - System.currentTimeMillis())
+                    urgencyColorName = when {
+                        days < 1 -> "red"
+                        days < 3 -> "deepOrange"
+                        days < 7 -> "orange"
+                        days < 30 -> "green"
+                        else -> null
+                    }
                 } else {
                     countdownText = storedCountdown
                     progressPercent = storedProgress
@@ -140,17 +149,19 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_countdown, countdownText)
                 views.setProgressBar(R.id.widget_progress_ring, 100, progressPercent.coerceIn(0, 100), false)
 
-                val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#00BFA5"))
-                val textColor = parseColorOrDefault(textColorStr, Color.WHITE)
+                val themeColor = try {
+                    if (bgColorStr.isNullOrEmpty()) Color.parseColor("#00BFA5") else Color.parseColor(bgColorStr)
+                } catch (e: Exception) { Color.parseColor("#00BFA5") }
+
+                val textColor = try {
+                    if (textColorStr.isNullOrEmpty()) Color.WHITE else Color.parseColor(textColorStr)
+                } catch (e: Exception) { Color.WHITE }
 
                 views.setInt(R.id.widget_root, "setBackgroundColor", themeColor)
                 views.setTextColor(R.id.widget_title, textColor)
                 views.setTextColor(R.id.widget_countdown, textColor)
 
-                val showUrgency = urgencyColorName != null &&
-                    urgencyColorName != "green" &&
-                    urgencyColorName != "grey"
-
+                val showUrgency = urgencyColorName != null && urgencyColorName != "green" && urgencyColorName != "grey"
                 if (showUrgency) {
                     views.setViewVisibility(R.id.widget_urgency_row, android.view.View.VISIBLE)
                     val urgencyColor = when (urgencyColorName) {
@@ -175,9 +186,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 if (launchIntent != null) {
                     val pendingIntent = PendingIntent.getActivity(
-                        context,
-                        0,
-                        launchIntent,
+                        context, 0, launchIntent,
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                     )
                     views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
@@ -187,7 +196,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 android.util.Log.i("EventWidget", "Widget $widgetId updated: $title | $countdownText")
 
                 if (deadlineMillis != null && deadlineMillis > System.currentTimeMillis()) {
-                    scheduleWidgetTick(context)
+                    scheduleTick(context)
                 }
 
             } catch (e: Exception) {
@@ -195,46 +204,24 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             }
         }
 
-        fun scheduleWidgetTick(context: Context) {
+        fun scheduleTick(context: Context) {
             try {
                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
                 val intent = Intent(context, EventCountdownWidgetProvider::class.java).apply {
                     action = ACTION_WIDGET_TICK
                 }
                 val pendingIntent = PendingIntent.getBroadcast(
-                    context,
-                    0,
-                    intent,
+                    context, 0, intent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 alarmManager.cancel(pendingIntent)
-                val triggerTime = SystemClock.elapsedRealtime() + 60_000
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    triggerTime,
+                    SystemClock.elapsedRealtime() + 60_000,
                     pendingIntent
                 )
-                android.util.Log.d("EventWidget", "Next tick in 60s")
             } catch (e: Exception) {
-                android.util.Log.e("EventWidget", "Failed to schedule tick", e)
-            }
-        }
-
-        fun cancelWidgetTicks(context: Context) {
-            try {
-                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                val intent = Intent(context, EventCountdownWidgetProvider::class.java).apply {
-                    action = ACTION_WIDGET_TICK
-                }
-                val pendingIntent = PendingIntent.getBroadcast(
-                    context,
-                    0,
-                    intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                alarmManager.cancel(pendingIntent)
-            } catch (e: Exception) {
-                android.util.Log.e("EventWidget", "Failed to cancel ticks", e)
+                android.util.Log.e("EventWidget", "Schedule failed", e)
             }
         }
 
@@ -249,11 +236,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         }
     }
 
-    override fun onUpdate(
-        context: Context,
-        appWidgetManager: AppWidgetManager,
-        appWidgetIds: IntArray
-    ) {
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         android.util.Log.i("EventWidget", "onUpdate: ${appWidgetIds.size} widgets")
         for (widgetId in appWidgetIds) {
             updateWidgetDirectly(context, appWidgetManager, widgetId)
@@ -265,22 +248,18 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         android.util.Log.i("EventWidget", "onReceive: ${intent.action}")
         when (intent.action) {
             ACTION_WIDGET_TICK -> {
+                updateAllWidgets(context)
                 val data = readWidgetData(context)
                 val deadlineMillis = (data["deadlineMillis"] as? Number)?.toLong()?.takeIf { it > 0 }
                 val remaining = deadlineMillis?.let { it - System.currentTimeMillis() } ?: 0
-                updateAllWidgets(context)
-                if (remaining > 0) {
-                    scheduleWidgetTick(context)
-                } else {
-                    cancelWidgetTicks(context)
-                }
+                if (remaining > 0) scheduleTick(context)
             }
             Intent.ACTION_BOOT_COMPLETED -> {
                 val data = readWidgetData(context)
                 val deadlineMillis = (data["deadlineMillis"] as? Number)?.toLong()?.takeIf { it > 0 }
                 if (deadlineMillis != null && deadlineMillis > System.currentTimeMillis()) {
                     updateAllWidgets(context)
-                    scheduleWidgetTick(context)
+                    scheduleTick(context)
                 }
             }
         }
@@ -288,11 +267,31 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         super.onDeleted(context, appWidgetIds)
-        cancelWidgetTicks(context)
+        try {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val intent = Intent(context, EventCountdownWidgetProvider::class.java).apply {
+                action = ACTION_WIDGET_TICK
+            }
+            val pendingIntent = PendingIntent.getBroadcast(
+                context, 0, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.cancel(pendingIntent)
+        } catch (e: Exception) {}
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
-        cancelWidgetTicks(context)
+        try {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val intent = Intent(context, EventCountdownWidgetProvider::class.java).apply {
+                action = ACTION_WIDGET_TICK
+            }
+            val pendingIntent = PendingIntent.getBroadcast(
+                context, 0, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.cancel(pendingIntent)
+        } catch (e: Exception) {}
     }
 }
