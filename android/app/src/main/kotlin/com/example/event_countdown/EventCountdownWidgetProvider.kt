@@ -25,7 +25,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             return try {
                 val file = File(context.filesDir, "widget_data.json")
                 if (!file.exists()) {
-                    android.util.Log.d("EventWidget", "widget_data.json not found at ${file.absolutePath}")
+                    android.util.Log.d("EventWidget", "❌ widget_data.json not found at ${file.absolutePath}")
                     return emptyMap()
                 }
                 val jsonString = file.readText()
@@ -36,10 +36,10 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                     val key = keys.next()
                     result[key] = json.opt(key)
                 }
-                android.util.Log.d("EventWidget", "Read widget data: $result")
+                android.util.Log.d("EventWidget", "✅ Read widget data: $result")
                 result
             } catch (e: Exception) {
-                android.util.Log.e("EventWidget", "Failed to read widget_data.json", e)
+                android.util.Log.e("EventWidget", "❌ Failed to read widget_data.json", e)
                 emptyMap()
             }
         }
@@ -116,7 +116,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 val startMillis = (data["startMillis"] as? Number)?.toLong()?.takeIf { it > 0 }
                 val smartFormat = data["smartFormat"] as? Boolean ?: true
 
-                android.util.Log.d("EventWidget", "title=$title, deadline=$deadlineMillis, progress=$storedProgress")
+                android.util.Log.d("EventWidget", "📝 title=$title, deadline=$deadlineMillis, progress=$storedProgress")
 
                 val countdownText: String
                 val progressPercent: Int
@@ -183,6 +183,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 }
 
                 appWidgetManager.updateAppWidget(widgetId, views)
+                android.util.Log.d("EventWidget", "✅ Widget $widgetId updated")
 
                 // Schedule next tick if event is in future
                 if (deadlineMillis != null && deadlineMillis > System.currentTimeMillis()) {
@@ -190,7 +191,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 }
 
             } catch (e: Exception) {
-                android.util.Log.e("EventWidget", "Update failed", e)
+                android.util.Log.e("EventWidget", "❌ Update failed", e)
             }
         }
 
@@ -213,9 +214,9 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                     triggerTime,
                     pendingIntent
                 )
-                android.util.Log.d("EventWidget", "Tick scheduled in 60s")
+                android.util.Log.d("EventWidget", "⏰ Tick scheduled in 60s")
             } catch (e: Exception) {
-                android.util.Log.e("EventWidget", "Failed to schedule tick", e)
+                android.util.Log.e("EventWidget", "❌ Failed to schedule tick", e)
             }
         }
 
@@ -232,8 +233,9 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 alarmManager.cancel(pendingIntent)
+                android.util.Log.d("EventWidget", "⏰ Ticks cancelled")
             } catch (e: Exception) {
-                android.util.Log.e("EventWidget", "Failed to cancel ticks", e)
+                android.util.Log.e("EventWidget", "❌ Failed to cancel ticks", e)
             }
         }
 
@@ -241,7 +243,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val componentName = ComponentName(context, EventCountdownWidgetProvider::class.java)
             val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
-            android.util.Log.d("EventWidget", "Updating ${widgetIds.size} widgets")
+            android.util.Log.d("EventWidget", "🔄 Updating ${widgetIds.size} widgets")
             for (widgetId in widgetIds) {
                 updateWidgetDirectly(context, appWidgetManager, widgetId)
             }
@@ -254,17 +256,18 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         appWidgetIds: IntArray
     ) {
         try {
+            android.util.Log.d("EventWidget", "🔄 onUpdate called for ${appWidgetIds.size} widgets")
             for (widgetId in appWidgetIds) {
                 updateWidgetDirectly(context, appWidgetManager, widgetId)
             }
         } catch (e: Exception) {
-            android.util.Log.e("EventWidget", "onUpdate failed", e)
+            android.util.Log.e("EventWidget", "❌ onUpdate failed", e)
         }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        android.util.Log.d("EventWidget", "onReceive: ${intent.action}")
+        android.util.Log.d("EventWidget", "📡 onReceive: ${intent.action}")
         when (intent.action) {
             ACTION_WIDGET_TICK -> {
                 val data = readWidgetData(context)
