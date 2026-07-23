@@ -17,7 +17,6 @@ class WidgetService {
 
   static const MethodChannel _channel = MethodChannel('com.example.event_countdown/widget');
 
-  // Keys for SharedPreferences (used as fallback)
   static const String _kEventTitle = 'flutter.event_title';
   static const String _kCountdownText = 'flutter.countdown_text';
   static const String _kBgColor = 'flutter.widget_bg_color';
@@ -28,7 +27,13 @@ class WidgetService {
   static const String _kEventStart = 'flutter.widget_event_start_millis';
   static const String _kSmartFormat = 'flutter.widget_smart_format_enabled';
 
-  // Write widget data to a JSON file that Android can read
+  static const String _kPomodoroSubject = 'flutter.pomodoro_subject';
+  static const String _kPomodoroTimer = 'flutter.pomodoro_timer_text';
+  static const String _kPomodoroStatus = 'flutter.pomodoro_status';
+  static const String _kPomodoroBgColor = 'flutter.pomodoro_bg_color';
+  static const String _kPomodoroProgress = 'flutter.pomodoro_progress_percent';
+  static const String _kPomodoroSessions = 'flutter.pomodoro_completed_sessions';
+
   static Future<void> _writeWidgetData(Map<String, dynamic> data) async {
     try {
       final directory = await getApplicationDocumentsDirectory();
@@ -96,7 +101,6 @@ class WidgetService {
         textColor = themeColors['text'];
       }
 
-      // Save to SharedPreferences
       await prefs.setString(_kEventTitle, title);
       await prefs.setString(_kCountdownText, countdownText);
       if (bgColor != null) await prefs.setString(_kBgColor, bgColor);
@@ -121,7 +125,6 @@ class WidgetService {
         await prefs.remove(_kUrgencyColor);
       }
 
-      // ALSO write to JSON file for reliable Android access
       await _writeWidgetData({
         'title': title,
         'countdown': countdownText,
@@ -144,6 +147,50 @@ class WidgetService {
       });
     } catch (e) {
       debugPrint('WidgetService.refreshWidget error: $e');
+    }
+  }
+
+  static Future<void> refreshPomodoroWidget() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final phaseName = prefs.getString('pomodoro_phase') ?? 'idle';
+      final remainingSeconds = prefs.getInt('pomodoro_remaining_seconds') ?? 0;
+      final completedSessions = prefs.getInt('pomodoro_completed_sessions') ?? 0;
+      final subject = prefs.getString('pomodoro_subject') ?? 'Ready to Focus';
+      final status = prefs.getString('pomodoro_status') ?? 'Focus';
+
+      final minutes = (remainingSeconds ~/ 60).toString().padLeft(2, '0');
+      final seconds = (remainingSeconds % 60).toString().padLeft(2, '0');
+      final timerText = phaseName == 'idle' ? 'Tap to start' : '$minutes:$seconds';
+
+      final progressPercent = prefs.getDouble('pomodoro_progress_percent') ?? 0.0;
+      final progressInt = (progressPercent * 100).round().clamp(0, 100);
+
+      String? bgColor;
+      if (phaseName == 'focusing' || phaseName == 'idle' || phaseName == 'paused') {
+        bgColor = '#FF6B6B';
+      } else {
+        bgColor = '#00BFA5';
+      }
+
+      await prefs.setString(_kPomodoroSubject, subject);
+      await prefs.setString(_kPomodoroTimer, timerText);
+      await prefs.setString(_kPomodoroStatus, status);
+      await prefs.setString(_kPomodoroBgColor, bgColor);
+      await prefs.setInt(_kPomodoroProgress, progressInt);
+      await prefs.setInt(_kPomodoroSessions, completedSessions);
+
+      await _channel.invokeMethod('updatePomodoroWidget', {
+        'subject': subject,
+        'timerText': timerText,
+        'status': status,
+        'bgColor': bgColor,
+        'progressPercent': progressInt,
+        'completedSessions': completedSessions,
+      });
+    } catch (e) {
+      debugPrint('WidgetService.refreshPomodoroWidget error: $e');
     }
   }
 
