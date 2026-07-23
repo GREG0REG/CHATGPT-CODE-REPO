@@ -14,16 +14,15 @@ import java.util.concurrent.TimeUnit
 
 class EventCountdownWidgetProvider : AppWidgetProvider() {
     companion object {
-        private const val PREFS_NAME = "FlutterSharedPreferences"
-        private const val KEY_TITLE = "flutter.event_title"
-        private const val KEY_COUNTDOWN = "flutter.countdown_text"
-        private const val KEY_BG_COLOR = "flutter.widget_bg_color"
-        private const val KEY_TEXT_COLOR = "flutter.widget_text_color"
-        private const val KEY_PROGRESS = "flutter.widget_progress_percent"
-        private const val KEY_URGENCY_COLOR = "flutter.widget_urgency_color"
-        private const val KEY_EVENT_DEADLINE = "flutter.widget_event_deadline_millis"
-        private const val KEY_EVENT_START = "flutter.widget_event_start_millis"
-        private const val KEY_SMART_FORMAT = "flutter.widget_smart_format_enabled"
+      private const val KEY_TITLE = "flutter.event_title"
+      private const val KEY_COUNTDOWN = "flutter.countdown_text"
+      private const val KEY_BG_COLOR = "flutter.widget_bg_color"
+      private const val KEY_TEXT_COLOR = "flutter.widget_text_color"
+      private const val KEY_PROGRESS = "flutter.widget_progress_percent"
+      private const val KEY_URGENCY_COLOR = "flutter.widget_urgency_color"
+      private const val KEY_EVENT_DEADLINE = "flutter.widget_event_deadline_millis"
+      private const val KEY_EVENT_START = "flutter.widget_event_start_millis"
+      private const val KEY_SMART_FORMAT = "flutter.widget_smart_format_enabled"
 
         const val ACTION_WIDGET_TICK = "com.example.event_countdown.EVENT_WIDGET_TICK"
         const val ACTION_WIDGET_UPDATE = "com.example.event_countdown.EVENT_WIDGET_UPDATE"
