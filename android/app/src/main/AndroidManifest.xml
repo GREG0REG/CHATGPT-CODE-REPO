@@ -43,6 +43,21 @@
                 android:resource="@xml/event_widget_info" />
         </receiver>
 
+                <!-- Event Countdown Widget -->
+        <receiver
+            android:name=".EventCountdownWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.event_countdown.EVENT_WIDGET_TICK" />
+                <action android:name="com.example.event_countdown.EVENT_WIDGET_UPDATE" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/event_widget_info" />
+        </receiver>
+
         <!-- Pomodoro Widget -->
         <receiver
             android:name=".PomodoroWidgetProvider"
@@ -57,6 +72,7 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/pomodoro_widget_info" />
         </receiver>
+
         
         <meta-data
             android:name="flutterEmbedding"
