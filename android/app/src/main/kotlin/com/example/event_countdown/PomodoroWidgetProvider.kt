@@ -11,11 +11,6 @@ import android.graphics.Color
 import android.os.SystemClock
 import android.widget.RemoteViews
 
-/**
- * Pomodoro Widget Provider with LIVE timer support.
- * Calculates remaining time from persisted end-time, so widget stays accurate
- * even when the app is killed, screen is off, or device is in Doze mode.
- */
 class PomodoroWidgetProvider : AppWidgetProvider() {
 
     companion object {
@@ -25,31 +20,10 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         private const val KEY_TOTAL_DURATION = "flutter.pomodoro_total_duration_seconds"
         private const val KEY_SUBJECT = "flutter.pomodoro_subject"
         private const val KEY_STATUS = "flutter.pomodoro_status"
-        private const val KEY_BG_COLOR = "flutter.pomodoro_bg_color"
         private const val KEY_SESSIONS = "flutter.pomodoro_completed_sessions"
-        private const val KEY_REMAINING_SECONDS = "flutter.pomodoro_remaining_seconds"
-        private const val KEY_PROGRESS_PERCENT = "flutter.pomodoro_progress_percent"
 
-        // Default colors
-        private const val DEFAULT_CORAL = "#FF6B6B"
-        private const val DEFAULT_TEAL = "#00BFA5"
-        private const val DEFAULT_AMBER = "#FFA726"
-
-        // Alarm action for widget updates - MUST MATCH AndroidManifest.xml
-        const val ACTION_POMODORO_UPDATE = "com.example.event_countdown.POMODORO_WIDGET_UPDATE"
         const val ACTION_POMODORO_TICK = "com.example.event_countdown.POMODORO_WIDGET_TICK"
 
-        fun parseColorOrDefault(colorStr: String?, defaultColor: Int): Int {
-            return try {
-                if (colorStr.isNullOrEmpty()) defaultColor else Color.parseColor(colorStr)
-            } catch (e: Exception) {
-                defaultColor
-            }
-        }
-
-        /**
-         * Calculate remaining time from end-time for LIVE updates.
-         */
         fun calculateRemainingTime(endTimeMillis: Long?): Int {
             if (endTimeMillis == null || endTimeMillis <= 0) return 0
             val now = System.currentTimeMillis()
@@ -57,120 +31,80 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             return remaining.coerceAtLeast(0)
         }
 
-        /**
-         * Format seconds as MM:SS
-         */
         fun formatTime(seconds: Int): String {
             val m = (seconds / 60).toString().padStart(2, '0')
             val s = (seconds % 60).toString().padStart(2, '0')
             return "$m:$s"
         }
 
-        /**
-         * Calculate progress percentage from remaining time and total duration
-         */
-        fun calculateProgress(remainingSeconds: Int, totalDurationSeconds: Int): Int {
-            if (totalDurationSeconds <= 0) return 0
-            val elapsed = totalDurationSeconds - remainingSeconds
-            return ((elapsed.toFloat() / totalDurationSeconds) * 100).toInt().coerceIn(0, 100)
-        }
-
-        /**
-         * Determine theme color based on phase
-         */
-        fun getThemeColor(phase: String?, bgColorStr: String?): Int {
-            val isFocusMode = phase.equals("focusing", ignoreCase = true) ||
-                              phase.equals("focus", ignoreCase = true) ||
-                              phase.equals("ready to focus", ignoreCase = true) ||
-                              phase.equals("idle", ignoreCase = true) ||
-                              phase.equals("paused", ignoreCase = true)
-
-            val isBreakMode = phase.equals("shortBreak", ignoreCase = true) ||
-                              phase.equals("longBreak", ignoreCase = true) ||
-                              phase.equals("short break", ignoreCase = true) ||
-                              phase.equals("long break", ignoreCase = true)
-
-            return when {
-                isFocusMode -> parseColorOrDefault(bgColorStr, Color.parseColor(DEFAULT_CORAL))
-                isBreakMode -> parseColorOrDefault(bgColorStr, Color.parseColor(DEFAULT_TEAL))
-                else -> parseColorOrDefault(bgColorStr, Color.parseColor(DEFAULT_CORAL))
-            }
-        }
-
-        /**
-         * Main widget update function - reads LIVE state and updates UI
-         */
         fun updateWidgetDirectly(
             context: Context,
             appWidgetManager: AppWidgetManager,
-            widgetId: Int,
-            prefs: android.content.SharedPreferences? = null
+            widgetId: Int
         ) {
             try {
-                val sharedPrefs = prefs ?: context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-                val phase = sharedPrefs.getString(KEY_PHASE, "idle") ?: "idle"
-                val endTimeMillis = sharedPrefs.getLong(KEY_END_TIME, 0L).takeIf { it > 0 }
-                val totalDuration = sharedPrefs.getInt(KEY_TOTAL_DURATION, 25 * 60)
-                val subject = sharedPrefs.getString(KEY_SUBJECT, "Ready to Focus") ?: "Ready to Focus"
-                val status = sharedPrefs.getString(KEY_STATUS, "Focus") ?: "Focus"
-                val bgColorStr = sharedPrefs.getString(KEY_BG_COLOR, null)
-                val completedSessions = sharedPrefs.getInt(KEY_SESSIONS, 0)
-                val savedRemaining = sharedPrefs.getInt(KEY_REMAINING_SECONDS, 0)
-                val savedProgress = sharedPrefs.getInt(KEY_PROGRESS_PERCENT, 45)
+                val phase = prefs.getString(KEY_PHASE, "idle") ?: "idle"
+                val endTime = prefs.getLong(KEY_END_TIME, 0L).takeIf { it > 0 }
+                val totalDuration = prefs.getInt(KEY_TOTAL_DURATION, 25 * 60)
+                val subject = prefs.getString(KEY_SUBJECT, "Ready to Focus") ?: "Ready to Focus"
+                val status = prefs.getString(KEY_STATUS, "Ready") ?: "Ready"
+                val sessions = prefs.getInt(KEY_SESSIONS, 0)
 
-                // LIVE calculation: compute remaining time from end-time
-                val remainingSeconds = calculateRemainingTime(endTimeMillis)
-                
+                val remainingSeconds = calculateRemainingTime(endTime)
+
                 val timerText = when {
                     phase == "idle" -> "Tap to start"
-                    phase == "paused" -> formatTime(savedRemaining)
-                    remainingSeconds <= 0 && endTimeMillis != null -> "00:00"
+                    phase == "paused" -> {
+                        val savedRemaining = prefs.getInt("flutter.pomodoro_remaining_seconds", 0)
+                        formatTime(savedRemaining)
+                    }
+                    remainingSeconds <= 0 && endTime != null -> "00:00"
                     else -> formatTime(remainingSeconds)
                 }
 
-                // LIVE progress calculation
                 val progressPercent = when {
                     phase == "idle" -> 0
-                    phase == "paused" -> savedProgress
+                    phase == "paused" -> {
+                        val savedProgress = prefs.getInt("flutter.pomodoro_progress_percent", 0)
+                        savedProgress
+                    }
                     remainingSeconds <= 0 -> 100
-                    else -> calculateProgress(remainingSeconds, totalDuration)
+                    totalDuration > 0 -> ((totalDuration - remainingSeconds).toFloat() / totalDuration * 100).toInt().coerceIn(0, 100)
+                    else -> 0
                 }
 
-                android.util.Log.d("PomodoroWidget", "phase=$phase, remaining=$remainingSeconds, progress=$progressPercent, timer=$timerText")
+                android.util.Log.i("PomodoroWidget", "UPDATE: phase=$phase, remaining=$remainingSeconds, timer=$timerText")
 
                 val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
 
-                // ===== FIXED: Use IDs that match YOUR layout XML exactly =====
                 views.setTextViewText(R.id.pomodoro_widget_subject, subject)
                 views.setTextViewText(R.id.pomodoro_widget_timer, timerText)
                 views.setTextViewText(R.id.pomodoro_widget_status, status)
-
-                // Update progress bar with LIVE value
                 views.setProgressBar(R.id.pomodoro_progress_ring, 100, progressPercent, false)
 
-                // Theme colors based on phase
-                val themeColor = getThemeColor(phase, bgColorStr)
-                views.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", themeColor)
+                val themeColor = when {
+                    phase.equals("shortBreak", ignoreCase = true) ||
+                    phase.equals("longBreak", ignoreCase = true) -> Color.parseColor("#00BFA5")
+                    phase.equals("paused", ignoreCase = true) -> Color.parseColor("#FFA726")
+                    else -> Color.parseColor("#FF6B6B")
+                }
 
-                // Text colors - always white for contrast
+                views.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", themeColor)
                 views.setTextColor(R.id.pomodoro_widget_subject, Color.WHITE)
                 views.setTextColor(R.id.pomodoro_widget_timer, Color.WHITE)
                 views.setTextColor(R.id.pomodoro_widget_status, Color.WHITE)
 
-                // Show session chips if sessions completed
-                if (completedSessions > 0) {
+                if (sessions > 0) {
                     views.setViewVisibility(R.id.pomodoro_session_chips, android.view.View.VISIBLE)
-                    views.setTextViewText(R.id.completed_sessions, "\uD83D\uDD25 $completedSessions")
+                    views.setTextViewText(R.id.completed_sessions, "\uD83D\uDD25 $sessions")
                 } else {
                     views.setViewVisibility(R.id.pomodoro_session_chips, android.view.View.GONE)
                 }
 
-                // Launch intent - tap anywhere opens app to Pomodoro screen
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 if (launchIntent != null) {
-                    launchIntent.putExtra("route", "/pomodoro")
-                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     val pendingIntent = PendingIntent.getActivity(
                         context,
                         widgetId,
@@ -181,10 +115,10 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 }
 
                 appWidgetManager.updateAppWidget(widgetId, views)
+                android.util.Log.i("PomodoroWidget", "Widget $widgetId updated: $timerText | $status")
 
-                // If timer is active and not finished, schedule next update
-                if (phase != "idle" && phase != "paused" && remainingSeconds > 0) {
-                    scheduleWidgetUpdate(context)
+                if ((phase == "focusing" || phase == "shortBreak" || phase == "longBreak") && remainingSeconds > 0) {
+                    scheduleTick(context)
                 }
 
             } catch (e: Exception) {
@@ -192,10 +126,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             }
         }
 
-        /**
-         * Schedule a precise alarm to update the widget every second while timer is active.
-         */
-        fun scheduleWidgetUpdate(context: Context) {
+        fun scheduleTick(context: Context) {
             try {
                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
                 val intent = Intent(context, PomodoroWidgetProvider::class.java).apply {
@@ -203,15 +134,11 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 }
                 val pendingIntent = PendingIntent.getBroadcast(
                     context,
-                    0,
+                    1,
                     intent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
-
-                // Cancel any existing alarm first
                 alarmManager.cancel(pendingIntent)
-
-                // Schedule next update in 1 second using exact alarm
                 val triggerTime = SystemClock.elapsedRealtime() + 1000
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.ELAPSED_REALTIME_WAKEUP,
@@ -219,14 +146,11 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     pendingIntent
                 )
             } catch (e: Exception) {
-                android.util.Log.e("PomodoroWidget", "Failed to schedule update", e)
+                android.util.Log.e("PomodoroWidget", "Failed to schedule tick", e)
             }
         }
 
-        /**
-         * Cancel all scheduled widget updates
-         */
-        fun cancelWidgetUpdates(context: Context) {
+        fun cancelTicks(context: Context) {
             try {
                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
                 val intent = Intent(context, PomodoroWidgetProvider::class.java).apply {
@@ -234,28 +158,23 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 }
                 val pendingIntent = PendingIntent.getBroadcast(
                     context,
-                    0,
+                    1,
                     intent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 alarmManager.cancel(pendingIntent)
             } catch (e: Exception) {
-                android.util.Log.e("PomodoroWidget", "Failed to cancel updates", e)
+                android.util.Log.e("PomodoroWidget", "Failed to cancel ticks", e)
             }
         }
 
-        /**
-         * Update all active widgets
-         */
         fun updateAllWidgets(context: Context) {
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val componentName = ComponentName(context, PomodoroWidgetProvider::class.java)
             val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
-            android.util.Log.d("PomodoroWidget", "Updating ${widgetIds.size} widgets")
+            android.util.Log.i("PomodoroWidget", "Updating ${widgetIds.size} widgets")
             for (widgetId in widgetIds) {
-                updateWidgetDirectly(context, appWidgetManager, widgetId, prefs)
+                updateWidgetDirectly(context, appWidgetManager, widgetId)
             }
         }
     }
@@ -265,56 +184,40 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        try {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
-            for (widgetId in appWidgetIds) {
-                updateWidgetDirectly(context, appWidgetManager, widgetId, prefs)
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("PomodoroWidget", "onUpdate failed", e)
+        android.util.Log.i("PomodoroWidget", "onUpdate: ${appWidgetIds.size} widgets")
+        for (widgetId in appWidgetIds) {
+            updateWidgetDirectly(context, appWidgetManager, widgetId)
         }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        android.util.Log.d("PomodoroWidget", "onReceive: ${intent.action}")
-
+        android.util.Log.i("PomodoroWidget", "onReceive: ${intent.action}")
         when (intent.action) {
             ACTION_POMODORO_TICK -> {
-                // Alarm fired - update widget with LIVE time
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 val phase = prefs.getString(KEY_PHASE, "idle") ?: "idle"
-                val endTimeMillis = prefs.getLong(KEY_END_TIME, 0L).takeIf { it > 0 }
-                val remainingSeconds = calculateRemainingTime(endTimeMillis)
+                val endTime = prefs.getLong(KEY_END_TIME, 0L).takeIf { it > 0 }
+                val remaining = calculateRemainingTime(endTime)
 
-                // Update all widgets
                 updateAllWidgets(context)
 
-                // Schedule next tick if timer still active and not finished
-                if (phase != "idle" && phase != "paused" && remainingSeconds > 0) {
-                    scheduleWidgetUpdate(context)
-                } else if (remainingSeconds <= 0 && phase != "idle") {
-                    // Timer finished - cancel updates
-                    cancelWidgetUpdates(context)
+                if ((phase == "focusing" || phase == "shortBreak" || phase == "longBreak") && remaining > 0) {
+                    scheduleTick(context)
+                } else {
+                    cancelTicks(context)
                 }
             }
-            ACTION_POMODORO_UPDATE -> {
-                // Explicit update request (from app via method channel)
-                updateAllWidgets(context)
-            }
             Intent.ACTION_BOOT_COMPLETED -> {
-                // Device rebooted - restore widget if timer was active
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 val phase = prefs.getString(KEY_PHASE, "idle") ?: "idle"
-                val endTimeMillis = prefs.getLong(KEY_END_TIME, 0L).takeIf { it > 0 }
+                val endTime = prefs.getLong(KEY_END_TIME, 0L).takeIf { it > 0 }
 
-                if (phase != "idle" && endTimeMillis != null) {
-                    val remaining = calculateRemainingTime(endTimeMillis)
+                if (phase != "idle" && endTime != null) {
+                    val remaining = calculateRemainingTime(endTime)
                     if (remaining > 0) {
-                        // Timer still running after reboot - resume updates
                         updateAllWidgets(context)
-                        scheduleWidgetUpdate(context)
+                        scheduleTick(context)
                     }
                 }
             }
@@ -323,11 +226,11 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         super.onDeleted(context, appWidgetIds)
-        cancelWidgetUpdates(context)
+        cancelTicks(context)
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
-        cancelWidgetUpdates(context)
+        cancelTicks(context)
     }
 }
