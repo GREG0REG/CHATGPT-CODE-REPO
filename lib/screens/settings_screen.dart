@@ -4,7 +4,6 @@ import 'package:battery_plus/battery_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import '../database_helper.dart';
 import '../main.dart';
@@ -48,14 +47,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _batteryLow = false;
   StreamSubscription<BatteryState>? _batterySub;
 
-  bool _batteryOptIgnored = false;
-
   @override
   void initState() {
     super.initState();
     _loadSettings();
     _listenToBattery();
-    _checkBatteryOptimization();
   }
 
   @override
@@ -80,74 +76,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _batteryStatus = '${charging ? '⚡ Charging' : '🔋 On battery'} • $level%';
       _batteryLow = low;
     });
-  }
-
-  Future<void> _checkBatteryOptimization() async {
-    if (!Platform.isAndroid) return;
-    try {
-      final status = await Permission.ignoreBatteryOptimizations.status;
-      if (mounted) {
-        setState(() => _batteryOptIgnored = status.isGranted);
-      }
-    } catch (e) {
-      debugPrint('Battery opt check failed: $e');
-    }
-  }
-
-  Future<void> _requestBatteryOptimization() async {
-    if (!Platform.isAndroid) {
-      _showSnack('Battery optimization settings are only available on Android');
-      return;
-    }
-
-    final alreadyPrompted = await SettingsService.instance.getBatteryOptPrompted();
-
-    if (!alreadyPrompted) {
-      final shouldPrompt = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Keep Widget Updated?'),
-          content: const Text(
-            'To keep your countdown widget updating even when the app is closed, '
-            'you need to disable battery optimization for Event Countdown. '
-            'This allows background updates to run reliably.\n\n'
-            'Battery impact is minimal — updates are adaptive and slow down when battery is low.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Not Now'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Open Settings'),
-            ),
-          ],
-        ),
-      );
-
-      if (shouldPrompt == true) {
-        await SettingsService.instance.setBatteryOptPrompted(true);
-      } else {
-        return;
-      }
-    }
-
-    try {
-      final status = await Permission.ignoreBatteryOptimizations.request();
-      if (status.isGranted) {
-        if (mounted) {
-          setState(() => _batteryOptIgnored = true);
-          _showSnack('Battery optimization disabled — widget will update reliably');
-        }
-      } else if (status.isPermanentlyDenied) {
-        await openAppSettings();
-      } else {
-        _showSnack('Permission denied — widget may stop updating when app is closed');
-      }
-    } catch (e) {
-      _showSnack('Could not open battery settings: $e');
-    }
   }
 
   Future<void> _loadSettings() async {
@@ -657,32 +585,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: const Text('Clean up and compact local storage'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _runVacuum,
-                ),
-                const Divider(),
-                const _SectionHeader('Background Updates'),
-                ListTile(
-                  leading: Icon(
-                    _batteryOptIgnored ? Icons.battery_charging_full : Icons.battery_alert,
-                    color: _batteryOptIgnored ? Colors.green : Colors.orange,
-                  ),
-                  title: const Text('Battery Optimization'),
-                  subtitle: Text(
-                    _batteryOptIgnored
-                        ? 'Disabled — widget updates run reliably in background'
-                        : 'Enabled — widget may stop updating when app is closed',
-                  ),
-                  trailing: TextButton(
-                    onPressed: _requestBatteryOptimization,
-                    child: Text(_batteryOptIgnored ? 'Change' : 'Disable'),
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    'Disabling battery optimization allows the widget to update even when the app is closed. '
-                    'Updates are adaptive and slow down when your battery is low.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
                 ),
                 const Divider(),
                 const _SectionHeader('Backup & Restore'),
