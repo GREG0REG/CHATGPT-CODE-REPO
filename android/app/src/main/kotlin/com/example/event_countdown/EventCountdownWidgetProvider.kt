@@ -281,6 +281,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 }
             }
             ACTION_WIDGET_UPDATE -> {
+                android.util.Log.d("EventWidget", "📡 ACTION_WIDGET_UPDATE received")
                 updateAllWidgets(context)
             }
             Intent.ACTION_BOOT_COMPLETED -> {
