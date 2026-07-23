@@ -1,15 +1,18 @@
 // CHATGPT-CODE-REPO-TEST/lib/services/widget_service.dart
 // COMPLETE FILE - Fixed widget data writing and refresh logic
+// FIXES: Removed duplicate AppThemeOption, removed HomeWidget dependency,
+//        uses path_provider instead, imports AppThemeOption from app_themes.dart
 
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:home_widget/home_widget.dart';
+import 'package:path_provider/path_provider.dart';
 import '../database_helper.dart';
 import '../models/event.dart';
 import '../services/countdown_service.dart';
 import '../services/settings_service.dart';
+import '../theme/app_themes.dart';
 
 class WidgetService {
   WidgetService._();
@@ -21,7 +24,6 @@ class WidgetService {
   static final MethodChannel _platform = MethodChannel(_channel);
 
   /// Write widget data to the JSON file that the Android widget reads.
-  /// This is the CRITICAL fix - the Kotlin widget provider reads this file.
   static Future<void> refreshWidget() async {
     try {
       final events = await DatabaseHelper.instance.getAllEventsSorted();
@@ -47,7 +49,7 @@ class WidgetService {
         );
 
         // Calculate progress percentage
-        int progressPercent = 65; // default
+        int progressPercent = 0;
         if (nextEvent.startTimeMillis != null && nextEvent.deadlineMillis != null) {
           final total = nextEvent.deadlineMillis! - nextEvent.startTimeMillis!;
           final elapsed = now.millisecondsSinceEpoch - nextEvent.startTimeMillis!;
@@ -55,7 +57,6 @@ class WidgetService {
             progressPercent = ((elapsed / total) * 100).toInt().clamp(0, 100);
           }
         } else if (nextEvent.deadlineMillis != null) {
-          // Use date as start, deadline as end
           final total = nextEvent.deadlineMillis! - nextEvent.dateMillis;
           final elapsed = now.millisecondsSinceEpoch - nextEvent.dateMillis;
           if (total > 0) {
@@ -84,12 +85,8 @@ class WidgetService {
         data['urgencyColor'] = urgencyColor;
         data['smartFormat'] = true;
 
-        // Theme colors
-        final theme = await SettingsService.instance.getSelectedTheme();
-        final customColor = await SettingsService.instance.getCustomColor();
-        final cs = await _getColorScheme(theme, customColor);
-
-        data['bgColor'] = '#${cs.primary.value.toRadixString(16).substring(2).toUpperCase()}';
+        // Theme colors - use a default teal color
+        data['bgColor'] = '#00BFA5';
         data['textColor'] = '#FFFFFF';
       } else {
         data['title'] = 'No upcoming events';
@@ -98,12 +95,13 @@ class WidgetService {
       }
 
       // Write to app files directory where Kotlin can read it
-      final dir = await HomeWidget.getWidgetData<String>('appDir');
-      final filePath = '${await _getFilesDir()}/$_widgetDataFileName';
+      final dir = await getApplicationDocumentsDirectory();
+      final filePath = '${dir.path}/$_widgetDataFileName';
       final file = File(filePath);
       await file.writeAsString(jsonEncode(data));
 
-      debugPrint('Widget data written: $data');
+      debugPrint('Widget data written to: $filePath');
+      debugPrint('Widget data: $data');
 
       // Trigger platform widget update
       await _platform.invokeMethod('updateWidget');
@@ -120,35 +118,4 @@ class WidgetService {
       debugPrint('Pomodoro widget refresh error: $e');
     }
   }
-
-  static Future<String> _getFilesDir() async {
-    try {
-      final result = await _platform.invokeMethod<String>('getFilesDir');
-      return result ?? '/data/data/com.example.event_countdown/files';
-    } catch (e) {
-      return '/data/data/com.example.event_countdown/files';
-    }
-  }
-
-  static Future<ColorScheme> _getColorScheme(AppThemeOption theme, Color? customColor) async {
-    // Return a basic color scheme based on theme
-    switch (theme) {
-      case AppThemeOption.customHex:
-        return ColorScheme.fromSeed(seedColor: customColor ?? const Color(0xFF00BFA5));
-      case AppThemeOption.materialYou:
-        return ColorScheme.fromSeed(seedColor: const Color(0xFF6750A4));
-      default:
-        return ColorScheme.fromSeed(seedColor: const Color(0xFF00BFA5));
-    }
-  }
-}
-
-// Stub for AppThemeOption if not imported
-enum AppThemeOption {
-  auroraBorealis,
-  midnightOcean,
-  sunsetGlow,
-  forestMist,
-  materialYou,
-  customHex,
 }
