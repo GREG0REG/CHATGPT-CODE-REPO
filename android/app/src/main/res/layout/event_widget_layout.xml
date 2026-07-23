@@ -53,15 +53,15 @@
             android:layout_marginStart="4dp" />
     </LinearLayout>
 
-    <!-- Your original ProgressBar — style is set in widget_info.xml or here -->
+    <!-- Fixed ProgressBar using the same drawable as pomodoro for consistency -->
     <ProgressBar
         android:id="@+id/widget_progress_ring"
-        style="@android:style/Widget.ProgressBar.Horizontal"
+        style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
         android:layout_height="4dp"
         android:layout_marginTop="12dp"
         android:max="100"
-        android:progress="65"
-        android:progressDrawable="@android:drawable/progress_horizontal" />
+        android:progress="0"
+        android:progressDrawable="@drawable/widget_progress_drawable" />
 
 </LinearLayout>
