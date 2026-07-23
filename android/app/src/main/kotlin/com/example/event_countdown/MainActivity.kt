@@ -17,15 +17,12 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "updateWidget" -> {
                     try {
-                        // Trigger immediate update + start background ticking
                         EventCountdownWidgetProvider.updateAllWidgets(this)
-                        
                         val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-                        val deadlineMillis = prefs.getLong("widget_event_deadline_millis", 0L).takeIf { it > 0 }
+                        val deadlineMillis = prefs.getLong("flutter.widget_event_deadline_millis", 0L).takeIf { it > 0 }
                         if (deadlineMillis != null && deadlineMillis > System.currentTimeMillis()) {
                             EventCountdownWidgetProvider.scheduleWidgetTick(this)
                         }
-                        
                         result.success(null)
                     } catch (e: Exception) {
                         result.error("WIDGET_UPDATE_ERROR", e.message, null)
