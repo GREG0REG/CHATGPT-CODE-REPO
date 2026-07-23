@@ -18,9 +18,7 @@ import 'theme/app_themes.dart';
 
 const String kWidgetRefreshTaskName = 'event_countdown_widget_refresh';
 const String kWidgetRefreshFrequentTaskName = 'event_countdown_widget_frequent';
-const String kWidgetRefreshAggressiveTaskName = 'event_countdown_widget_aggressive';
 const String kBackupTaskName = 'event_countdown_weekly_backup';
-const String kBootCompletedTask = 'event_countdown_boot_completed';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -53,28 +51,6 @@ void callbackDispatcher() {
         debugPrint('Background widget refresh error: $e');
         return false;
       }
-    } else if (task == kWidgetRefreshAggressiveTaskName) {
-      try {
-        final isCharging = await BatteryService.instance.isCharging();
-        if (!isCharging) {
-          debugPrint('Aggressive refresh: skipped — not charging');
-          return true;
-        }
-        await WidgetService.refreshWidget();
-        await WidgetService.refreshPomodoroWidget();
-        return true;
-      } catch (e) {
-        debugPrint('Aggressive widget refresh error: $e');
-        return false;
-      }
-    } else if (task == kBootCompletedTask) {
-      try {
-        await _registerBackgroundTasks();
-        return true;
-      } catch (e) {
-        debugPrint('Boot completed task error: $e');
-        return false;
-      }
     } else if (task == kBackupTaskName) {
       return Future.value(await BackupService.executeBackup());
     }
@@ -82,7 +58,19 @@ void callbackDispatcher() {
   });
 }
 
-Future<void> _registerBackgroundTasks() async {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await BatteryService.instance.initialize();
+
+  await NotificationService.instance.init();
+  await PomodoroService.instance.init();
+
+  await Workmanager().initialize(
+    callbackDispatcher,
+    isInDebugMode: false,
+  );
+
   await Workmanager().registerPeriodicTask(
     kWidgetRefreshFrequentTaskName,
     kWidgetRefreshFrequentTaskName,
@@ -107,35 +95,8 @@ Future<void> _registerBackgroundTasks() async {
     existingWorkPolicy: ExistingWorkPolicy.keep,
   );
 
-  await Workmanager().registerPeriodicTask(
-    kWidgetRefreshAggressiveTaskName,
-    kWidgetRefreshAggressiveTaskName,
-    frequency: const Duration(minutes: 5),
-    constraints: Constraints(
-      networkType: NetworkType.not_required,
-      requiresCharging: true,
-      requiresBatteryNotLow: false,
-    ),
-    existingWorkPolicy: ExistingWorkPolicy.keep,
-  );
-}
-
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  await BatteryService.instance.initialize();
-
-  await NotificationService.instance.init();
-  await PomodoroService.instance.init();
-
-  await Workmanager().initialize(
-    callbackDispatcher,
-    isInDebugMode: false,
-  );
-
-  await _registerBackgroundTasks();
   await BackupService.registerWeeklyBackup();
-
+  
   try {
     await WidgetService.refreshWidget();
     await WidgetService.refreshPomodoroWidget();
