@@ -18,8 +18,8 @@ class MainActivity : FlutterActivity() {
                 "updateWidget" -> {
                     try {
                         EventCountdownWidgetProvider.updateAllWidgets(this)
-                        val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-                        val deadlineMillis = prefs.getLong("flutter.widget_event_deadline_millis", 0L).takeIf { it > 0 }
+                        val data = EventCountdownWidgetProvider.readWidgetData(this)
+                        val deadlineMillis = (data["deadlineMillis"] as? Number)?.toLong()?.takeIf { it > 0 }
                         if (deadlineMillis != null && deadlineMillis > System.currentTimeMillis()) {
                             EventCountdownWidgetProvider.scheduleWidgetTick(this)
                         }
