@@ -18,6 +18,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         private const val KEY_PROGRESS = "widget_progress_percent"
         private const val KEY_URGENCY_COLOR = "widget_urgency_color"
         
+        // NEW: Grade and Tasks keys
         private const val KEY_GRADE_CURRENT = "grade_current"
         private const val KEY_GRADE_LETTER = "grade_letter"
         private const val KEY_TASKS_DATA = "tasks_data"
@@ -46,19 +47,25 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             try {
                 val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
 
+                // Set text content
                 views.setTextViewText(R.id.widget_title, title)
                 views.setTextViewText(R.id.widget_countdown, countdown)
 
+                // Update progress bar
                 views.setProgressBar(R.id.widget_progress_ring, 100, progressPercent.coerceIn(0, 100), false)
 
+                // Parse theme colors
                 val themeColor = parseColorOrDefault(bgColorStr, Color.parseColor("#00BFA5"))
                 val textColor = parseColorOrDefault(textColorStr, Color.WHITE)
 
+                // Set background color on the root
                 views.setInt(R.id.widget_root, "setBackgroundColor", themeColor)
 
+                // Text colors
                 views.setTextColor(R.id.widget_title, textColor)
                 views.setTextColor(R.id.widget_countdown, textColor)
 
+                // Urgency indicator - show for orange, deepOrange, red
                 val showUrgency = urgencyColorName != null &&
                     urgencyColorName != "green" &&
                     urgencyColorName != "grey"
@@ -84,6 +91,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.widget_urgency_row, android.view.View.GONE)
                 }
 
+                // Launch intent - tap anywhere opens app
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 if (launchIntent != null) {
                     val pendingIntent = PendingIntent.getActivity(
@@ -117,12 +125,14 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             val progressPercent = prefs.getInt(KEY_PROGRESS, 65)
             val urgencyColorName = prefs.getString(KEY_URGENCY_COLOR, null)
 
+            // NEW: Read grade and tasks data (available for display if needed)
             val gradeCurrent = prefs.getFloat(KEY_GRADE_CURRENT, 0f)
             val gradeLetter = prefs.getString(KEY_GRADE_LETTER, "N/A") ?: "N/A"
             val tasksData = prefs.getString(KEY_TASKS_DATA, "[]") ?: "[]"
             val tasksUrgent = prefs.getInt(KEY_TASKS_URGENT, 0)
             val tasksTotal = prefs.getInt(KEY_TASKS_TOTAL, 0)
 
+            // Log grade/tasks data for debugging
             android.util.Log.d("EventWidget", "Grade: $gradeCurrent ($gradeLetter), Tasks: $tasksUrgent urgent / $tasksTotal total")
 
             for (widgetId in appWidgetIds) {
