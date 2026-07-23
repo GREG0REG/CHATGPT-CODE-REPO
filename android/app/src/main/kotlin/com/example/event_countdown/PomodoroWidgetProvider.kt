@@ -20,13 +20,15 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private const val PREFS_NAME = "FlutterSharedPreferences"
-        private const val KEY_PHASE = "pomodoro_phase"
-        private const val KEY_END_TIME = "pomodoro_end_time_millis"
-        private const val KEY_TOTAL_DURATION = "pomodoro_total_duration_seconds"
-        private const val KEY_SUBJECT = "pomodoro_subject"
-        private const val KEY_STATUS = "pomodoro_status"
-        private const val KEY_BG_COLOR = "pomodoro_bg_color"
-        private const val KEY_SESSIONS = "pomodoro_completed_sessions"
+        private const val KEY_PHASE = "flutter.pomodoro_phase"
+        private const val KEY_END_TIME = "flutter.pomodoro_end_time_millis"
+        private const val KEY_TOTAL_DURATION = "flutter.pomodoro_total_duration_seconds"
+        private const val KEY_SUBJECT = "flutter.pomodoro_subject"
+        private const val KEY_STATUS = "flutter.pomodoro_status"
+        private const val KEY_BG_COLOR = "flutter.pomodoro_bg_color"
+        private const val KEY_SESSIONS = "flutter.pomodoro_completed_sessions"
+        private const val KEY_REMAINING_SECONDS = "flutter.pomodoro_remaining_seconds"
+        private const val KEY_PROGRESS_PERCENT = "flutter.pomodoro_progress_percent"
 
         // Default colors
         private const val DEFAULT_CORAL = "#FF6B6B"
@@ -50,7 +52,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
          * This is the KEY function that makes the widget work independently.
          */
         fun calculateRemainingTime(endTimeMillis: Long?): Int {
-            if (endTimeMillis == null) return 0
+            if (endTimeMillis == null || endTimeMillis <= 0) return 0
             val now = System.currentTimeMillis()
             val remaining = ((endTimeMillis - now) / 1000).toInt()
             return remaining.coerceAtLeast(0)
@@ -115,24 +117,28 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 val status = sharedPrefs.getString(KEY_STATUS, "Focus") ?: "Focus"
                 val bgColorStr = sharedPrefs.getString(KEY_BG_COLOR, null)
                 val completedSessions = sharedPrefs.getInt(KEY_SESSIONS, 0)
+                val savedRemaining = sharedPrefs.getInt(KEY_REMAINING_SECONDS, 0)
+                val savedProgress = sharedPrefs.getInt(KEY_PROGRESS_PERCENT, 45)
 
                 // LIVE calculation: compute remaining time from end-time
                 val remainingSeconds = calculateRemainingTime(endTimeMillis)
-                val timerText = if (phase == "idle") {
-                    "Tap to start"
-                } else if (phase == "paused") {
-                    val savedRemaining = sharedPrefs.getInt("pomodoro_remaining_seconds", 0)
-                    formatTime(savedRemaining)
-                } else {
-                    formatTime(remainingSeconds)
+                
+                val timerText = when {
+                    phase == "idle" -> "Tap to start"
+                    phase == "paused" -> formatTime(savedRemaining)
+                    remainingSeconds <= 0 && endTimeMillis != null -> "00:00"
+                    else -> formatTime(remainingSeconds)
                 }
 
                 // LIVE progress calculation
-                val progressPercent = if (phase == "idle" || phase == "paused") {
-                    sharedPrefs.getInt("pomodoro_progress_percent", 45)
-                } else {
-                    calculateProgress(remainingSeconds, totalDuration)
+                val progressPercent = when {
+                    phase == "idle" -> 0
+                    phase == "paused" -> savedProgress
+                    remainingSeconds <= 0 -> 100
+                    else -> calculateProgress(remainingSeconds, totalDuration)
                 }
+
+                android.util.Log.d("PomodoroWidget", "phase=$phase, remaining=$remainingSeconds, progress=$progressPercent, timer=$timerText")
 
                 val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
 
@@ -177,7 +183,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
                 appWidgetManager.updateAppWidget(widgetId, views)
 
-                // If timer is active, schedule next update
+                // If timer is active and not finished, schedule next update
                 if (phase != "idle" && phase != "paused" && remainingSeconds > 0) {
                     scheduleWidgetUpdate(context)
                 }
@@ -249,6 +255,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+            android.util.Log.d("PomodoroWidget", "Updating ${widgetIds.size} widgets")
             for (widgetId in widgetIds) {
                 updateWidgetDirectly(context, appWidgetManager, widgetId, prefs)
             }
@@ -273,6 +280,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
+        android.util.Log.d("PomodoroWidget", "onReceive: ${intent.action}")
 
         when (intent.action) {
             ACTION_WIDGET_TICK -> {
@@ -285,7 +293,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 // Update all widgets
                 updateAllWidgets(context)
 
-                // Schedule next tick if timer still active
+                // Schedule next tick if timer still active and not finished
                 if (phase != "idle" && phase != "paused" && remainingSeconds > 0) {
                     scheduleWidgetUpdate(context)
                 } else if (remainingSeconds <= 0 && phase != "idle") {
@@ -317,13 +325,11 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         super.onDeleted(context, appWidgetIds)
-        // Cancel alarms when widget is removed
         cancelWidgetUpdates(context)
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
-        // Cancel all alarms when last widget is removed
         cancelWidgetUpdates(context)
     }
 }
