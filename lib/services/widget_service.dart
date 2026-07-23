@@ -31,7 +31,6 @@ class WidgetService {
       Event? nextEvent;
       for (final e in events) {
         if (e.isCompleted) continue;
-        // Use finalMillis which is the actual deadline
         if (e.finalMillis > now.millisecondsSinceEpoch) {
           nextEvent = e;
           break;
@@ -104,12 +103,12 @@ class WidgetService {
       debugPrint('✅ Widget data written to: $filePath');
       debugPrint('✅ Widget data: $data');
 
-      // Trigger platform widget update
+      // Trigger platform widget update via method channel
       try {
-        await _platform.invokeMethod('updateWidget');
-        debugPrint('✅ Platform widget update triggered');
+        final result = await _platform.invokeMethod('updateWidget');
+        debugPrint('✅ Platform widget update triggered: $result');
       } catch (e) {
-        debugPrint('⚠️ Platform channel error (expected in emulator): $e');
+        debugPrint('⚠️ Platform channel error: $e');
       }
     } catch (e, stack) {
       debugPrint('❌ Widget refresh error: $e');
@@ -120,10 +119,10 @@ class WidgetService {
   /// Refresh the Pomodoro widget with current timer state
   static Future<void> refreshPomodoroWidget() async {
     try {
-      await _platform.invokeMethod('updatePomodoroWidget');
-      debugPrint('✅ Pomodoro widget update triggered');
+      final result = await _platform.invokeMethod('updatePomodoroWidget');
+      debugPrint('✅ Pomodoro widget update triggered: $result');
     } catch (e) {
-      debugPrint('⚠️ Pomodoro widget refresh error (expected in emulator): $e');
+      debugPrint('⚠️ Pomodoro widget refresh error: $e');
     }
   }
 }
