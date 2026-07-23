@@ -1,9 +1,6 @@
 package com.example.event_countdown
 
-import android.appwidget.AppWidgetManager
-import android.content.ComponentName
 import android.content.Intent
-import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -16,6 +13,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+            android.util.Log.d("MainActivity", "Method call received: ${call.method}")
             when (call.method) {
                 "updateWidget" -> {
                     try {
@@ -23,8 +21,10 @@ class MainActivity : FlutterActivity() {
                             action = EventCountdownWidgetProvider.ACTION_WIDGET_UPDATE
                         }
                         sendBroadcast(intent)
-                        result.success(null)
+                        android.util.Log.d("MainActivity", "Event widget update broadcast sent")
+                        result.success("event_updated")
                     } catch (e: Exception) {
+                        android.util.Log.e("MainActivity", "Event widget update failed", e)
                         result.error("UPDATE_ERROR", e.message, null)
                     }
                 }
@@ -34,12 +34,15 @@ class MainActivity : FlutterActivity() {
                             action = PomodoroWidgetProvider.ACTION_POMODORO_UPDATE
                         }
                         sendBroadcast(intent)
-                        result.success(null)
+                        android.util.Log.d("MainActivity", "Pomodoro widget update broadcast sent")
+                        result.success("pomodoro_updated")
                     } catch (e: Exception) {
+                        android.util.Log.e("MainActivity", "Pomodoro widget update failed", e)
                         result.error("UPDATE_ERROR", e.message, null)
                     }
                 }
                 else -> {
+                    android.util.Log.w("MainActivity", "Unknown method: ${call.method}")
                     result.notImplemented()
                 }
             }
