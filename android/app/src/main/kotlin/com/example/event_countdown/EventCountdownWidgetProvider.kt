@@ -25,7 +25,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             return try {
                 val file = File(context.filesDir, "widget_data.json")
                 if (!file.exists()) {
-                    android.util.Log.d("EventWidget", "widget_data.json not found")
+                    android.util.Log.d("EventWidget", "widget_data.json not found at ${file.absolutePath}")
                     return emptyMap()
                 }
                 val jsonString = file.readText()
@@ -76,9 +76,9 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         }
 
         fun calculateLiveProgress(startMillis: Long?, deadlineMillis: Long?): Int {
-            if (startMillis == null || deadlineMillis == null) return 65
+            if (startMillis == null || deadlineMillis == null) return 0
             val total = deadlineMillis - startMillis
-            if (total <= 0) return 65
+            if (total <= 0) return 0
             val now = System.currentTimeMillis()
             val elapsed = now - startMillis
             return ((elapsed.toFloat() / total) * 100).toInt().coerceIn(0, 100)
@@ -109,14 +109,14 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 val storedCountdown = data["countdown"] as? String ?: ""
                 val bgColorStr = data["bgColor"] as? String
                 val textColorStr = data["textColor"] as? String
-                val storedProgress = (data["progressPercent"] as? Number)?.toInt() ?: 65
+                val storedProgress = (data["progressPercent"] as? Number)?.toInt() ?: 0
                 val storedUrgency = data["urgencyColor"] as? String
 
                 val deadlineMillis = (data["deadlineMillis"] as? Number)?.toLong()?.takeIf { it > 0 }
                 val startMillis = (data["startMillis"] as? Number)?.toLong()?.takeIf { it > 0 }
                 val smartFormat = data["smartFormat"] as? Boolean ?: true
 
-                android.util.Log.d("EventWidget", "title=$title, deadline=$deadlineMillis")
+                android.util.Log.d("EventWidget", "title=$title, deadline=$deadlineMillis, progress=$storedProgress")
 
                 val countdownText: String
                 val progressPercent: Int
@@ -170,6 +170,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.widget_urgency_row, android.view.View.GONE)
                 }
 
+                // Launch intent - tap opens app
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 if (launchIntent != null) {
                     val pendingIntent = PendingIntent.getActivity(
@@ -183,6 +184,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
 
                 appWidgetManager.updateAppWidget(widgetId, views)
 
+                // Schedule next tick if event is in future
                 if (deadlineMillis != null && deadlineMillis > System.currentTimeMillis()) {
                     scheduleWidgetTick(context)
                 }
@@ -211,6 +213,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                     triggerTime,
                     pendingIntent
                 )
+                android.util.Log.d("EventWidget", "Tick scheduled in 60s")
             } catch (e: Exception) {
                 android.util.Log.e("EventWidget", "Failed to schedule tick", e)
             }
@@ -238,6 +241,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val componentName = ComponentName(context, EventCountdownWidgetProvider::class.java)
             val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
+            android.util.Log.d("EventWidget", "Updating ${widgetIds.size} widgets")
             for (widgetId in widgetIds) {
                 updateWidgetDirectly(context, appWidgetManager, widgetId)
             }
@@ -260,6 +264,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
+        android.util.Log.d("EventWidget", "onReceive: ${intent.action}")
         when (intent.action) {
             ACTION_WIDGET_TICK -> {
                 val data = readWidgetData(context)
