@@ -16,18 +16,72 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private const val PREFS_NAME = "FlutterSharedPreferences"
-        private const val KEY_TITLE = "flutter.event_title"
-        private const val KEY_COUNTDOWN = "flutter.countdown_text"
-        private const val KEY_BG_COLOR = "flutter.widget_bg_color"
-        private const val KEY_TEXT_COLOR = "flutter.widget_text_color"
-        private const val KEY_PROGRESS = "flutter.widget_progress_percent"
-        private const val KEY_URGENCY_COLOR = "flutter.widget_urgency_color"
-        private const val KEY_EVENT_DEADLINE = "flutter.widget_event_deadline_millis"
-        private const val KEY_EVENT_START = "flutter.widget_event_start_millis"
-        private const val KEY_SMART_FORMAT = "flutter.widget_smart_format_enabled"
+        
+        // Try BOTH versions of keys - with and without flutter. prefix
+        private val KEYS_TITLE = listOf("flutter.event_title", "event_title")
+        private val KEYS_COUNTDOWN = listOf("flutter.countdown_text", "countdown_text")
+        private val KEYS_BG_COLOR = listOf("flutter.widget_bg_color", "widget_bg_color")
+        private val KEYS_TEXT_COLOR = listOf("flutter.widget_text_color", "widget_text_color")
+        private val KEYS_PROGRESS = listOf("flutter.widget_progress_percent", "widget_progress_percent")
+        private val KEYS_URGENCY = listOf("flutter.widget_urgency_color", "widget_urgency_color")
+        private val KEYS_DEADLINE = listOf("flutter.widget_event_deadline_millis", "widget_event_deadline_millis")
+        private val KEYS_START = listOf("flutter.widget_event_start_millis", "widget_event_start_millis")
+        private val KEYS_SMART = listOf("flutter.widget_smart_format_enabled", "widget_smart_format_enabled")
 
         const val ACTION_WIDGET_TICK = "com.example.event_countdown.EVENT_WIDGET_TICK"
         const val ACTION_WIDGET_UPDATE = "com.example.event_countdown.EVENT_WIDGET_UPDATE"
+
+        // Helper to read a string value trying multiple keys
+        private fun readString(prefs: android.content.SharedPreferences, keys: List<String>, default: String): String {
+            for (key in keys) {
+                val value = prefs.getString(key, null)
+                if (value != null) {
+                    android.util.Log.d("EventWidgetDebug", "FOUND key='$key' value='$value'")
+                    return value
+                }
+            }
+            android.util.Log.d("EventWidgetDebug", "NOT FOUND keys=$keys, using default='$default'")
+            return default
+        }
+
+        // Helper to read an int value trying multiple keys
+        private fun readInt(prefs: android.content.SharedPreferences, keys: List<String>, default: Int): Int {
+            for (key in keys) {
+                if (prefs.contains(key)) {
+                    val value = prefs.getInt(key, default)
+                    android.util.Log.d("EventWidgetDebug", "FOUND key='$key' intValue=$value")
+                    return value
+                }
+            }
+            android.util.Log.d("EventWidgetDebug", "NOT FOUND int keys=$keys, using default=$default")
+            return default
+        }
+
+        // Helper to read a long value trying multiple keys
+        private fun readLong(prefs: android.content.SharedPreferences, keys: List<String>, default: Long): Long {
+            for (key in keys) {
+                if (prefs.contains(key)) {
+                    val value = prefs.getLong(key, default)
+                    android.util.Log.d("EventWidgetDebug", "FOUND key='$key' longValue=$value")
+                    return value
+                }
+            }
+            android.util.Log.d("EventWidgetDebug", "NOT FOUND long keys=$keys, using default=$default")
+            return default
+        }
+
+        // Helper to read a boolean value trying multiple keys
+        private fun readBool(prefs: android.content.SharedPreferences, keys: List<String>, default: Boolean): Boolean {
+            for (key in keys) {
+                if (prefs.contains(key)) {
+                    val value = prefs.getBoolean(key, default)
+                    android.util.Log.d("EventWidgetDebug", "FOUND key='$key' boolValue=$value")
+                    return value
+                }
+            }
+            android.util.Log.d("EventWidgetDebug", "NOT FOUND bool keys=$keys, using default=$default")
+            return default
+        }
 
         fun parseColorOrDefault(colorStr: String?, defaultColor: Int): Int {
             return try {
@@ -91,16 +145,25 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             try {
                 val sharedPrefs = prefs ?: context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-                val title = sharedPrefs.getString(KEY_TITLE, "No upcoming events") ?: "No upcoming events"
-                val storedCountdown = sharedPrefs.getString(KEY_COUNTDOWN, "") ?: ""
-                val bgColorStr = sharedPrefs.getString(KEY_BG_COLOR, null)
-                val textColorStr = sharedPrefs.getString(KEY_TEXT_COLOR, null)
-                val storedProgress = sharedPrefs.getInt(KEY_PROGRESS, 65)
-                val storedUrgency = sharedPrefs.getString(KEY_URGENCY_COLOR, null)
+                // DEBUG: Log ALL keys in the prefs file
+                android.util.Log.d("EventWidgetDebug", "=== ALL KEYS IN PREFS ===")
+                for (key in sharedPrefs.all.keys.sorted()) {
+                    android.util.Log.d("EventWidgetDebug", "Key: $key = ${sharedPrefs.all[key]}")
+                }
+                android.util.Log.d("EventWidgetDebug", "========================")
 
-                val deadlineMillis = sharedPrefs.getLong(KEY_EVENT_DEADLINE, 0L).takeIf { it > 0 }
-                val startMillis = sharedPrefs.getLong(KEY_EVENT_START, 0L).takeIf { it > 0 }
-                val smartFormat = sharedPrefs.getBoolean(KEY_SMART_FORMAT, true)
+                val title = readString(sharedPrefs, KEYS_TITLE, "No upcoming events")
+                val storedCountdown = readString(sharedPrefs, KEYS_COUNTDOWN, "")
+                val bgColorStr = readString(sharedPrefs, KEYS_BG_COLOR, "#00BFA5")
+                val textColorStr = readString(sharedPrefs, KEYS_TEXT_COLOR, "#FFFFFF")
+                val storedProgress = readInt(sharedPrefs, KEYS_PROGRESS, 65)
+                val storedUrgency = readString(sharedPrefs, KEYS_URGENCY, "")
+
+                val deadlineMillis = readLong(sharedPrefs, KEYS_DEADLINE, 0L).takeIf { it > 0 }
+                val startMillis = readLong(sharedPrefs, KEYS_START, 0L).takeIf { it > 0 }
+                val smartFormat = readBool(sharedPrefs, KEYS_SMART, true)
+
+                android.util.Log.d("EventWidgetDebug", "Parsed: title='$title', deadline=$deadlineMillis, start=$startMillis")
 
                 val countdownText: String
                 val progressPercent: Int
@@ -113,7 +176,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 } else {
                     countdownText = storedCountdown
                     progressPercent = storedProgress
-                    urgencyColorName = storedUrgency
+                    urgencyColorName = storedUrgency.takeIf { it.isNotEmpty() }
                 }
 
                 val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
@@ -249,7 +312,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         when (intent.action) {
             ACTION_WIDGET_TICK -> {
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val deadlineMillis = prefs.getLong(KEY_EVENT_DEADLINE, 0L).takeIf { it > 0 }
+                val deadlineMillis = readLong(prefs, KEYS_DEADLINE, 0L).takeIf { it > 0 }
                 val remaining = deadlineMillis?.let { it - System.currentTimeMillis() } ?: 0
                 updateAllWidgets(context)
                 if (remaining > 0) {
@@ -263,7 +326,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             }
             Intent.ACTION_BOOT_COMPLETED -> {
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val deadlineMillis = prefs.getLong(KEY_EVENT_DEADLINE, 0L).takeIf { it > 0 }
+                val deadlineMillis = readLong(prefs, KEYS_DEADLINE, 0L).takeIf { it > 0 }
                 if (deadlineMillis != null && deadlineMillis > System.currentTimeMillis()) {
                     updateAllWidgets(context)
                     scheduleWidgetTick(context)
