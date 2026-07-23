@@ -1,76 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#00BFA5"
-    android:padding="12dp">
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#00BFA5">
 
-    <!-- Content layer -->
+    <TextView
+        android:id="@+id/widget_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="No upcoming events"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/widget_countdown"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="#FFFFFF"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_marginTop="4dp" />
+
     <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:gravity="center_vertical">
+        android:id="@+id/widget_urgency_row"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp"
+        android:visibility="gone">
 
-        <!-- Urgency row (hidden by default) -->
-        <LinearLayout
-            android:id="@+id/widget_urgency_row"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:visibility="gone"
-            android:layout_marginBottom="4dp">
-
-            <TextView
-                android:id="@+id/widget_urgency_dot"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="●"
-                android:textSize="10sp" />
-
-            <TextView
-                android:id="@+id/widget_urgency_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:textColor="#FFFFFF" />
-        </LinearLayout>
-
-        <!-- Title -->
         <TextView
-            android:id="@+id/widget_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Event Title"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFF"
-            android:maxLines="1"
-            android:ellipsize="end" />
+            android:id="@+id/widget_urgency_dot"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:background="@android:drawable/btn_star"
+            android:text="●"
+            android:textSize="12sp" />
 
-        <!-- Countdown text -->
         <TextView
-            android:id="@+id/widget_countdown"
+            android:id="@+id/widget_urgency_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="2 days left"
+            android:textColor="#FF9800"
             android:textSize="12sp"
-            android:textColor="#B0FFFFFF"
-            android:layout_marginTop="6dp" />
-
-        <!-- Progress bar -->
-        <ProgressBar
-            android:id="@+id/widget_progress_ring"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="4dp"
-            android:layout_marginTop="8dp"
-            android:progressDrawable="@drawable/widget_progress_drawable" />
-
+            android:layout_marginStart="4dp" />
     </LinearLayout>
 
-</FrameLayout>
+    <ProgressBar
+        android:id="@+id/widget_progress_ring"
+        style="@android:style/Widget.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:layout_marginTop="12dp"
+        android:max="100"
+        android:progress="65"
+        android:progressDrawable="@android:drawable/progress_horizontal" />
+
+</LinearLayout>
