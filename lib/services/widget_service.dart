@@ -1,6 +1,3 @@
-// CHATGPT-CODE-REPO-TEST/lib/services/widget_service.dart
-// COMPLETE FILE - Fixed widget data writing and refresh logic
-
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -10,7 +7,6 @@ import '../database_helper.dart';
 import '../models/event.dart';
 import '../services/countdown_service.dart';
 import '../services/settings_service.dart';
-import '../theme/app_themes.dart';
 
 class WidgetService {
   WidgetService._();
@@ -18,16 +14,13 @@ class WidgetService {
 
   static const String _widgetDataFileName = 'widget_data.json';
   static const String _channel = 'com.example.event_countdown/widget';
-
   static const MethodChannel _platform = MethodChannel(_channel);
 
-  /// Write widget data to the JSON file that the Android widget reads.
   static Future<void> refreshWidget() async {
     try {
       final events = await DatabaseHelper.instance.getAllEventsSorted();
       final now = DateTime.now();
 
-      // Find the next upcoming event (NOT completed and deadline in future)
       Event? nextEvent;
       for (final e in events) {
         if (e.isCompleted) continue;
@@ -46,34 +39,23 @@ class WidgetService {
           smartFormatEnabled: await SettingsService.instance.getSmartFormatEnabled(),
         );
 
-        // Calculate progress percentage
         int progressPercent = 0;
         if (nextEvent.startTimeMillis != null && nextEvent.deadlineMillis != null) {
           final total = nextEvent.deadlineMillis! - nextEvent.startTimeMillis!;
           final elapsed = now.millisecondsSinceEpoch - nextEvent.startTimeMillis!;
-          if (total > 0) {
-            progressPercent = ((elapsed / total) * 100).toInt().clamp(0, 100);
-          }
+          if (total > 0) progressPercent = ((elapsed / total) * 100).toInt().clamp(0, 100);
         } else if (nextEvent.deadlineMillis != null) {
           final total = nextEvent.deadlineMillis! - nextEvent.dateMillis;
           final elapsed = now.millisecondsSinceEpoch - nextEvent.dateMillis;
-          if (total > 0) {
-            progressPercent = ((elapsed / total) * 100).toInt().clamp(0, 100);
-          }
+          if (total > 0) progressPercent = ((elapsed / total) * 100).toInt().clamp(0, 100);
         }
 
-        // Urgency color based on time remaining
         final diff = Duration(milliseconds: nextEvent.finalMillis - now.millisecondsSinceEpoch);
         String? urgencyColor;
-        if (diff.inDays < 1) {
-          urgencyColor = 'red';
-        } else if (diff.inDays < 3) {
-          urgencyColor = 'deepOrange';
-        } else if (diff.inDays < 7) {
-          urgencyColor = 'orange';
-        } else if (diff.inDays < 30) {
-          urgencyColor = 'green';
-        }
+        if (diff.inDays < 1) urgencyColor = 'red';
+        else if (diff.inDays < 3) urgencyColor = 'deepOrange';
+        else if (diff.inDays < 7) urgencyColor = 'orange';
+        else if (diff.inDays < 30) urgencyColor = 'green';
 
         data['title'] = nextEvent.title;
         data['countdown'] = result.text;
@@ -82,8 +64,6 @@ class WidgetService {
         data['progressPercent'] = progressPercent;
         data['urgencyColor'] = urgencyColor;
         data['smartFormat'] = true;
-
-        // Theme colors - use a default teal color
         data['bgColor'] = '#00BFA5';
         data['textColor'] = '#FFFFFF';
       } else {
@@ -94,35 +74,29 @@ class WidgetService {
         data['startMillis'] = 0;
       }
 
-      // Write to app files directory where Kotlin can read it
       final dir = await getApplicationDocumentsDirectory();
-      final filePath = '${dir.path}/$_widgetDataFileName';
-      final file = File(filePath);
+      final file = File('${dir.path}/$_widgetDataFileName');
       await file.writeAsString(jsonEncode(data));
 
-      debugPrint('✅ Widget data written to: $filePath');
-      debugPrint('✅ Widget data: $data');
+      debugPrint('Widget data written: ${file.path}');
+      debugPrint('Data: $data');
 
-      // Trigger platform widget update via method channel
       try {
-        final result = await _platform.invokeMethod('updateWidget');
-        debugPrint('✅ Platform widget update triggered: $result');
+        await _platform.invokeMethod('updateWidget');
       } catch (e) {
-        debugPrint('⚠️ Platform channel error: $e');
+        debugPrint('Method channel error: $e');
       }
     } catch (e, stack) {
-      debugPrint('❌ Widget refresh error: $e');
-      debugPrint(stack.toString());
+      debugPrint('Widget refresh error: $e');
+      debugPrint('$stack');
     }
   }
 
-  /// Refresh the Pomodoro widget with current timer state
   static Future<void> refreshPomodoroWidget() async {
     try {
-      final result = await _platform.invokeMethod('updatePomodoroWidget');
-      debugPrint('✅ Pomodoro widget update triggered: $result');
+      await _platform.invokeMethod('updatePomodoroWidget');
     } catch (e) {
-      debugPrint('⚠️ Pomodoro widget refresh error: $e');
+      debugPrint('Pomodoro widget refresh error: $e');
     }
   }
 }
