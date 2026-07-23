@@ -39,9 +39,8 @@
 
         <TextView
             android:id="@+id/widget_urgency_dot"
-            android:layout_width="8dp"
-            android:layout_height="8dp"
-            android:background="@android:drawable/btn_star"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:text="●"
             android:textSize="12sp" />
 
@@ -54,6 +53,7 @@
             android:layout_marginStart="4dp" />
     </LinearLayout>
 
+    <!-- Your original ProgressBar — style is set in widget_info.xml or here -->
     <ProgressBar
         android:id="@+id/widget_progress_ring"
         style="@android:style/Widget.ProgressBar.Horizontal"
