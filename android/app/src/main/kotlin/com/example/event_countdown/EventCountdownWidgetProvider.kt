@@ -19,34 +19,8 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
     companion object {
         const val ACTION_WIDGET_TICK = "com.example.event_countdown.EVENT_WIDGET_TICK"
 
-        fun ensureTestData(context: Context) {
-            try {
-                val file = File(context.filesDir, "widget_data.json")
-                if (!file.exists()) {
-                    // Create test data so widget shows something
-                    val testData = JSONObject().apply {
-                        put("title", "Open app to add events")
-                        put("countdown", "Event Countdown")
-                        put("deadlineMillis", System.currentTimeMillis() + 86400000)
-                        put("startMillis", System.currentTimeMillis())
-                        put("progressPercent", 25)
-                        put("urgencyColor", "orange")
-                        put("smartFormat", true)
-                        put("bgColor", "#00BFA5")
-                        put("textColor", "#FFFFFF")
-                    }
-                    file.writeText(testData.toString())
-                    android.util.Log.i("EventWidget", "Created test data at ${file.absolutePath}")
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("EventWidget", "Failed to create test data", e)
-            }
-        }
-
         fun readWidgetData(context: Context): Map<String, Any?> {
             return try {
-                ensureTestData(context)
-
                 val file = File(context.filesDir, "widget_data.json")
                 if (!file.exists()) {
                     android.util.Log.e("EventWidget", "widget_data.json NOT FOUND at ${file.absolutePath}")
