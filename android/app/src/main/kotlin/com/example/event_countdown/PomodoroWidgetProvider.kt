@@ -24,26 +24,6 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
         const val ACTION_POMODORO_TICK = "com.example.event_countdown.POMODORO_WIDGET_TICK"
 
-        fun ensureTestData(context: Context) {
-            try {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                if (!prefs.contains(KEY_PHASE)) {
-                    // Create test data
-                    prefs.edit().apply {
-                        putString(KEY_PHASE, "idle")
-                        putString(KEY_SUBJECT, "Open app to start")
-                        putString(KEY_STATUS, "Ready")
-                        putInt(KEY_SESSIONS, 0)
-                        putInt(KEY_TOTAL_DURATION, 25 * 60)
-                        apply()
-                    }
-                    android.util.Log.i("PomodoroWidget", "Created test prefs")
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("PomodoroWidget", "Failed to create test data", e)
-            }
-        }
-
         fun calculateRemainingTime(endTimeMillis: Long?): Int {
             if (endTimeMillis == null || endTimeMillis <= 0) return 0
             val now = System.currentTimeMillis()
@@ -63,8 +43,6 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             widgetId: Int
         ) {
             try {
-                ensureTestData(context)
-
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
                 val phase = prefs.getString(KEY_PHASE, "idle") ?: "idle"
