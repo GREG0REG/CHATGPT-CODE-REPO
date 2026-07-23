@@ -20,6 +20,11 @@ class WidgetService {
   static const String _kTextColor = 'widget_text_color';
   static const String _kProgress = 'widget_progress_percent';
   static const String _kUrgencyColor = 'widget_urgency_color';
+  
+  // NEW: Keys for LIVE background updates
+  static const String _kEventDeadline = 'widget_event_deadline_millis';
+  static const String _kEventStart = 'widget_event_start_millis';
+  static const String _kSmartFormat = 'widget_smart_format_enabled';
 
   static const String _kPomodoroSubject = 'pomodoro_subject';
   static const String _kPomodoroTimer = 'pomodoro_timer_text';
@@ -52,14 +57,22 @@ class WidgetService {
       String? textColor;
       int progressPercent;
       String? urgencyColorName;
+      
+      // NEW: Store deadline/start for LIVE background calculation
+      int? deadlineMillis;
+      int? startMillis;
 
       if (nextEvent == null) {
         title = 'No upcoming events';
         countdownText = '';
         progressPercent = 0;
         urgencyColorName = null;
+        deadlineMillis = null;
+        startMillis = null;
       } else {
         title = nextEvent.title;
+        deadlineMillis = nextEvent.finalMillis;
+        startMillis = nextEvent.startTimeMillis;
         final result = CountdownService.buildCountdownText(nextEvent, now, smartFormatEnabled: smartFormat);
         countdownText = result.text;
 
@@ -84,13 +97,25 @@ class WidgetService {
       if (bgColor != null) await prefs.setString(_kBgColor, bgColor);
       if (textColor != null) await prefs.setString(_kTextColor, textColor);
       await prefs.setInt(_kProgress, progressPercent);
+      await prefs.setBool(_kSmartFormat, smartFormat);
+      
+      // NEW: Persist deadline/start for background LIVE calculation
+      if (deadlineMillis != null) {
+        await prefs.setInt(_kEventDeadline, deadlineMillis);
+      } else {
+        await prefs.remove(_kEventDeadline);
+      }
+      if (startMillis != null) {
+        await prefs.setInt(_kEventStart, startMillis);
+      } else {
+        await prefs.remove(_kEventStart);
+      }
+      
       if (urgencyColorName != null) {
         await prefs.setString(_kUrgencyColor, urgencyColorName);
       } else {
         await prefs.remove(_kUrgencyColor);
       }
-
-      await _persistGradeAndTasksData(prefs);
 
       await _channel.invokeMethod('updateWidget', {
         'title': title,
@@ -146,55 +171,6 @@ class WidgetService {
       });
     } catch (e) {
       debugPrint('WidgetService.refreshPomodoroWidget error: $e');
-    }
-  }
-
-  static Future<void> _persistGradeAndTasksData(SharedPreferences prefs) async {
-    try {
-      final components = await DatabaseHelper.instance.getAllGradeComponents();
-      double weightedScore = 0;
-      double totalWeight = 0;
-      for (final c in components) {
-        weightedScore += ((c['score'] as num) / (c['totalPoints'] as num)) * (c['weight'] as num);
-        totalWeight += (c['weight'] as num);
-      }
-      final grade = totalWeight > 0 ? (weightedScore / totalWeight) * 100 : 0;
-
-      String letter;
-      if (grade >= 93) letter = 'A';
-      else if (grade >= 90) letter = 'A-';
-      else if (grade >= 87) letter = 'B+';
-      else if (grade >= 83) letter = 'B';
-      else if (grade >= 80) letter = 'B-';
-      else if (grade >= 77) letter = 'C+';
-      else if (grade >= 73) letter = 'C';
-      else if (grade >= 70) letter = 'C-';
-      else if (grade >= 67) letter = 'D+';
-      else if (grade >= 63) letter = 'D';
-      else if (grade >= 60) letter = 'D-';
-      else letter = 'F';
-
-      await prefs.setDouble('grade_current', grade.toDouble());
-      await prefs.setString('grade_letter', letter);
-
-      final events = await DatabaseHelper.instance.getAllEventsSorted();
-      final now = DateTime.now();
-      int urgentCount = 0;
-      int totalTasks = 0;
-      for (final e in events) {
-        if (e.subjectTag != null && e.subjectTag!.isNotEmpty && !e.isCompleted) {
-          totalTasks++;
-          final diff = DateTime.fromMillisecondsSinceEpoch(e.finalMillis).difference(now);
-          if (diff.inDays < 7 && !diff.isNegative) {
-            urgentCount++;
-          }
-        }
-      }
-
-      await prefs.setInt('tasks_urgent_count', urgentCount);
-      await prefs.setInt('tasks_total_count', totalTasks);
-    } catch (e) {
-      debugPrint('WidgetService._persistGradeAndTasksData error: $e');
     }
   }
 
