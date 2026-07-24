@@ -1,5 +1,8 @@
+// FILE: lib/screens/main_screen.dart
+// COMPLETE REPLACEMENT — copy and paste entire file
+
 // CHATGPT-CODE-REPO-TEST/lib/screens/main_screen.dart
-// UPDATED - All student features integrated
+// UPDATED - All student features integrated + Quick Notes tab
 
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
@@ -9,6 +12,7 @@ import 'flashcard_screen.dart';
 import 'grade_calculator_screen.dart';
 import 'assignment_tracker_screen.dart';
 import 'study_log_screen.dart';
+import 'quick_notes_screen.dart';
 
 /// Bottom-navigation host for all primary destinations.
 /// IndexedStack is used so that:
@@ -35,6 +39,7 @@ class _MainScreenState extends State<MainScreen> {
     const StudyLogScreen(),
     const GradeCalculatorScreen(),
     const StatsScreen(),
+    const QuickNotesScreen(),
   ];
 
   @override
@@ -93,6 +98,12 @@ class _MainScreenState extends State<MainScreen> {
             selectedIcon: Icon(Icons.bar_chart),
             label: 'Stats',
             tooltip: 'Stats',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.note_alt_outlined),
+            selectedIcon: Icon(Icons.note_alt),
+            label: 'Notes',
+            tooltip: 'Quick Notes',
           ),
         ],
       ),
