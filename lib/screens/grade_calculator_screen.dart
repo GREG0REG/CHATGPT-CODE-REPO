@@ -1,5 +1,5 @@
 // FILE: lib/screens/grade_calculator_screen.dart
-// COMPLETE REPLACEMENT — copy and paste entire file
+// COMPLETE REPLACEMENT — FIXED: _gradeColor expects double, cast percent to double
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -544,7 +544,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
                           final weight = (c['weight'] as num?)?.toDouble() ?? 0;
                           final score = (c['score'] as num?)?.toDouble() ?? 0;
                           final total = (c['totalPoints'] as num?)?.toDouble() ?? 100;
-                          final percent = total > 0 ? (score / total) * 100 : 0;
+                          final percent = total > 0 ? ((score / total) * 100).toDouble() : 0.0;
                           final contribution = (percent / 100) * weight;
                           final id = c['id'] as int;
                           final compColor = _gradeColor(percent);
