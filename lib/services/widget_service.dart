@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../database_helper.dart';
 import '../models/event.dart';
 import '../services/countdown_service.dart';
@@ -18,6 +19,13 @@ class WidgetService {
 
   static Future<void> refreshWidget() async {
     try {
+      final smartFormatEnabled = await SettingsService.instance.getSmartFormatEnabled();
+
+      // CRITICAL FIX: Write the smart-countdown toggle to SharedPreferences
+      // so the Android widget can read it and switch to absolute dates when OFF.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('smart_countdown_enabled', smartFormatEnabled);
+
       final events = await DatabaseHelper.instance.getAllEventsSorted();
       final now = DateTime.now();
 
@@ -36,7 +44,7 @@ class WidgetService {
         final result = CountdownService.buildCountdownText(
           nextEvent,
           now,
-          smartFormatEnabled: await SettingsService.instance.getSmartFormatEnabled(),
+          smartFormatEnabled: smartFormatEnabled,
         );
 
         int progressPercent = 0;
@@ -52,10 +60,20 @@ class WidgetService {
 
         final diff = Duration(milliseconds: nextEvent.finalMillis - now.millisecondsSinceEpoch);
         String? urgencyColor;
-        if (diff.inDays < 1) urgencyColor = 'red';
-        else if (diff.inDays < 3) urgencyColor = 'deepOrange';
-        else if (diff.inDays < 7) urgencyColor = 'orange';
-        else if (diff.inDays < 30) urgencyColor = 'green';
+        String? urgencyLabel;
+        if (diff.inDays < 1) {
+          urgencyColor = 'red';
+          urgencyLabel = 'Critical';
+        } else if (diff.inDays < 3) {
+          urgencyColor = 'deepOrange';
+          urgencyLabel = 'Urgent';
+        } else if (diff.inDays < 7) {
+          urgencyColor = 'orange';
+          urgencyLabel = 'Soon';
+        } else if (diff.inDays < 30) {
+          urgencyColor = 'green';
+          urgencyLabel = 'Upcoming';
+        }
 
         data['title'] = nextEvent.title;
         data['countdown'] = result.text;
@@ -63,7 +81,8 @@ class WidgetService {
         data['startMillis'] = nextEvent.startTimeMillis ?? nextEvent.dateMillis;
         data['progressPercent'] = progressPercent;
         data['urgencyColor'] = urgencyColor;
-        data['smartFormat'] = true;
+        data['urgencyLabel'] = urgencyLabel;
+        data['smartFormat'] = smartFormatEnabled;
         data['bgColor'] = '#00BFA5';
         data['textColor'] = '#FFFFFF';
       } else {
@@ -74,7 +93,9 @@ class WidgetService {
         data['startMillis'] = 0;
       }
 
-      final dir = await getApplicationSupportDirectory();
+      // CRITICAL FIX: Use getApplicationDocumentsDirectory() which maps exactly to
+      // Context.getFilesDir() on Android — the path the Kotlin widget code reads.
+      final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/$_widgetDataFileName');
       await file.writeAsString(jsonEncode(data));
 
