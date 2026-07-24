@@ -19,7 +19,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
 
     companion object {
         const val ACTION_WIDGET_TICK = "com.example.event_countdown.EVENT_WIDGET_TICK"
-        private const val TICK_INTERVAL_MS = 60_000L // 60 seconds
+        private const val TICK_INTERVAL_MS = 30_000L // 30 seconds for faster updates
 
         fun readWidgetData(context: Context): Map<String, Any?> {
             return try {
@@ -220,7 +220,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 
                 val triggerAt = SystemClock.elapsedRealtime() + intervalMillis
                 
-                // Try exact alarm first for precision
+                // Use setExactAndAllowWhileIdle for best precision on all API levels
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         alarmManager.setExactAndAllowWhileIdle(
