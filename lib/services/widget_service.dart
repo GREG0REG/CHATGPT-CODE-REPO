@@ -21,8 +21,7 @@ class WidgetService {
     try {
       final smartFormatEnabled = await SettingsService.instance.getSmartFormatEnabled();
 
-      // CRITICAL FIX: Write the smart-countdown toggle to SharedPreferences
-      // so the Android widget can read it and switch to absolute dates when OFF.
+      // Write toggle to SharedPreferences so Android widget can read it
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('smart_countdown_enabled', smartFormatEnabled);
 
@@ -93,9 +92,9 @@ class WidgetService {
         data['startMillis'] = 0;
       }
 
-      // CRITICAL FIX: Use getApplicationDocumentsDirectory() which maps exactly to
-      // Context.getFilesDir() on Android — the path the Kotlin widget code reads.
-      final dir = await getApplicationDocumentsDirectory();
+      // CRITICAL FIX: Use getApplicationSupportDirectory() which maps to Context.getFilesDir()
+      // on Android. This MUST match the Kotlin side reading from context.filesDir.
+      final dir = await getApplicationSupportDirectory();
       final file = File('${dir.path}/$_widgetDataFileName');
       await file.writeAsString(jsonEncode(data));
 
