@@ -25,7 +25,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
         const val ACTION_POMODORO_TICK = "com.example.event_countdown.POMODORO_WIDGET_TICK"
         private const val ACTIVE_TICK_INTERVAL_MS = 1_000L // 1 second when active
-        private const val IDLE_TICK_INTERVAL_MS = 15_000L // 15 seconds when idle
+        private const val IDLE_TICK_INTERVAL_MS = 10_000L // 10 seconds when idle (faster to catch state changes)
 
         fun calculateRemainingTime(endTimeMillis: Long?): Int {
             if (endTimeMillis == null || endTimeMillis <= 0) return 0
@@ -75,7 +75,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     else -> 0
                 }
 
-                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, timer=$timerText")
+                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, timer=$timerText, endTime=$endTime, remaining=$remainingSeconds")
 
                 val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
 
@@ -144,7 +144,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 
                 val triggerAt = SystemClock.elapsedRealtime() + intervalMillis
                 
-                // Try exact alarm first for precision
+                // Use setExactAndAllowWhileIdle for best precision
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         alarmManager.setExactAndAllowWhileIdle(
