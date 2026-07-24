@@ -24,8 +24,8 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         private const val KEY_SESSIONS = "flutter.pomodoro_completed_sessions"
 
         const val ACTION_POMODORO_TICK = "com.example.event_countdown.POMODORO_WIDGET_TICK"
-        private const val ACTIVE_TICK_INTERVAL_MS = 1_000L // 1 second when active
-        private const val IDLE_TICK_INTERVAL_MS = 10_000L // 10 seconds when idle (faster to catch state changes)
+        private const val ACTIVE_TICK_INTERVAL_MS = 1_000L
+        private const val IDLE_TICK_INTERVAL_MS = 10_000L
 
         fun calculateRemainingTime(endTimeMillis: Long?): Int {
             if (endTimeMillis == null || endTimeMillis <= 0) return 0
@@ -75,7 +75,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     else -> 0
                 }
 
-                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, timer=$timerText, endTime=$endTime, remaining=$remainingSeconds")
+                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, timer=$timerText, remaining=$remainingSeconds")
 
                 val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
 
@@ -113,9 +113,8 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 }
 
                 appWidgetManager.updateAppWidget(widgetId, views)
-                android.util.Log.i("PomodoroWidget", "Widget $widgetId updated: $timerText")
+                android.util.Log.i("PomodoroWidget", "Widget $widgetId updated")
 
-                // ALWAYS schedule next tick with appropriate interval
                 val interval = if (phase == "focusing" || phase == "shortBreak" || phase == "longBreak") {
                     ACTIVE_TICK_INTERVAL_MS
                 } else {
@@ -125,7 +124,6 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
             } catch (e: Exception) {
                 android.util.Log.e("PomodoroWidget", "Update failed", e)
-                // Even on failure, schedule next tick to retry
                 scheduleTick(context, IDLE_TICK_INTERVAL_MS)
             }
         }
@@ -141,10 +139,8 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 alarmManager.cancel(pendingIntent)
-                
                 val triggerAt = SystemClock.elapsedRealtime() + intervalMillis
                 
-                // Use setExactAndAllowWhileIdle for best precision
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         alarmManager.setExactAndAllowWhileIdle(
@@ -160,7 +156,6 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                         )
                     }
                 } catch (e: SecurityException) {
-                    // Fallback for Android 12+ without exact alarm permission
                     android.util.Log.w("PomodoroWidget", "Exact alarm not permitted, using fallback")
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         alarmManager.setAndAllowWhileIdle(
@@ -203,18 +198,10 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         super.onReceive(context, intent)
         android.util.Log.i("PomodoroWidget", "onReceive: ${intent.action}")
         when (intent.action) {
-            ACTION_POMODORO_TICK -> {
-                updateAllWidgets(context)
-            }
-            Intent.ACTION_BOOT_COMPLETED -> {
-                updateAllWidgets(context)
-            }
-            Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                updateAllWidgets(context)
-            }
-            Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> {
-                updateAllWidgets(context)
-            }
+            ACTION_POMODORO_TICK -> updateAllWidgets(context)
+            Intent.ACTION_BOOT_COMPLETED -> updateAllWidgets(context)
+            Intent.ACTION_MY_PACKAGE_REPLACED -> updateAllWidgets(context)
+            Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> updateAllWidgets(context)
         }
     }
 
