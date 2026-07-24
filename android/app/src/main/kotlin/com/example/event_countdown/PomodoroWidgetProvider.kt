@@ -25,13 +25,10 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         private const val KEY_SESSIONS = "flutter.pomodoro_completed_sessions"
 
         const val ACTION_POMODORO_TICK = "com.example.event_countdown.POMODORO_WIDGET_TICK"
-        const val ACTION_POMODORO_FORCE_UPDATE = "com.example.event_countdown.POMODORO_WIDGET_FORCE_UPDATE"
-
         private const val ACTIVE_TICK_INTERVAL_MS = 1_000L
         private const val IDLE_TICK_INTERVAL_MS = 10_000L
 
-        // CRITICAL FIX: Safe read helpers that handle both Int and Long storage
-        // because Flutter shared_preferences may store values as either type.
+        // Flutter stores numbers unpredictably as Int or Long. These helpers try both.
         private fun getIntPref(prefs: SharedPreferences, key: String, default: Int): Int {
             return try {
                 prefs.getInt(key, default)
@@ -104,7 +101,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     else -> 0
                 }
 
-                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, timer=$timerText, remaining=$remainingSeconds, endTime=$endTime")
+                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, timer=$timerText, remaining=$remainingSeconds")
 
                 val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
 
@@ -228,7 +225,6 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         android.util.Log.i("PomodoroWidget", "onReceive: ${intent.action}")
         when (intent.action) {
             ACTION_POMODORO_TICK -> updateAllWidgets(context)
-            ACTION_POMODORO_FORCE_UPDATE -> updateAllWidgets(context)
             Intent.ACTION_BOOT_COMPLETED -> updateAllWidgets(context)
             Intent.ACTION_MY_PACKAGE_REPLACED -> updateAllWidgets(context)
             Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> updateAllWidgets(context)
