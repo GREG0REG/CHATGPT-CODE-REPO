@@ -266,21 +266,21 @@ class _EventCardState extends State<EventCard> {
                               ],
                             ],
                           ),
+                          // ── SUBJECT TAG PILL ──
+                          // Restored from old design: small rounded pill below title
                           if (widget.event.subjectTag != null && widget.event.subjectTag!.isNotEmpty) ...[
                             const SizedBox(height: 4),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                               decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [cs.primary.withOpacity(0.12), cs.secondary.withOpacity(0.12)],
-                                ),
+                                color: cs.primaryContainer,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
                                 widget.event.subjectTag!,
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: cs.primary,
+                                  color: cs.onPrimaryContainer,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
