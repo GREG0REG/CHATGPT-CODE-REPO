@@ -1,8 +1,5 @@
 package com.example.event_countdown
 
-import android.appwidget.AppWidgetManager
-import android.content.ComponentName
-import android.content.Intent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -19,14 +16,11 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "updateWidget" -> {
                     try {
-                        val appWidgetManager = AppWidgetManager.getInstance(this)
-                        val componentName = ComponentName(this, EventCountdownWidgetProvider::class.java)
-                        val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
-                        
-                        sendBroadcast(Intent(this, EventCountdownWidgetProvider::class.java).apply {
-                            action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, widgetIds)
-                        })
+                        // CRITICAL FIX: Direct static call instead of unreliable broadcast.
+                        // Broadcasts sent from the app to its own widget are often swallowed
+                        // by the system. Calling the companion object method directly is
+                        // guaranteed to execute in the same process.
+                        EventCountdownWidgetProvider.updateAllWidgets(this)
                         result.success("ok")
                     } catch (e: Exception) {
                         result.error("ERR", e.message, null)
@@ -34,12 +28,8 @@ class MainActivity : FlutterActivity() {
                 }
                 "updatePomodoroWidget" -> {
                     try {
-                        // CRITICAL FIX: Use custom action instead of APPWIDGET_UPDATE.
-                        // The system APPWIDGET_UPDATE broadcast is often ignored when sent
-                        // explicitly from the app. A custom action goes straight to onReceive().
-                        sendBroadcast(Intent(this, PomodoroWidgetProvider::class.java).apply {
-                            action = PomodoroWidgetProvider.ACTION_POMODORO_FORCE_UPDATE
-                        })
+                        // CRITICAL FIX: Direct static call instead of broadcast.
+                        PomodoroWidgetProvider.updateAllWidgets(this)
                         result.success("ok")
                     } catch (e: Exception) {
                         result.error("ERR", e.message, null)
