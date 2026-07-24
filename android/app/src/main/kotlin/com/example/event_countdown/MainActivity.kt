@@ -34,13 +34,11 @@ class MainActivity : FlutterActivity() {
                 }
                 "updatePomodoroWidget" -> {
                     try {
-                        val appWidgetManager = AppWidgetManager.getInstance(this)
-                        val componentName = ComponentName(this, PomodoroWidgetProvider::class.java)
-                        val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
-                        
+                        // CRITICAL FIX: Use custom action instead of APPWIDGET_UPDATE.
+                        // The system APPWIDGET_UPDATE broadcast is often ignored when sent
+                        // explicitly from the app. A custom action goes straight to onReceive().
                         sendBroadcast(Intent(this, PomodoroWidgetProvider::class.java).apply {
-                            action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, widgetIds)
+                            action = PomodoroWidgetProvider.ACTION_POMODORO_FORCE_UPDATE
                         })
                         result.success("ok")
                     } catch (e: Exception) {
