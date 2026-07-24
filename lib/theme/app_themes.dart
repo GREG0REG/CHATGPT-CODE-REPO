@@ -1,5 +1,7 @@
-// CHATGPT-CODE-REPO-TEST/lib/theme/app_themes.dart
-// COMPLETE FILE - Fixed high contrast support
+// FILE: lib/theme/app_themes.dart
+// COMPLETE REPLACEMENT — copy and paste entire file
+// ADDED: 4 new immersive themes (Neon Cyberpunk, Midnight Ocean, Sunset Boulevard, Nordic Frost)
+// EXISTING: All 7 original themes preserved exactly as-is
 
 import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
@@ -12,6 +14,11 @@ enum AppThemeOption {
   cherryBlossom,
   materialYou,
   customHex,
+  // NEW THEMES:
+  neonCyberpunk,
+  midnightOcean,
+  sunsetBoulevard,
+  nordicFrost,
 }
 
 class ThemeInfo {
@@ -30,6 +37,7 @@ enum WidgetBackgroundType { themeColor, customImage }
 
 class AppThemes {
   // ── Theme definitions ──
+  // EXISTING 7 themes preserved exactly as-is
   static const List<ThemeInfo> all = [
     ThemeInfo(
       option: AppThemeOption.auroraBorealis,
@@ -66,6 +74,29 @@ class AppThemes {
       label: 'Custom Color',
       gradientColors: [Color(0xFF00BFA5), Color(0xFF00E5FF)],
     ),
+    // ═══════════════════════════════════════════════════════════════
+    // NEW IMMERSIVE THEMES
+    // ═══════════════════════════════════════════════════════════════
+    ThemeInfo(
+      option: AppThemeOption.neonCyberpunk,
+      label: 'Neon Cyberpunk',
+      gradientColors: [Color(0xFFFF00FF), Color(0xFF00FFFF), Color(0xFF9D00FF)],
+    ),
+    ThemeInfo(
+      option: AppThemeOption.midnightOcean,
+      label: 'Midnight Ocean',
+      gradientColors: [Color(0xFF0A1628), Color(0xFF1E3A5F), Color(0xFF00B4D8)],
+    ),
+    ThemeInfo(
+      option: AppThemeOption.sunsetBoulevard,
+      label: 'Sunset Boulevard',
+      gradientColors: [Color(0xFFFF6B6B), Color(0xFFFFE66D), Color(0xFFFF8E53)],
+    ),
+    ThemeInfo(
+      option: AppThemeOption.nordicFrost,
+      label: 'Nordic Frost',
+      gradientColors: [Color(0xFFE3F2FD), Color(0xFF90CAF9), Color(0xFF5C6BC0)],
+    ),
   ];
 
   static ThemeInfo fromName(String name) {
@@ -91,44 +122,75 @@ class AppThemes {
     final baseColors = gradientColorsFor(option) ?? all.first.gradientColors;
     final primaryColor = customColor ?? baseColors.first;
 
-    // FIXED: Generate high-contrast color scheme when enabled
+    // SPECIAL HANDLING FOR NEW DARK THEMES
+    // Neon Cyberpunk and Midnight Ocean default to dark mode for immersion
+    final bool forceDark = option == AppThemeOption.neonCyberpunk || 
+                          option == AppThemeOption.midnightOcean;
+    final effectiveBrightness = forceDark ? Brightness.dark : brightness;
+
     ColorScheme colorScheme;
     
     if (option == AppThemeOption.materialYou && dynamicScheme != null) {
-      // Use dynamic color with high contrast override
       colorScheme = highContrast 
-        ? _applyHighContrast(dynamicScheme, brightness)
+        ? _applyHighContrast(dynamicScheme, effectiveBrightness)
         : dynamicScheme;
     } else {
-      // Generate from seed color with high contrast
       colorScheme = _generateColorScheme(
         primaryColor, 
-        brightness, 
+        effectiveBrightness, 
         highContrast: highContrast,
       );
     }
 
+    // SPECIAL: Override surface colors for immersive dark themes
+    Color surfaceColor = colorScheme.surface;
+    Color surfaceContainerHighestColor = colorScheme.surfaceContainerHighest;
+    
+    if (option == AppThemeOption.neonCyberpunk && !highContrast) {
+      surfaceColor = const Color(0xFF0D0221);
+      surfaceContainerHighestColor = const Color(0xFF1A0B2E);
+    } else if (option == AppThemeOption.midnightOcean && !highContrast) {
+      surfaceColor = const Color(0xFF070F1F);
+      surfaceContainerHighestColor = const Color(0xFF0F1F3A);
+    } else if (option == AppThemeOption.sunsetBoulevard && !highContrast) {
+      surfaceColor = effectiveBrightness == Brightness.dark 
+          ? const Color(0xFF1A0F0A) 
+          : colorScheme.surface;
+      surfaceContainerHighestColor = effectiveBrightness == Brightness.dark
+          ? const Color(0xFF2A1A10)
+          : colorScheme.surfaceContainerHighest;
+    } else if (option == AppThemeOption.nordicFrost && !highContrast) {
+      surfaceColor = effectiveBrightness == Brightness.dark
+          ? const Color(0xFF0D1B2A)
+          : const Color(0xFFF0F7FF);
+      surfaceContainerHighestColor = effectiveBrightness == Brightness.dark
+          ? const Color(0xFF1B2838)
+          : const Color(0xFFE3F2FD);
+    }
+
     return ThemeData(
       useMaterial3: true,
-      brightness: brightness,
-      colorScheme: colorScheme,
-      scaffoldBackgroundColor: colorScheme.surface,
+      brightness: effectiveBrightness,
+      colorScheme: colorScheme.copyWith(
+        surface: surfaceColor,
+        surfaceContainerHighest: surfaceContainerHighestColor,
+      ),
+      scaffoldBackgroundColor: surfaceColor,
       appBarTheme: AppBarTheme(
-        backgroundColor: colorScheme.surface,
+        backgroundColor: surfaceColor,
         foregroundColor: colorScheme.onSurface,
         elevation: 0,
         centerTitle: true,
       ),
       cardTheme: CardTheme(
-        elevation: highContrast ? 2 : 0, // FIXED: More elevation in high contrast
+        elevation: highContrast ? 2 : 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          // FIXED: Add border in high contrast mode
           side: highContrast 
             ? BorderSide(color: colorScheme.outline, width: 1.5)
             : BorderSide.none,
         ),
-        color: colorScheme.surfaceContainerHighest,
+        color: surfaceContainerHighestColor,
       ),
       listTileTheme: ListTileThemeData(
         shape: RoundedRectangleBorder(
@@ -137,12 +199,12 @@ class AppThemes {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: colorScheme.surfaceContainerHighest,
+        fillColor: surfaceContainerHighestColor,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
             color: highContrast ? colorScheme.onSurface : colorScheme.outline,
-            width: highContrast ? 2.0 : 1.0, // FIXED: Thicker borders in high contrast
+            width: highContrast ? 2.0 : 1.0,
           ),
         ),
         enabledBorder: OutlineInputBorder(
@@ -156,7 +218,7 @@ class AppThemes {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
             color: colorScheme.primary,
-            width: highContrast ? 3.0 : 2.0, // FIXED: Thicker focus border
+            width: highContrast ? 3.0 : 2.0,
           ),
         ),
       ),
@@ -174,15 +236,14 @@ class AppThemes {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          // FIXED: Higher contrast filled buttons
           backgroundColor: highContrast ? colorScheme.primary : null,
           foregroundColor: highContrast ? colorScheme.onPrimary : null,
         ),
       ),
-      textTheme: _buildTextTheme(brightness, highContrast: highContrast),
+      textTheme: _buildTextTheme(effectiveBrightness, highContrast: highContrast, option: option),
       dividerTheme: DividerThemeData(
         color: colorScheme.outlineVariant,
-        thickness: highContrast ? 1.5 : 1.0, // FIXED: Thicker dividers
+        thickness: highContrast ? 1.5 : 1.0,
       ),
       switchTheme: SwitchThemeData(
         trackColor: WidgetStateProperty.resolveWith((states) {
@@ -193,13 +254,13 @@ class AppThemes {
           }
           return highContrast 
             ? colorScheme.onSurface.withOpacity(0.4)
-            : colorScheme.surfaceContainerHighest;
+            : surfaceContainerHighestColor;
         }),
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return highContrast ? colorScheme.onPrimary : colorScheme.primary;
           }
-          return highContrast ? colorScheme.surface : colorScheme.outline;
+          return highContrast ? surfaceColor : colorScheme.outline;
         }),
       ),
       checkboxTheme: CheckboxThemeData(
@@ -221,7 +282,7 @@ class AppThemes {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: colorScheme.surfaceContainerHighest,
+        backgroundColor: surfaceContainerHighestColor,
         selectedColor: highContrast ? colorScheme.primary : colorScheme.primaryContainer,
         labelStyle: TextStyle(
           color: highContrast ? colorScheme.onSurface : colorScheme.onSurfaceVariant,
@@ -236,17 +297,17 @@ class AppThemes {
       ),
       sliderTheme: SliderThemeData(
         activeTrackColor: highContrast ? colorScheme.primary : colorScheme.primaryContainer,
-        inactiveTrackColor: highContrast ? colorScheme.onSurface.withOpacity(0.3) : colorScheme.surfaceContainerHighest,
+        inactiveTrackColor: highContrast ? colorScheme.onSurface.withOpacity(0.3) : surfaceContainerHighestColor,
         thumbColor: highContrast ? colorScheme.onPrimary : colorScheme.primary,
         overlayColor: colorScheme.primary.withOpacity(0.1),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: highContrast ? colorScheme.primary : colorScheme.primary,
-        linearTrackColor: highContrast ? colorScheme.onSurface.withOpacity(0.2) : colorScheme.surfaceContainerHighest,
-        circularTrackColor: highContrast ? colorScheme.onSurface.withOpacity(0.2) : colorScheme.surfaceContainerHighest,
+        linearTrackColor: highContrast ? colorScheme.onSurface.withOpacity(0.2) : surfaceContainerHighestColor,
+        circularTrackColor: highContrast ? colorScheme.onSurface.withOpacity(0.2) : surfaceContainerHighestColor,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: colorScheme.surface,
+        backgroundColor: surfaceColor,
         indicatorColor: highContrast ? colorScheme.primary : colorScheme.secondaryContainer,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -280,27 +341,25 @@ class AppThemes {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
-        backgroundColor: highContrast ? colorScheme.inverseSurface : colorScheme.inverseSurface,
+        backgroundColor: colorScheme.inverseSurface,
         contentTextStyle: TextStyle(
-          color: highContrast ? colorScheme.onInverseSurface : colorScheme.onInverseSurface,
+          color: colorScheme.onInverseSurface,
           fontWeight: highContrast ? FontWeight.w600 : FontWeight.normal,
         ),
       ),
     );
   }
 
-  // FIXED: Generate high-contrast color scheme
   static ColorScheme _generateColorScheme(
     Color seedColor, 
     Brightness brightness, {
     required bool highContrast,
   }) {
     if (highContrast) {
-      // FIXED: Use high contrast variant of ColorScheme
       return ColorScheme.fromSeed(
         seedColor: seedColor,
         brightness: brightness,
-        contrastLevel: 1.0, // Maximum contrast for Material 3
+        contrastLevel: 1.0,
       );
     }
     
@@ -311,11 +370,8 @@ class AppThemes {
     );
   }
 
-  // FIXED: Apply high contrast modifications to dynamic color scheme
   static ColorScheme _applyHighContrast(ColorScheme scheme, Brightness brightness) {
-    // Increase contrast by adjusting colors to be more distinct
     return scheme.copyWith(
-      // Ensure surface and background have strong contrast with text
       surface: brightness == Brightness.light 
         ? scheme.surface 
         : scheme.surface,
@@ -325,15 +381,12 @@ class AppThemes {
       surfaceContainerHighest: brightness == Brightness.light
         ? scheme.surfaceContainerHighest
         : scheme.surfaceContainerHighest,
-      // Stronger primary colors
       primary: _ensureContrast(scheme.primary, scheme.onPrimary, brightness),
       onPrimary: scheme.onPrimary,
-      // Stronger error colors
       error: brightness == Brightness.light 
         ? const Color(0xFFB00020) 
         : const Color(0xFFCF6679),
       onError: Colors.white,
-      // Ensure outline is visible
       outline: brightness == Brightness.light 
         ? Colors.black54 
         : Colors.white70,
@@ -343,26 +396,38 @@ class AppThemes {
     );
   }
 
-  // Helper to ensure color has enough contrast
   static Color _ensureContrast(Color color, Color onColor, Brightness brightness) {
-    // For high contrast, use more saturated/vivid colors
     final hsl = HSLColor.fromColor(color);
     return hsl.withLightness(
       brightness == Brightness.light 
-        ? (hsl.lightness * 0.85).clamp(0.3, 0.5)  // Darker in light mode
-        : (hsl.lightness * 1.15).clamp(0.5, 0.7)  // Lighter in dark mode
+        ? (hsl.lightness * 0.85).clamp(0.3, 0.5)
+        : (hsl.lightness * 1.15).clamp(0.5, 0.7)
     ).toColor();
   }
 
-  // FIXED: Build text theme with high contrast support
-  static TextTheme _buildTextTheme(Brightness brightness, {required bool highContrast}) {
+  static TextTheme _buildTextTheme(Brightness brightness, {required bool highContrast, AppThemeOption? option}) {
     final baseTextTheme = brightness == Brightness.light 
       ? ThemeData.light().textTheme 
       : ThemeData.dark().textTheme;
     
-    if (!highContrast) return baseTextTheme;
+    if (!highContrast) {
+      // SPECIAL: Neon Cyberpunk gets slightly brighter text for readability
+      if (option == AppThemeOption.neonCyberpunk) {
+        return baseTextTheme.copyWith(
+          bodyLarge: baseTextTheme.bodyLarge?.copyWith(
+            color: Colors.white.withOpacity(0.9),
+          ),
+          bodyMedium: baseTextTheme.bodyMedium?.copyWith(
+            color: Colors.white.withOpacity(0.85),
+          ),
+          titleMedium: baseTextTheme.titleMedium?.copyWith(
+            color: Colors.white.withOpacity(0.95),
+          ),
+        );
+      }
+      return baseTextTheme;
+    }
 
-    // FIXED: Apply high contrast text styles
     return baseTextTheme.copyWith(
       displayLarge: baseTextTheme.displayLarge?.copyWith(
         fontWeight: FontWeight.bold,
