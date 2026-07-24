@@ -50,17 +50,19 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
                 val phase = prefs.getString(KEY_PHASE, "idle") ?: "idle"
                 val endTime = prefs.getLong(KEY_END_TIME, 0L).takeIf { it > 0 }
-                val totalDuration = prefs.getInt(KEY_TOTAL_DURATION, 25 * 60)
+                // CRITICAL FIX: Flutter stores all ints as Long in SharedPreferences.
+                // Using getInt() causes ClassCastException. Must use getLong() and convert to Int.
+                val totalDuration = prefs.getLong(KEY_TOTAL_DURATION, (25 * 60).toLong()).toInt()
                 val subject = prefs.getString(KEY_SUBJECT, "Ready to Focus") ?: "Ready to Focus"
                 val status = prefs.getString(KEY_STATUS, "Ready") ?: "Ready"
-                val sessions = prefs.getInt(KEY_SESSIONS, 0)
+                val sessions = prefs.getLong(KEY_SESSIONS, 0L).toInt()
 
                 val remainingSeconds = calculateRemainingTime(endTime)
 
                 val timerText = when {
                     phase == "idle" -> "Tap to start"
                     phase == "paused" -> {
-                        val savedRemaining = prefs.getInt("flutter.pomodoro_remaining_seconds", 0)
+                        val savedRemaining = prefs.getLong("flutter.pomodoro_remaining_seconds", 0L).toInt()
                         formatTime(savedRemaining)
                     }
                     remainingSeconds <= 0 && endTime != null -> "00:00"
@@ -69,7 +71,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
                 val progressPercent = when {
                     phase == "idle" -> 0
-                    phase == "paused" -> prefs.getInt("flutter.pomodoro_progress_percent", 0)
+                    phase == "paused" -> prefs.getLong("flutter.pomodoro_progress_percent", 0L).toInt()
                     remainingSeconds <= 0 -> 100
                     totalDuration > 0 -> ((totalDuration - remainingSeconds).toFloat() / totalDuration * 100).toInt().coerceIn(0, 100)
                     else -> 0
@@ -202,6 +204,12 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             Intent.ACTION_BOOT_COMPLETED -> updateAllWidgets(context)
             Intent.ACTION_MY_PACKAGE_REPLACED -> updateAllWidgets(context)
             Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> updateAllWidgets(context)
+            AppWidgetManager.ACTION_APPWIDGET_UPDATE -> {
+                // Fallback: if the broadcast came without widget IDs (so super.onReceive did nothing), update all directly
+                if (intent.getIntArrayExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS) == null) {
+                    updateAllWidgets(context)
+                }
+            }
         }
     }
 
