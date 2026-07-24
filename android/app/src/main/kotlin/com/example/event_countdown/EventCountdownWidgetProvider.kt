@@ -17,7 +17,6 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 
 class EventCountdownWidgetProvider : AppWidgetProvider() {
 
@@ -29,17 +28,6 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         const val ACTION_EVENT_TICK = "com.example.event_countdown.EVENT_WIDGET_TICK"
         private const val TICK_INTERVAL_MS = 60_000L // 1 minute
 
-        private fun readWidgetData(context: Context): JSONObject? {
-            return try {
-                val file = File(context.filesDir, WIDGET_DATA_FILE)
-                if (!file.exists()) return null
-                JSONObject(file.readText())
-            } catch (e: Exception) {
-                android.util.Log.e("EventWidget", "Failed to read widget JSON", e)
-                null
-            }
-        }
-
         fun updateWidgetDirectly(
             context: Context,
             appWidgetManager: AppWidgetManager,
@@ -47,96 +35,50 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         ) {
             try {
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val json = readWidgetData(context)
+                val smartCountdown = prefs.getBoolean(KEY_SMART_COUNTDOWN, true)
 
-                val title: String
-                val countdownText: String
-                val progress: Int
-                val urgencyLabel: String
-                val urgencyColorStr: String
+                // Read event data from JSON file written by widget_service.dart
+                var title = "No upcoming events"
+                var countdownText = "Open app to add events"
+                var progress = 0
+                var urgencyLabel = ""
+                var urgencyColorStr = "#FF9800"
 
-                if (json != null) {
-                    // Read from JSON file written by widget_service.dart
-                    title = json.optString("title", "No upcoming events")
-
-                    // CRITICAL FIX: Respect smart countdown toggle from SharedPreferences.
-                    // widget_service.dart hardcodes smartFormat=true in JSON, so we ignore
-                    // that field and check the actual user setting.
-                    val smartCountdown = prefs.getBoolean(KEY_SMART_COUNTDOWN, true)
-                    val deadlineMillis = json.optLong("deadlineMillis", 0L)
-
-                    countdownText = if (!smartCountdown && deadlineMillis > 0) {
-                        val sdf = SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault())
-                        sdf.format(Date(deadlineMillis))
-                    } else {
-                        json.optString("countdown", "")
-                    }
-
-                    progress = json.optInt("progressPercent", 0)
-
-                    // Build urgency label and color from JSON urgencyColor field
-                    val urgencyColor = json.optString("urgencyColor", null)
-                    urgencyColorStr = when (urgencyColor) {
-                        "red" -> "#F44336"
-                        "deepOrange" -> "#FF5722"
-                        "orange" -> "#FF9800"
-                        "green" -> "#4CAF50"
-                        else -> "#FF9800"
-                    }
-
-                    urgencyLabel = when (urgencyColor) {
-                        "red" -> "Critical"
-                        "deepOrange" -> "Urgent"
-                        "orange" -> "Soon"
-                        "green" -> "Upcoming"
-                        else -> ""
-                    }
-                } else {
-                    // Fallback to SharedPreferences if JSON file is missing
-                    title = prefs.getString("flutter.widget_event_title", "No upcoming events")
-                        ?: "No upcoming events"
-                    val eventDateMillis = prefs.getLong("flutter.widget_event_date_millis", 0L)
-                    progress = prefs.getLong("flutter.widget_event_progress", 0L).toInt()
-                    val smartCountdown = prefs.getBoolean(KEY_SMART_COUNTDOWN, true)
-
-                    countdownText = if (!smartCountdown && eventDateMillis > 0) {
-                        val sdf = SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault())
-                        sdf.format(Date(eventDateMillis))
-                    } else if (eventDateMillis > 0) {
-                        val now = System.currentTimeMillis()
-                        val diff = eventDateMillis - now
-                        if (diff > 0) {
-                            val days = TimeUnit.MILLISECONDS.toDays(diff)
-                            val hours = TimeUnit.MILLISECONDS.toHours(diff) % 24
-                            buildString {
-                                if (days > 0) append("$days days ")
-                                if (hours > 0 || days == 0L) append("${hours}h")
-                                append(" left")
-                            }
-                        } else {
-                            "Due now"
+                try {
+                    // This path MUST match Dart's getApplicationSupportDirectory()
+                    val file = File(context.filesDir, WIDGET_DATA_FILE)
+                    if (file.exists()) {
+                        val json = JSONObject(file.readText())
+                        title = json.optString("title", title)
+                        countdownText = json.optString("countdown", countdownText)
+                        progress = json.optInt("progressPercent", 0)
+                        urgencyLabel = json.optString("urgencyLabel", "")
+                        urgencyColorStr = when (json.optString("urgencyColor", null)) {
+                            "red" -> "#F44336"
+                            "deepOrange" -> "#FF5722"
+                            "orange" -> "#FF9800"
+                            "green" -> "#4CAF50"
+                            else -> "#FF9800"
                         }
-                    } else {
-                        ""
-                    }
 
-                    urgencyLabel = prefs.getString("flutter.widget_event_urgency_label", "") ?: ""
-                    urgencyColorStr = prefs.getString("flutter.widget_event_urgency_color", "#FF9800")
-                        ?: "#FF9800"
+                        // CRITICAL FIX: If smart countdown is OFF, show absolute date
+                        val deadlineMillis = json.optLong("deadlineMillis", 0L)
+                        if (!smartCountdown && deadlineMillis > 0) {
+                            val sdf = SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault())
+                            countdownText = sdf.format(Date(deadlineMillis))
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("EventWidget", "JSON read failed", e)
                 }
 
                 val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
 
                 views.setTextViewText(R.id.widget_title, title)
                 views.setTextViewText(R.id.widget_countdown, countdownText)
-                views.setProgressBar(
-                    R.id.widget_progress_ring,
-                    100,
-                    progress.coerceIn(0, 100),
-                    false
-                )
+                views.setProgressBar(R.id.widget_progress_ring, 100, progress.coerceIn(0, 100), false)
 
-                // Urgency row visibility and coloring
+                // Urgency row
                 if (urgencyLabel.isNotEmpty()) {
                     views.setViewVisibility(R.id.widget_urgency_row, View.VISIBLE)
                     views.setTextViewText(R.id.widget_urgency_label, urgencyLabel)
@@ -162,7 +104,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 }
 
                 appWidgetManager.updateAppWidget(widgetId, views)
-                android.util.Log.i("EventWidget", "Widget $widgetId updated")
+                android.util.Log.i("EventWidget", "Widget $widgetId updated: smart=$smartCountdown")
 
             } catch (e: Exception) {
                 android.util.Log.e("EventWidget", "Update failed", e)
