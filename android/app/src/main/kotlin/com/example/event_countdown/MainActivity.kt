@@ -1,5 +1,7 @@
 package com.example.event_countdown
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Intent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -17,8 +19,13 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "updateWidget" -> {
                     try {
+                        val appWidgetManager = AppWidgetManager.getInstance(this)
+                        val componentName = ComponentName(this, EventCountdownWidgetProvider::class.java)
+                        val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
+                        
                         sendBroadcast(Intent(this, EventCountdownWidgetProvider::class.java).apply {
-                            action = "android.appwidget.action.APPWIDGET_UPDATE"
+                            action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, widgetIds)
                         })
                         result.success("ok")
                     } catch (e: Exception) {
@@ -27,8 +34,13 @@ class MainActivity : FlutterActivity() {
                 }
                 "updatePomodoroWidget" -> {
                     try {
+                        val appWidgetManager = AppWidgetManager.getInstance(this)
+                        val componentName = ComponentName(this, PomodoroWidgetProvider::class.java)
+                        val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
+                        
                         sendBroadcast(Intent(this, PomodoroWidgetProvider::class.java).apply {
-                            action = "android.appwidget.action.APPWIDGET_UPDATE"
+                            action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, widgetIds)
                         })
                         result.success("ok")
                     } catch (e: Exception) {
