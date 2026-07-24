@@ -1,5 +1,5 @@
 // FILE: lib/screens/flashcard_screen.dart
-// COMPLETE REPLACEMENT — FIXED: tagsJson instead of tags, imagePath/isFavorite/difficultyRating handled
+// COMPLETE REPLACEMENT — FIXED: tagsJson non-null, missing closing paren on line 1146
 
 import 'dart:io';
 import 'dart:math';
@@ -139,7 +139,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         c.frontText.toLowerCase().contains(query) ||
         c.backText.toLowerCase().contains(query) ||
         c.subjectTag.toLowerCase().contains(query) ||
-        (c.tagsJson != null && c.tagsJson!.toLowerCase().contains(query))
+        (c.tagsJson.toLowerCase().contains(query))
       ).toList();
     }
 
@@ -227,7 +227,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     final nextReview = now + (baseIntervals[newBox] * intervalMultiplier).round();
 
     // Update difficulty rating
-    double newDifficulty = card.difficultyRating ?? 3.0;
+    double newDifficulty = card.difficultyRating;
     final diffMap = {'again': 5.0, 'hard': 4.0, 'good': 2.5, 'easy': 1.0};
     newDifficulty = (newDifficulty + (diffMap[difficulty] ?? 3.0)) / 2;
 
@@ -266,7 +266,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   }
 
   Future<void> _toggleFavorite(Flashcard card) async {
-    final updated = card.copyWith(isFavorite: !(card.isFavorite ?? false));
+    final updated = card.copyWith(isFavorite: !card.isFavorite);
     await DatabaseHelper.instance.updateFlashcard(updated);
     HapticFeedback.lightImpact();
     await _loadData();
@@ -334,7 +334,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     final frontController = TextEditingController(text: existing?.frontText ?? '');
     final backController = TextEditingController(text: existing?.backText ?? '');
     final tagsController = TextEditingController(
-      text: existing?.tagsJson != null ? _tagsFromJson(existing!.tagsJson!) : '',
+      text: _tagsFromJson(existing?.tagsJson ?? '[]'),
     );
     String? imagePath = existing?.imagePath;
     bool isNewSubject = !subjects.contains(subject) && subjects.isNotEmpty;
@@ -509,7 +509,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
       // Convert tags to JSON string
       final tagsText = tagsController.text.trim();
-      final tagsJson = tagsText.isEmpty ? null : _tagsToJson(tagsText);
+      final tagsJson = tagsText.isEmpty ? '[]' : _tagsToJson(tagsText);
 
       final newCard = Flashcard(
         id: existing?.id,
@@ -568,9 +568,9 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
   // Helper: get tags list from card for display
   List<String> _getTagsList(Flashcard card) {
-    if (card.tagsJson == null || card.tagsJson!.isEmpty) return [];
+    if (card.tagsJson.isEmpty) return [];
     try {
-      final List<dynamic> decoded = jsonDecode(card.tagsJson!);
+      final List<dynamic> decoded = jsonDecode(card.tagsJson);
       return decoded.map((t) => t.toString()).toList();
     } catch (e) {
       return [];
@@ -903,7 +903,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
               }).length;
               final avgBox = subjectCards.isEmpty ? 0.0 : subjectCards.map((c) => c.boxLevel).reduce((a, b) => a + b) / subjectCards.length;
               final progress = avgBox / 5.0;
-              final favCount = subjectCards.where((c) => c.isFavorite == true).length;
+              final favCount = subjectCards.where((c) => c.isFavorite).length;
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -1054,8 +1054,8 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                   // Favorite toggle
                   IconButton(
                     icon: Icon(
-                      card.isFavorite == true ? Icons.star : Icons.star_border,
-                      color: card.isFavorite == true ? Colors.amber : cs.outline,
+                      card.isFavorite ? Icons.star : Icons.star_border,
+                      color: card.isFavorite ? Colors.amber : cs.outline,
                       size: 20,
                     ),
                     onPressed: () => _toggleFavorite(card),
@@ -1143,7 +1143,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                                     transform: Matrix4.identity()..rotateY(3.1415926535897932),
                                     alignment: Alignment.center,
                                     child: _buildCardFace(card, cs, isFront: false),
-                                  );
+                                  ),
                           );
                         },
                       ),
@@ -1160,39 +1160,37 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Difficulty display
-                    if (card.difficultyRating != null) ...[
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Difficulty: ',
-                            style: TextStyle(fontSize: 12, color: cs.outline),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Difficulty: ',
+                          style: TextStyle(fontSize: 12, color: cs.outline),
+                        ),
+                        Text(
+                          '${card.difficultyRating.toStringAsFixed(1)}/5',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _difficultyColor(card.difficultyRating),
                           ),
-                          Text(
-                            '${card.difficultyRating!.toStringAsFixed(1)}/5',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: _difficultyColor(card.difficultyRating!),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 60,
+                          height: 4,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: LinearProgressIndicator(
+                              value: (card.difficultyRating / 5).clamp(0.0, 1.0),
+                              backgroundColor: cs.surfaceContainerHighest,
+                              valueColor: AlwaysStoppedAnimation(_difficultyColor(card.difficultyRating)),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 60,
-                            height: 4,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(2),
-                              child: LinearProgressIndicator(
-                                value: (card.difficultyRating! / 5).clamp(0.0, 1.0),
-                                backgroundColor: cs.surfaceContainerHighest,
-                                valueColor: AlwaysStoppedAnimation(_difficultyColor(card.difficultyRating!)),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                    ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     Text(
                       'Tap card to flip • Swipe left = Again • Swipe right = Good',
                       textAlign: TextAlign.center,
@@ -1371,7 +1369,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Favorite indicator
-                if (card.isFavorite == true)
+                if (card.isFavorite)
                   const Padding(
                     padding: EdgeInsets.only(right: 8),
                     child: Icon(Icons.star, color: Colors.amber, size: 20),
