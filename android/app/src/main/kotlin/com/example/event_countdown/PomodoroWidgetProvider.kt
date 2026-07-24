@@ -101,7 +101,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     else -> 0
                 }
 
-                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, timer=$timerText, remaining=$remainingSeconds")
+                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, subject=$subject, timer=$timerText, remaining=$remainingSeconds")
 
                 val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
 
@@ -213,11 +213,21 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    // CRITICAL FIX: Added onEnabled to schedule first alarm when widget is placed
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        android.util.Log.i("PomodoroWidget", "onEnabled: scheduling first tick")
+        scheduleTick(context, IDLE_TICK_INTERVAL_MS)
+    }
+
+    // CRITICAL FIX: onUpdate now calls scheduleTick so alarm is always rescheduled
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         android.util.Log.i("PomodoroWidget", "onUpdate: ${appWidgetIds.size} widgets")
         for (widgetId in appWidgetIds) {
             updateWidgetDirectly(context, appWidgetManager, widgetId)
         }
+        // CRITICAL FIX: Always reschedule tick after update so widget keeps running when app closes
+        scheduleTick(context, IDLE_TICK_INTERVAL_MS)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
