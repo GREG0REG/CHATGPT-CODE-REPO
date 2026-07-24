@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:home_widget/home_widget.dart';
 import 'package:path_provider/path_provider.dart';
 import '../database_helper.dart';
 import '../models/event.dart';
@@ -74,7 +75,7 @@ class WidgetService {
         data['startMillis'] = 0;
       }
 
-      // Write to app files directory (same as context.filesDir on Android)
+      // Write to app files directory (guaranteed to match context.filesDir)
       final dir = await getApplicationSupportDirectory();
       final file = File('${dir.path}/$_widgetDataFileName');
       await file.writeAsString(jsonEncode(data));
@@ -82,7 +83,15 @@ class WidgetService {
       debugPrint('✅ WIDGET DATA WRITTEN: ${file.path}');
       debugPrint('✅ DATA: $data');
 
-      // Try method channel but don't depend on it
+      // Trigger immediate widget update via home_widget package
+      try {
+        await HomeWidget.updateWidget(androidName: 'EventCountdownWidgetProvider');
+        debugPrint('✅ Event widget update triggered');
+      } catch (e) {
+        debugPrint('HomeWidget event update failed: $e');
+      }
+
+      // Fallback method channel (optional)
       try {
         await _platform.invokeMethod('updateWidget');
       } catch (e) {
@@ -96,8 +105,16 @@ class WidgetService {
 
   static Future<void> refreshPomodoroWidget() async {
     // Pomodoro widget reads from SharedPreferences directly
-    // No file writing needed - pomodoro_service.dart already writes to SharedPreferences
-    debugPrint('✅ Pomodoro widget data is in SharedPreferences');
+    // We just need to trigger the widget to re-read
+    debugPrint('✅ Triggering pomodoro widget update');
+    
+    try {
+      await HomeWidget.updateWidget(androidName: 'PomodoroWidgetProvider');
+      debugPrint('✅ Pomodoro widget update triggered');
+    } catch (e) {
+      debugPrint('HomeWidget pomodoro update failed: $e');
+    }
+
     try {
       await _platform.invokeMethod('updatePomodoroWidget');
     } catch (e) {
