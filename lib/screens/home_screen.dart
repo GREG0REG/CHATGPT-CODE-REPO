@@ -1,3 +1,6 @@
+// FILE: lib/screens/home_screen.dart
+// COMPLETE REPLACEMENT — copy and paste entire file
+
 import 'dart:async';
 import 'dart:math';
 import 'dart:convert';
@@ -301,7 +304,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           : _events.isEmpty
               ? _buildEmptyState()
               : RefreshIndicator(
-                  onRefresh: _loadAll,
+                  onRefresh: () async {
+                    HapticFeedback.mediumImpact();
+                    await _loadAll();
+                  },
                   child: ListView.builder(
                     padding: const EdgeInsets.only(top: 8, bottom: 80),
                     itemCount: groups.length,
@@ -374,29 +380,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
             const SizedBox(height: 32),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: AppThemes.glassmorphism(
-                context: context,
-                opacity: 0.08,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                children: [
-                  Icon(Icons.format_quote, color: cs.primary, size: 24),
-                  const SizedBox(height: 12),
-                  Text(
-                    _randomQuote(),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontStyle: FontStyle.italic,
-                      color: cs.onSurface.withOpacity(0.7),
-                      height: 1.5,
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 800),
+              builder: (context, value, child) {
+                return Opacity(
+                  opacity: value,
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: AppThemes.glassmorphism(
+                      context: context,
+                      opacity: 0.08,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(Icons.format_quote, color: cs.primary, size: 24),
+                        const SizedBox(height: 12),
+                        Text(
+                          _randomQuote(),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontStyle: FontStyle.italic,
+                            color: cs.onSurface.withOpacity(0.7),
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ],
         ),
