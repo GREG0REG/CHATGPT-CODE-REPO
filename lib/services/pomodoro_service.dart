@@ -1,5 +1,8 @@
 // CHATGPT-CODE-REPO-TEST/lib/services/pomodoro_service.dart
-// COMPLETE FILE - FIXED: Timer now uses endTime calculation so it doesn't freeze when app is backgrounded
+// COMPLETE FILE - FIXED: Removed double 'flutter.' prefix from SharedPreferences keys.
+// The shared_preferences plugin auto-prefixes keys with 'flutter.', so we must NOT
+// include 'flutter.' in our key names. Dart writes 'pomodoro_phase' -> stored as
+// 'flutter.pomodoro_phase' -> Kotlin reads 'flutter.pomodoro_phase' = MATCH!
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -66,20 +69,23 @@ class PomodoroService {
   PomodoroService._();
   static final PomodoroService instance = PomodoroService._();
 
-  // SharedPreferences keys - MUST match Kotlin PomodoroWidgetProvider exactly
-  static const String _kPhase = 'flutter.pomodoro_phase';
-  static const String _kEndTime = 'flutter.pomodoro_end_time_millis';
-  static const String _kTotalDuration = 'flutter.pomodoro_total_duration_seconds';
-  static const String _kSubject = 'flutter.pomodoro_subject';
-  static const String _kStatus = 'flutter.pomodoro_status';
-  static const String _kSessions = 'flutter.pomodoro_completed_sessions';
-  static const String _kRemainingSeconds = 'flutter.pomodoro_remaining_seconds';
-  static const String _kProgressPercent = 'flutter.pomodoro_progress_percent';
-  static const String _kPresetName = 'flutter.pomodoro_preset_name';
-  static const String _kFocusMinutes = 'flutter.pomodoro_focus_minutes';
-  static const String _kShortBreakMinutes = 'flutter.pomodoro_short_break_minutes';
-  static const String _kLongBreakMinutes = 'flutter.pomodoro_long_break_minutes';
-  static const String _kSessionsBeforeLong = 'flutter.pomodoro_sessions_before_long';
+  // SharedPreferences keys - MUST match Kotlin PomodoroWidgetProvider exactly.
+  // CRITICAL: Do NOT include 'flutter.' prefix here. The shared_preferences plugin
+  // automatically prepends 'flutter.' when storing. So 'pomodoro_phase' becomes
+  // 'flutter.pomodoro_phase' in the actual SharedPreferences XML file.
+  static const String _kPhase = 'pomodoro_phase';
+  static const String _kEndTime = 'pomodoro_end_time_millis';
+  static const String _kTotalDuration = 'pomodoro_total_duration_seconds';
+  static const String _kSubject = 'pomodoro_subject';
+  static const String _kStatus = 'pomodoro_status';
+  static const String _kSessions = 'pomodoro_completed_sessions';
+  static const String _kRemainingSeconds = 'pomodoro_remaining_seconds';
+  static const String _kProgressPercent = 'pomodoro_progress_percent';
+  static const String _kPresetName = 'pomodoro_preset_name';
+  static const String _kFocusMinutes = 'pomodoro_focus_minutes';
+  static const String _kShortBreakMinutes = 'pomodoro_short_break_minutes';
+  static const String _kLongBreakMinutes = 'pomodoro_long_break_minutes';
+  static const String _kSessionsBeforeLong = 'pomodoro_sessions_before_long';
 
   Timer? _timer;
   PomodoroPreset _preset = PomodoroPreset.classic;
