@@ -1,8 +1,9 @@
 // FILE: lib/screens/flashcard_screen.dart
-// COMPLETE REPLACEMENT — copy and paste entire file
+// COMPLETE REPLACEMENT — FIXED: tagsJson instead of tags, imagePath/isFavorite/difficultyRating handled
 
 import 'dart:io';
 import 'dart:math';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -138,7 +139,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         c.frontText.toLowerCase().contains(query) ||
         c.backText.toLowerCase().contains(query) ||
         c.subjectTag.toLowerCase().contains(query) ||
-        (c.tags?.any((t) => t.toLowerCase().contains(query)) ?? false)
+        (c.tagsJson != null && c.tagsJson!.toLowerCase().contains(query))
       ).toList();
     }
 
@@ -333,7 +334,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     final frontController = TextEditingController(text: existing?.frontText ?? '');
     final backController = TextEditingController(text: existing?.backText ?? '');
     final tagsController = TextEditingController(
-      text: existing?.tags?.join(', ') ?? '',
+      text: existing?.tagsJson != null ? _tagsFromJson(existing!.tagsJson!) : '',
     );
     String? imagePath = existing?.imagePath;
     bool isNewSubject = !subjects.contains(subject) && subjects.isNotEmpty;
@@ -506,9 +507,9 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       final finalSubject = subject.trim().isEmpty ? 'General' : subject.trim();
       final nowMillis = DateTime.now().millisecondsSinceEpoch;
 
-      // Parse tags
+      // Convert tags to JSON string
       final tagsText = tagsController.text.trim();
-      final tags = tagsText.isEmpty ? null : tagsText.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
+      final tagsJson = tagsText.isEmpty ? null : _tagsToJson(tagsText);
 
       final newCard = Flashcard(
         id: existing?.id,
@@ -520,7 +521,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         nextReviewMillis: existing?.nextReviewMillis,
         createdAtMillis: existing?.createdAtMillis ?? nowMillis,
         imagePath: imagePath,
-        tags: tags,
+        tagsJson: tagsJson,
         isFavorite: existing?.isFavorite ?? false,
         difficultyRating: existing?.difficultyRating ?? 3.0,
       );
@@ -547,6 +548,33 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     frontController.dispose();
     backController.dispose();
     tagsController.dispose();
+  }
+
+  // Helper: convert comma-separated tags to JSON string
+  String _tagsToJson(String commaSeparated) {
+    final tags = commaSeparated.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
+    return jsonEncode(tags);
+  }
+
+  // Helper: convert JSON string to comma-separated tags
+  String _tagsFromJson(String jsonStr) {
+    try {
+      final List<dynamic> tags = jsonDecode(jsonStr);
+      return tags.join(', ');
+    } catch (e) {
+      return jsonStr;
+    }
+  }
+
+  // Helper: get tags list from card for display
+  List<String> _getTagsList(Flashcard card) {
+    if (card.tagsJson == null || card.tagsJson!.isEmpty) return [];
+    try {
+      final List<dynamic> decoded = jsonDecode(card.tagsJson!);
+      return decoded.map((t) => t.toString()).toList();
+    } catch (e) {
+      return [];
+    }
   }
 
   Future<void> _showBulkImportDialog() async {
@@ -1115,7 +1143,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                                     transform: Matrix4.identity()..rotateY(3.1415926535897932),
                                     alignment: Alignment.center,
                                     child: _buildCardFace(card, cs, isFront: false),
-                                  ),
+                                  );
                           );
                         },
                       ),
@@ -1308,6 +1336,8 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   }
 
   Widget _buildCardFace(Flashcard card, ColorScheme cs, {required bool isFront}) {
+    final tags = _getTagsList(card);
+
     return Container(
       margin: const EdgeInsets.all(20),
       padding: const EdgeInsets.all(24),
@@ -1342,8 +1372,8 @@ class _FlashcardScreenState extends State<FlashcardScreen>
               children: [
                 // Favorite indicator
                 if (card.isFavorite == true)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
+                  const Padding(
+                    padding: EdgeInsets.only(right: 8),
                     child: Icon(Icons.star, color: Colors.amber, size: 20),
                   ),
                 PopupMenuButton<String>(
@@ -1407,13 +1437,13 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                     textAlign: TextAlign.center,
                   ),
                   // Tags on back
-                  if (!isFront && card.tags != null && card.tags!.isNotEmpty) ...[
+                  if (!isFront && tags.isNotEmpty) ...[
                     const SizedBox(height: 20),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
                       alignment: WrapAlignment.center,
-                      children: card.tags!.map((tag) => Chip(
+                      children: tags.map((tag) => Chip(
                         label: Text(
                           tag,
                           style: TextStyle(fontSize: 11, color: cs.onPrimaryContainer),
