@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.os.Build
 import android.os.SystemClock
 import android.widget.RemoteViews
 import org.json.JSONObject
@@ -18,6 +19,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
 
     companion object {
         const val ACTION_WIDGET_TICK = "com.example.event_countdown.EVENT_WIDGET_TICK"
+        private const val TICK_INTERVAL_MS = 60_000L // 60 seconds
 
         fun readWidgetData(context: Context): Map<String, Any?> {
             return try {
@@ -56,12 +58,12 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         ) {
             try {
                 val data = readWidgetData(context)
+                val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
 
                 // If no data file, show placeholder
                 if (data.isEmpty()) {
-                    val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
-                    views.setTextViewText(R.id.widget_title, "Open app to add events")
-                    views.setTextViewText(R.id.widget_countdown, "No events yet")
+                    views.setTextViewText(R.id.widget_title, "No upcoming events")
+                    views.setTextViewText(R.id.widget_countdown, "Open app to add events")
                     views.setViewVisibility(R.id.widget_urgency_row, android.view.View.GONE)
                     views.setProgressBar(R.id.widget_progress_ring, 100, 0, false)
                     views.setInt(R.id.widget_root, "setBackgroundColor", Color.parseColor("#00BFA5"))
@@ -79,6 +81,9 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
 
                     appWidgetManager.updateAppWidget(widgetId, views)
                     android.util.Log.i("EventWidget", "Widget $widgetId: No data file")
+                    
+                    // ALWAYS schedule next tick to check for updates
+                    scheduleTick(context, TICK_INTERVAL_MS)
                     return
                 }
 
@@ -125,7 +130,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                     progressPercent = if (total > 0) {
                         val elapsed = System.currentTimeMillis() - (startMillis ?: deadlineMillis)
                         ((elapsed.toFloat() / total) * 100).toInt().coerceIn(0, 100)
-                    } else storedProgress
+                    } else 0
 
                     val days = TimeUnit.MILLISECONDS.toDays(deadlineMillis - System.currentTimeMillis())
                     urgencyColorName = when {
@@ -140,8 +145,6 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                     progressPercent = storedProgress
                     urgencyColorName = storedUrgency
                 }
-
-                val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
 
                 views.setTextViewText(R.id.widget_title, title)
                 views.setTextViewText(R.id.widget_countdown, countdownText)
@@ -193,16 +196,17 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 appWidgetManager.updateAppWidget(widgetId, views)
                 android.util.Log.i("EventWidget", "Widget $widgetId: $title | $countdownText")
 
-                if (deadlineMillis != null && deadlineMillis > System.currentTimeMillis()) {
-                    scheduleTick(context)
-                }
+                // ALWAYS schedule next tick, regardless of state
+                scheduleTick(context, TICK_INTERVAL_MS)
 
             } catch (e: Exception) {
                 android.util.Log.e("EventWidget", "Update failed", e)
+                // Even on failure, schedule next tick to retry
+                scheduleTick(context, TICK_INTERVAL_MS)
             }
         }
 
-        fun scheduleTick(context: Context) {
+        fun scheduleTick(context: Context, intervalMillis: Long) {
             try {
                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
                 val intent = Intent(context, EventCountdownWidgetProvider::class.java).apply {
@@ -213,11 +217,41 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 alarmManager.cancel(pendingIntent)
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    SystemClock.elapsedRealtime() + 60_000,
-                    pendingIntent
-                )
+                
+                val triggerAt = SystemClock.elapsedRealtime() + intervalMillis
+                
+                // Try exact alarm first for precision
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        alarmManager.setExactAndAllowWhileIdle(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            pendingIntent
+                        )
+                    } else {
+                        alarmManager.setExact(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            pendingIntent
+                        )
+                    }
+                } catch (e: SecurityException) {
+                    // Fallback for Android 12+ without exact alarm permission
+                    android.util.Log.w("EventWidget", "Exact alarm not permitted, using fallback")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        alarmManager.setAndAllowWhileIdle(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            pendingIntent
+                        )
+                    } else {
+                        alarmManager.set(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            pendingIntent
+                        )
+                    }
+                }
             } catch (e: Exception) {
                 android.util.Log.e("EventWidget", "Schedule failed", e)
             }
@@ -247,39 +281,30 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         when (intent.action) {
             ACTION_WIDGET_TICK -> {
                 updateAllWidgets(context)
-                val data = readWidgetData(context)
-                val deadlineMillis = (data["deadlineMillis"] as? Number)?.toLong()?.takeIf { it > 0 }
-                val remaining = deadlineMillis?.let { it - System.currentTimeMillis() } ?: 0
-                if (remaining > 0) scheduleTick(context)
             }
             Intent.ACTION_BOOT_COMPLETED -> {
-                val data = readWidgetData(context)
-                val deadlineMillis = (data["deadlineMillis"] as? Number)?.toLong()?.takeIf { it > 0 }
-                if (deadlineMillis != null && deadlineMillis > System.currentTimeMillis()) {
-                    updateAllWidgets(context)
-                    scheduleTick(context)
-                }
+                updateAllWidgets(context)
+            }
+            Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                updateAllWidgets(context)
+            }
+            Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> {
+                updateAllWidgets(context)
             }
         }
     }
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         super.onDeleted(context, appWidgetIds)
-        try {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(context, EventCountdownWidgetProvider::class.java).apply {
-                action = ACTION_WIDGET_TICK
-            }
-            val pendingIntent = PendingIntent.getBroadcast(
-                context, 0, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            alarmManager.cancel(pendingIntent)
-        } catch (e: Exception) {}
+        cancelAlarm(context)
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
+        cancelAlarm(context)
+    }
+    
+    private fun cancelAlarm(context: Context) {
         try {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(context, EventCountdownWidgetProvider::class.java).apply {
@@ -290,6 +315,8 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             alarmManager.cancel(pendingIntent)
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.e("EventWidget", "Cancel alarm failed", e)
+        }
     }
 }
