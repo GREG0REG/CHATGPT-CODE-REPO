@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.os.Build
 import android.os.SystemClock
 import android.widget.RemoteViews
 
@@ -23,6 +24,8 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         private const val KEY_SESSIONS = "flutter.pomodoro_completed_sessions"
 
         const val ACTION_POMODORO_TICK = "com.example.event_countdown.POMODORO_WIDGET_TICK"
+        private const val ACTIVE_TICK_INTERVAL_MS = 1_000L // 1 second when active
+        private const val IDLE_TICK_INTERVAL_MS = 15_000L // 15 seconds when idle
 
         fun calculateRemainingTime(endTimeMillis: Long?): Int {
             if (endTimeMillis == null || endTimeMillis <= 0) return 0
@@ -112,16 +115,22 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 appWidgetManager.updateAppWidget(widgetId, views)
                 android.util.Log.i("PomodoroWidget", "Widget $widgetId updated: $timerText")
 
-                if ((phase == "focusing" || phase == "shortBreak" || phase == "longBreak") && remainingSeconds > 0) {
-                    scheduleTick(context)
+                // ALWAYS schedule next tick with appropriate interval
+                val interval = if (phase == "focusing" || phase == "shortBreak" || phase == "longBreak") {
+                    ACTIVE_TICK_INTERVAL_MS
+                } else {
+                    IDLE_TICK_INTERVAL_MS
                 }
+                scheduleTick(context, interval)
 
             } catch (e: Exception) {
                 android.util.Log.e("PomodoroWidget", "Update failed", e)
+                // Even on failure, schedule next tick to retry
+                scheduleTick(context, IDLE_TICK_INTERVAL_MS)
             }
         }
 
-        fun scheduleTick(context: Context) {
+        fun scheduleTick(context: Context, intervalMillis: Long) {
             try {
                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
                 val intent = Intent(context, PomodoroWidgetProvider::class.java).apply {
@@ -132,11 +141,41 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 alarmManager.cancel(pendingIntent)
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    SystemClock.elapsedRealtime() + 1000,
-                    pendingIntent
-                )
+                
+                val triggerAt = SystemClock.elapsedRealtime() + intervalMillis
+                
+                // Try exact alarm first for precision
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        alarmManager.setExactAndAllowWhileIdle(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            pendingIntent
+                        )
+                    } else {
+                        alarmManager.setExact(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            pendingIntent
+                        )
+                    }
+                } catch (e: SecurityException) {
+                    // Fallback for Android 12+ without exact alarm permission
+                    android.util.Log.w("PomodoroWidget", "Exact alarm not permitted, using fallback")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        alarmManager.setAndAllowWhileIdle(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            pendingIntent
+                        )
+                    } else {
+                        alarmManager.set(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerAt,
+                            pendingIntent
+                        )
+                    }
+                }
             } catch (e: Exception) {
                 android.util.Log.e("PomodoroWidget", "Schedule failed", e)
             }
@@ -165,50 +204,31 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         android.util.Log.i("PomodoroWidget", "onReceive: ${intent.action}")
         when (intent.action) {
             ACTION_POMODORO_TICK -> {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val phase = prefs.getString(KEY_PHASE, "idle") ?: "idle"
-                val endTime = prefs.getLong(KEY_END_TIME, 0L).takeIf { it > 0 }
-                val remaining = calculateRemainingTime(endTime)
-
                 updateAllWidgets(context)
-
-                if ((phase == "focusing" || phase == "shortBreak" || phase == "longBreak") && remaining > 0) {
-                    scheduleTick(context)
-                }
             }
             Intent.ACTION_BOOT_COMPLETED -> {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val phase = prefs.getString(KEY_PHASE, "idle") ?: "idle"
-                val endTime = prefs.getLong(KEY_END_TIME, 0L).takeIf { it > 0 }
-
-                if (phase != "idle" && endTime != null) {
-                    val remaining = calculateRemainingTime(endTime)
-                    if (remaining > 0) {
-                        updateAllWidgets(context)
-                        scheduleTick(context)
-                    }
-                }
+                updateAllWidgets(context)
+            }
+            Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                updateAllWidgets(context)
+            }
+            Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> {
+                updateAllWidgets(context)
             }
         }
     }
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         super.onDeleted(context, appWidgetIds)
-        try {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(context, PomodoroWidgetProvider::class.java).apply {
-                action = ACTION_POMODORO_TICK
-            }
-            val pendingIntent = PendingIntent.getBroadcast(
-                context, 1, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            alarmManager.cancel(pendingIntent)
-        } catch (e: Exception) {}
+        cancelAlarm(context)
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
+        cancelAlarm(context)
+    }
+    
+    private fun cancelAlarm(context: Context) {
         try {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(context, PomodoroWidgetProvider::class.java).apply {
@@ -219,6 +239,8 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             alarmManager.cancel(pendingIntent)
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.e("PomodoroWidget", "Cancel alarm failed", e)
+        }
     }
 }
