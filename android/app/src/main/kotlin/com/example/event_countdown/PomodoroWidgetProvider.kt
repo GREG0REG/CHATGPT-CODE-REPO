@@ -7,6 +7,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.Color
 import android.os.Build
 import android.os.SystemClock
@@ -24,11 +25,36 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         private const val KEY_SESSIONS = "flutter.pomodoro_completed_sessions"
 
         const val ACTION_POMODORO_TICK = "com.example.event_countdown.POMODORO_WIDGET_TICK"
-        // NEW: Custom action triggered directly from MainActivity method channel.
         const val ACTION_POMODORO_FORCE_UPDATE = "com.example.event_countdown.POMODORO_WIDGET_FORCE_UPDATE"
 
         private const val ACTIVE_TICK_INTERVAL_MS = 1_000L
         private const val IDLE_TICK_INTERVAL_MS = 10_000L
+
+        // CRITICAL FIX: Safe read helpers that handle both Int and Long storage
+        // because Flutter shared_preferences may store values as either type.
+        private fun getIntPref(prefs: SharedPreferences, key: String, default: Int): Int {
+            return try {
+                prefs.getInt(key, default)
+            } catch (e: ClassCastException) {
+                try {
+                    prefs.getLong(key, default.toLong()).toInt()
+                } catch (e2: ClassCastException) {
+                    default
+                }
+            }
+        }
+
+        private fun getLongPref(prefs: SharedPreferences, key: String, default: Long): Long {
+            return try {
+                prefs.getLong(key, default)
+            } catch (e: ClassCastException) {
+                try {
+                    prefs.getInt(key, default.toInt()).toLong()
+                } catch (e2: ClassCastException) {
+                    default
+                }
+            }
+        }
 
         fun calculateRemainingTime(endTimeMillis: Long?): Int {
             if (endTimeMillis == null || endTimeMillis <= 0) return 0
@@ -52,19 +78,18 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
                 val phase = prefs.getString(KEY_PHASE, "idle") ?: "idle"
-                val endTime = prefs.getLong(KEY_END_TIME, 0L).takeIf { it > 0 }
-                // CRITICAL: Flutter stores ALL ints as Long. getInt() = ClassCastException.
-                val totalDuration = prefs.getLong(KEY_TOTAL_DURATION, (25 * 60).toLong()).toInt()
+                val endTime = getLongPref(prefs, KEY_END_TIME, 0L).takeIf { it > 0 }
+                val totalDuration = getIntPref(prefs, KEY_TOTAL_DURATION, 25 * 60)
                 val subject = prefs.getString(KEY_SUBJECT, "Ready to Focus") ?: "Ready to Focus"
                 val status = prefs.getString(KEY_STATUS, "Ready") ?: "Ready"
-                val sessions = prefs.getLong(KEY_SESSIONS, 0L).toInt()
+                val sessions = getIntPref(prefs, KEY_SESSIONS, 0)
 
                 val remainingSeconds = calculateRemainingTime(endTime)
 
                 val timerText = when {
                     phase == "idle" -> "Tap to start"
                     phase == "paused" -> {
-                        val savedRemaining = prefs.getLong("flutter.pomodoro_remaining_seconds", 0L).toInt()
+                        val savedRemaining = getIntPref(prefs, "flutter.pomodoro_remaining_seconds", 0)
                         formatTime(savedRemaining)
                     }
                     remainingSeconds <= 0 && endTime != null -> "00:00"
@@ -73,13 +98,13 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
                 val progressPercent = when {
                     phase == "idle" -> 0
-                    phase == "paused" -> prefs.getLong("flutter.pomodoro_progress_percent", 0L).toInt()
+                    phase == "paused" -> getIntPref(prefs, "flutter.pomodoro_progress_percent", 0)
                     remainingSeconds <= 0 -> 100
                     totalDuration > 0 -> ((totalDuration - remainingSeconds).toFloat() / totalDuration * 100).toInt().coerceIn(0, 100)
                     else -> 0
                 }
 
-                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, timer=$timerText, remaining=$remainingSeconds")
+                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, timer=$timerText, remaining=$remainingSeconds, endTime=$endTime")
 
                 val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
 
@@ -117,7 +142,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 }
 
                 appWidgetManager.updateAppWidget(widgetId, views)
-                android.util.Log.i("PomodoroWidget", "Widget $widgetId updated")
+                android.util.Log.i("PomodoroWidget", "Widget $widgetId updated successfully")
 
                 val interval = if (phase == "focusing" || phase == "shortBreak" || phase == "longBreak") {
                     ACTIVE_TICK_INTERVAL_MS
@@ -208,8 +233,12 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             Intent.ACTION_MY_PACKAGE_REPLACED -> updateAllWidgets(context)
             Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> updateAllWidgets(context)
             AppWidgetManager.ACTION_APPWIDGET_UPDATE -> {
-                // Safety net: if system sends bare update without IDs, update all directly
-                if (intent.getIntArrayExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS) == null) {
+                val widgetIds = intent.getIntArrayExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS)
+                if (widgetIds != null && widgetIds.isNotEmpty()) {
+                    for (widgetId in widgetIds) {
+                        updateWidgetDirectly(context, AppWidgetManager.getInstance(context), widgetId)
+                    }
+                } else {
                     updateAllWidgets(context)
                 }
             }
