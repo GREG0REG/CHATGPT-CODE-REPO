@@ -68,14 +68,14 @@ class WidgetService {
         data['textColor'] = '#FFFFFF';
       } else {
         data['title'] = 'No upcoming events';
-        data['countdown'] = 'Add an event to see countdown';
+        data['countdown'] = 'Open app to add events';
         data['progressPercent'] = 0;
         data['deadlineMillis'] = 0;
         data['startMillis'] = 0;
       }
 
-      // Write to app files directory
-      final dir = await getApplicationDocumentsDirectory();
+      // Write to app files directory (same as context.filesDir on Android)
+      final dir = await getApplicationSupportDirectory();
       final file = File('${dir.path}/$_widgetDataFileName');
       await file.writeAsString(jsonEncode(data));
 
