@@ -69,6 +69,56 @@ class _EventCardState extends State<EventCard> {
     return '${dt.month}/${dt.day}/${dt.year}';
   }
 
+  /// Check if a timestamp is meaningfully different from the base date.
+  bool _isExplicitlySet(int? timestampMillis, int baseDateMillis) {
+    if (timestampMillis == null) return false;
+    if (timestampMillis == baseDateMillis) return false;
+    final ts = DateTime.fromMillisecondsSinceEpoch(timestampMillis);
+    final base = DateTime.fromMillisecondsSinceEpoch(baseDateMillis);
+    if (ts.year == base.year && ts.month == base.month && ts.day == base.day) {
+      return ts.hour != 0 || ts.minute != 0;
+    }
+    return true;
+  }
+
+  /// Calculate a user-friendly urgency progress (0.0 to 1.0).
+  /// The bar fills up as the event gets closer — intuitive!
+  double _calculateUrgencyProgress(DateTime now, Event event) {
+    if (event.isCompleted) return 1.0;
+    
+    final eventDate = DateTime.fromMillisecondsSinceEpoch(event.finalMillis);
+    final diff = eventDate.difference(now);
+    final daysUntil = diff.inDays;
+    
+    if (diff.isNegative || diff.inHours <= 0) {
+      return 1.0;
+    }
+    
+    if (daysUntil >= 30) {
+      return 0.05;
+    } else if (daysUntil >= 7) {
+      return (1.0 - (daysUntil / 30.0)).clamp(0.05, 0.95);
+    } else {
+      return (1.0 - (daysUntil / 7.0)).clamp(0.1, 1.0);
+    }
+  }
+
+  /// Get a human-readable label for what the progress bar means
+  String _getUrgencyLabel(DateTime now, Event event) {
+    if (event.isCompleted) return 'Done';
+    
+    final eventDate = DateTime.fromMillisecondsSinceEpoch(event.finalMillis);
+    final diff = eventDate.difference(now);
+    final daysUntil = diff.inDays;
+    
+    if (diff.isNegative || diff.inHours <= 0) return 'Now';
+    if (daysUntil == 0) return 'Today';
+    if (daysUntil == 1) return 'Tomorrow';
+    if (daysUntil < 7) return '$daysUntil days';
+    if (daysUntil < 30) return '${(daysUntil / 7).floor()} weeks';
+    return '${(daysUntil / 30).floor()} months';
+  }
+
   Future<void> _shareEvent(BuildContext context) async {
     final now = DateTime.now();
     final result = CountdownService.buildCountdownText(
@@ -109,23 +159,27 @@ class _EventCardState extends State<EventCard> {
     );
   }
 
-  /// Build vertical progress indicator for the left side of card
-  Widget _buildVerticalProgress(double progress, Color color) {
-    return Container(
-      width: 4,
-      height: 80,
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(2),
-      ),
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: Container(
-          width: 4,
-          height: 80 * progress,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(2),
+  /// Build the user-friendly vertical urgency bar
+  Widget _buildUrgencyBar(double progress, Color color, String label) {
+    return Tooltip(
+      message: 'Time remaining: $label',
+      child: Container(
+        width: 5,
+        height: 72,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 500),
+            width: 5,
+            height: 72 * progress,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(3),
+            ),
           ),
         ),
       ),
@@ -150,12 +204,12 @@ class _EventCardState extends State<EventCard> {
     );
 
     final subtitleParts = <String>[];
-    if (widget.event.startTimeMillis != null) {
+    subtitleParts.add('Date: ${_formatDateOnly(widget.event.dateMillis)}');
+    
+    if (_isExplicitlySet(widget.event.startTimeMillis, widget.event.dateMillis)) {
       subtitleParts.add('Starts: ${_formatDateTime(widget.event.startTimeMillis!)}');
-    } else {
-      subtitleParts.add('Date: ${_formatDateOnly(widget.event.dateMillis)}');
     }
-    if (widget.event.deadlineMillis != null) {
+    if (_isExplicitlySet(widget.event.deadlineMillis, widget.event.dateMillis)) {
       subtitleParts.add('Deadline: ${_formatDateTime(widget.event.deadlineMillis!)}');
     }
 
@@ -163,17 +217,8 @@ class _EventCardState extends State<EventCard> {
     final isRecurringParent = widget.event.isRecurring && widget.event.id != null && widget.event.id! > 0;
     final hasChildren = widget.childOccurrences != null && widget.childOccurrences!.isNotEmpty;
 
-    // Calculate progress for the vertical bar (0.0 to 1.0)
-    double progressValue = 0.0;
-    if (!isCompleted && displayEvent.deadlineMillis != null && displayEvent.startTimeMillis != null) {
-      final total = displayEvent.deadlineMillis! - displayEvent.startTimeMillis!;
-      final elapsed = now.millisecondsSinceEpoch - displayEvent.startTimeMillis!;
-      if (total > 0) {
-        progressValue = (elapsed / total).clamp(0.0, 1.0);
-      }
-    } else {
-      progressValue = isCompleted ? 1.0 : 0.65;
-    }
+    final urgencyProgress = _calculateUrgencyProgress(now, displayEvent);
+    final urgencyLabel = _getUrgencyLabel(now, displayEvent);
 
     final cs = Theme.of(context).colorScheme;
 
@@ -202,30 +247,50 @@ class _EventCardState extends State<EventCard> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Vertical progress bar on the left
-                    _buildVerticalProgress(progressValue, isCompleted ? Colors.grey : cs.primary),
+                    // ── URGENCY BAR (user-friendly) ──
+                    _buildUrgencyBar(urgencyProgress, isCompleted ? Colors.grey : cs.primary, urgencyLabel),
                     const SizedBox(width: 12),
 
-                    // Event Icon with urgency-colored background
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: isCompleted
-                            ? Colors.grey.withOpacity(0.12)
-                            : urgencyColor.withOpacity(0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Icon(
-                          displayEvent.iconData,
-                          size: 24,
-                          color: isCompleted ? Colors.grey : urgencyColor,
+                    // ── EVENT ICON ──
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: isCompleted
+                                ? Colors.grey.withOpacity(0.12)
+                                : urgencyColor.withOpacity(0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Icon(
+                              displayEvent.iconData,
+                              size: 24,
+                              color: isCompleted ? Colors.grey : urgencyColor,
+                            ),
+                          ),
                         ),
-                      ),
+                        if (!isCompleted && widget.event.priority > 0)
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              width: 14,
+                              height: 14,
+                              decoration: BoxDecoration(
+                                color: widget.event.priorityColor,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(width: 12),
 
+                    // ── TEXT COLUMN ──
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,7 +332,6 @@ class _EventCardState extends State<EventCard> {
                             ],
                           ),
                           // ── SUBJECT TAG PILL ──
-                          // Restored from old design: small rounded pill below title
                           if (widget.event.subjectTag != null && widget.event.subjectTag!.isNotEmpty) ...[
                             const SizedBox(height: 4),
                             Container(
@@ -286,6 +350,7 @@ class _EventCardState extends State<EventCard> {
                               ),
                             ),
                           ],
+                          // ── DATE LINE ──
                           if (subtitleParts.isNotEmpty) ...[
                             const SizedBox(height: 4),
                             Text(
@@ -300,7 +365,7 @@ class _EventCardState extends State<EventCard> {
                             ),
                           ],
                           const SizedBox(height: 6),
-                          // Urgency dot + countdown text
+                          // ── COUNTDOWN TEXT ──
                           Row(
                             children: [
                               Container(
@@ -334,7 +399,7 @@ class _EventCardState extends State<EventCard> {
 
                     const SizedBox(width: 6),
 
-                    // Action buttons
+                    // ── ACTION BUTTONS ──
                     if (widget.event.isRecurring)
                       Container(
                         width: 28,
@@ -396,7 +461,7 @@ class _EventCardState extends State<EventCard> {
             ),
           ),
         ),
-        // Expanded child occurrences
+        // ── EXPANDED CHILD OCCURRENCES ──
         if (widget.isExpanded && hasChildren)
           Padding(
             padding: const EdgeInsets.only(left: 24, right: 12, bottom: 8),
@@ -416,12 +481,12 @@ class _EventCardState extends State<EventCard> {
                   );
                   final childDate = _formatDateOnly(child.dateMillis);
                   final childSubtitle = <String>[];
-                  if (child.startTimeMillis != null) {
+                  if (_isExplicitlySet(child.startTimeMillis, child.dateMillis)) {
                     childSubtitle.add('Starts: ${_formatDateTime(child.startTimeMillis!)}');
                   } else {
                     childSubtitle.add('Date: $childDate');
                   }
-                  if (child.deadlineMillis != null) {
+                  if (_isExplicitlySet(child.deadlineMillis, child.dateMillis)) {
                     childSubtitle.add('Deadline: ${_formatDateTime(child.deadlineMillis!)}');
                   }
 
