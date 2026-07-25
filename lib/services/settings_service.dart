@@ -25,6 +25,7 @@ class SettingsService {
   static const _kFirstLaunch = 'first_launch';
   static const _kDefaultReminderMinutes = 'default_reminder_minutes';
   static const _kBatteryOptPrompted = 'battery_opt_prompted';
+  static const _kLastViewedAttendanceSubject = 'last_viewed_attendance_subject';
 
   Future<SharedPreferences> get _prefs async => SharedPreferences.getInstance();
 
@@ -226,5 +227,21 @@ class SettingsService {
   Future<void> setBatteryOptPrompted(bool v) async {
     final p = await _prefs;
     await p.setBool(_kBatteryOptPrompted, v);
+  }
+
+  // ==================== ATTENDANCE WIDGET ====================
+  
+  Future<String?> getLastViewedAttendanceSubject() async {
+    final p = await _prefs;
+    return p.getString(_kLastViewedAttendanceSubject);
+  }
+
+  Future<void> setLastViewedAttendanceSubject(String? subject) async {
+    final p = await _prefs;
+    if (subject == null) {
+      await p.remove(_kLastViewedAttendanceSubject);
+    } else {
+      await p.setString(_kLastViewedAttendanceSubject, subject);
+    }
   }
 }
