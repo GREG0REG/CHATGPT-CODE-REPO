@@ -1,5 +1,6 @@
 // FILE: lib/screens/home_screen.dart
-// COMPLETE REPLACEMENT — copy and paste entire file
+// COMPLETE REPLACEMENT — Fixed double header: removed duplicate title from body
+// Now has its own AppBar with drawer button
 
 import 'dart:async';
 import 'dart:math';
@@ -13,9 +14,10 @@ import '../services/recurrence_service.dart';
 import '../services/settings_service.dart';
 import '../services/widget_service.dart';
 import '../theme/app_themes.dart';
-import '../event_card.dart';
+import '../widgets/event_card.dart';
 import 'add_edit_event_screen.dart';
 import 'settings_screen.dart';
+import 'main_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -287,6 +289,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => mainScaffoldKey.currentState?.openDrawer(),
+        ),
         title: const Text('Event Countdown'),
         actions: [
           IconButton(
