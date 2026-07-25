@@ -6,7 +6,7 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="16dp"
-    android:background="@drawable/widget_background_dark">
+    android:background="@drawable/widget_glass_background">
 
     <TextView
         android:id="@+id/widget_title"
