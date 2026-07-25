@@ -1,3 +1,6 @@
+// FILE: lib/screens/pomodoro_screen.dart
+// COMPLETE REPLACEMENT — Fixed double header, added drawer button
+
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,8 +14,9 @@ import '../services/focus_settings_service.dart';
 import '../services/pomodoro_service.dart';
 import '../services/widget_service.dart';
 import '../theme/app_themes.dart';
-import '../WIDGET/subject_picker_sheet.dart';
+import '../widgets/subject_picker_sheet.dart';
 import 'focus_settings_sheet.dart';
+import 'main_screen.dart';
 
 class PomodoroScreen extends StatefulWidget {
   const PomodoroScreen({super.key});
@@ -352,11 +356,14 @@ class _PomodoroScreenState extends State<PomodoroScreen>
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        title: Text(
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => mainScaffoldKey.currentState?.openDrawer(),
+        ),
+        title: const Text(
           'Focus',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: scheme.onSurface,
           ),
         ),
         actions: [
