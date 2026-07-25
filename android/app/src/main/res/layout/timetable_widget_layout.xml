@@ -39,23 +39,172 @@
         android:background="#33FFFFFF"
         android:layout_marginVertical="8dp" />
 
+    <!-- Empty state -->
+    <TextView
+        android:id="@+id/timetable_widget_empty"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="No upcoming classes"
+        android:textColor="#88FFFFFF"
+        android:textSize="12sp"
+        android:layout_gravity="center"
+        android:paddingVertical="16dp"
+        android:visibility="gone" />
+
+    <!-- Class row 1 -->
     <LinearLayout
-        android:id="@+id/timetable_widget_classes_container"
+        android:id="@+id/timetable_class_1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingVertical="4dp"
+        android:visibility="gone">
 
-        <!-- Class items will be added dynamically -->
-        <TextView
-            android:id="@+id/timetable_widget_empty"
-            android:layout_width="wrap_content"
+        <View
+            android:id="@+id/timetable_class_1_dot"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:background="@drawable/widget_dot_circle" />
+
+        <LinearLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="No classes today"
-            android:textColor="#88FFFFFF"
-            android:textSize="12sp"
-            android:layout_gravity="center"
-            android:paddingVertical="16dp" />
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginStart="10dp">
 
+            <TextView
+                android:id="@+id/timetable_class_1_subject"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Subject"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/timetable_class_1_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="09:00 - 10:00"
+                android:textColor="#AAFFFFFF"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/timetable_class_1_room"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Room 101"
+                android:textColor="#88FFFFFF"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Class row 2 -->
+    <LinearLayout
+        android:id="@+id/timetable_class_2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingVertical="4dp"
+        android:visibility="gone">
+
+        <View
+            android:id="@+id/timetable_class_2_dot"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:background="@drawable/widget_dot_circle" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginStart="10dp">
+
+            <TextView
+                android:id="@+id/timetable_class_2_subject"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Subject"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/timetable_class_2_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="09:00 - 10:00"
+                android:textColor="#AAFFFFFF"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/timetable_class_2_room"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Room 101"
+                android:textColor="#88FFFFFF"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Class row 3 -->
+    <LinearLayout
+        android:id="@+id/timetable_class_3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingVertical="4dp"
+        android:visibility="gone">
+
+        <View
+            android:id="@+id/timetable_class_3_dot"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:background="@drawable/widget_dot_circle" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:layout_marginStart="10dp">
+
+            <TextView
+                android:id="@+id/timetable_class_3_subject"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Subject"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/timetable_class_3_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="09:00 - 10:00"
+                android:textColor="#AAFFFFFF"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/timetable_class_3_room"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Room 101"
+                android:textColor="#88FFFFFF"
+                android:textSize="10sp" />
+        </LinearLayout>
     </LinearLayout>
 
 </LinearLayout>
