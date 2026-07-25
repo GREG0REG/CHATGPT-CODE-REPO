@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/reading_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@drawable/widget_glass_background">
+
+    <!-- Book title -->
+    <TextView
+        android:id="@+id/reading_widget_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="The Great Gatsby"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <!-- Page info -->
+    <TextView
+        android:id="@+id/reading_widget_pages"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Page 120/300 • 40%"
+        android:textColor="#AAFFFFFF"
+        android:textSize="12sp" />
+
+    <!-- Progress bar -->
+    <ProgressBar
+        android:id="@+id/reading_widget_progress_bar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:layout_marginTop="8dp"
+        android:progress="40"
+        android:max="100"
+        android:progressDrawable="@drawable/widget_progress_bar" />
+
+    <!-- Reminder text -->
+    <TextView
+        android:id="@+id/reading_widget_reminder"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="Read for 20 min today"
+        android:textColor="#88FFFFFF"
+        android:textSize="11sp"
+        android:visibility="visible" />
+
+</LinearLayout>
