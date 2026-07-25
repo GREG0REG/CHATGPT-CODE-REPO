@@ -1,8 +1,12 @@
+// FILE: lib/screens/assignment_tracker_screen.dart
+// COMPLETE REPLACEMENT — Fixed double header, added drawer button
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database_helper.dart';
 import '../services/widget_service.dart';
 import '../models/event.dart';
+import 'main_screen.dart';
 
 class AssignmentTrackerScreen extends StatefulWidget {
   const AssignmentTrackerScreen({super.key});
@@ -183,7 +187,13 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen> {
     final urgentCount = _assignments.where((a) => a.priority == 4 && !a.isCompleted).length;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Assignments')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => mainScaffoldKey.currentState?.openDrawer(),
+        ),
+        title: const Text('Assignments'),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
