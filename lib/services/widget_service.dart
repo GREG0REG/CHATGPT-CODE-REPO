@@ -19,6 +19,8 @@ class WidgetService {
     await refreshPomodoroWidget();
     await refreshAttendanceWidget();
     await refreshTimetableWidget();
+    await refreshHabitWidget();      // NEW
+    await refreshReadingWidget();    // NEW
   }
 
   // ==================== EVENT COUNTDOWN WIDGET ====================
@@ -376,6 +378,182 @@ class WidgetService {
       await _channel.invokeMethod('updateTimetableWidget');
     } catch (e) {
       debugPrint('Timetable widget refresh error: $e');
+    }
+  }
+
+  // ==================== HABIT WIDGET (NEW) ====================
+  static Future<void> refreshHabitWidget() async {
+    try {
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+      final weekStart = todayStart - ((now.weekday - 1) * const Duration(days: 1).inMilliseconds);
+      
+      final habits = await DatabaseHelper.instance.getAllHabits(includeArchived: false);
+      
+      if (habits.isEmpty) {
+        final data = <String, dynamic>{
+          'habitName': 'No Habits',
+          'weekProgress': 0,
+          'weekTarget': 0,
+          'streak': 0,
+          'todayCompleted': false,
+          'statusColor': 'grey',
+          'message': 'Add habits to start tracking',
+        };
+        await _writeWidgetData('habit_widget_data.json', data);
+        await _channel.invokeMethod('updateHabitWidget');
+        return;
+      }
+
+      // Find the habit with the best streak to showcase
+      Map<String, dynamic>? featuredHabit;
+      int bestStreak = -1;
+      
+      for (final habit in habits) {
+        final habitId = habit['id'] as int;
+        final streak = await DatabaseHelper.instance.getHabitStreak(habitId);
+        if (streak > bestStreak) {
+          bestStreak = streak;
+          featuredHabit = habit;
+        }
+      }
+      
+      // If no streaks, pick the first habit
+      featuredHabit ??= habits.first;
+      final habitId = featuredHabit['id'] as int;
+      final habitName = featuredHabit['name'] as String;
+      final targetPerWeek = (featuredHabit['targetPerWeek'] as int?) ?? 7;
+      final colorHex = (featuredHabit['colorHex'] as String?) ?? '#4CAF50';
+      
+      // Get weekly stats
+      final weeklyStats = await DatabaseHelper.instance.getHabitWeeklyStats(habitId, weekStart);
+      final weekProgress = weeklyStats['completed'] as int;
+      final streak = await DatabaseHelper.instance.getHabitStreak(habitId);
+      
+      // Check today's completion
+      final todayLog = await DatabaseHelper.instance.getHabitLogForDate(habitId, todayStart);
+      final todayCompleted = todayLog != null && (todayLog['completed'] as int?) == 1;
+      
+      // Determine status color
+      String statusColor;
+      final percentage = targetPerWeek > 0 ? (weekProgress / targetPerWeek * 100).round() : 0;
+      if (percentage >= 100) {
+        statusColor = 'green';
+      } else if (percentage >= 75) {
+        statusColor = 'light_green';
+      } else if (percentage >= 50) {
+        statusColor = 'yellow';
+      } else if (percentage >= 25) {
+        statusColor = 'orange';
+      } else {
+        statusColor = 'red';
+      }
+      
+      final data = <String, dynamic>{
+        'habitName': habitName,
+        'weekProgress': weekProgress,
+        'weekTarget': targetPerWeek,
+        'streak': streak,
+        'todayCompleted': todayCompleted,
+        'statusColor': statusColor,
+        'percentage': percentage,
+        'colorHex': colorHex,
+        'message': '$weekProgress / $targetPerWeek this week',
+      };
+
+      await _writeWidgetData('habit_widget_data.json', data);
+      await _channel.invokeMethod('updateHabitWidget');
+    } catch (e) {
+      debugPrint('Habit widget refresh error: $e');
+    }
+  }
+
+  // ==================== READING WIDGET (NEW) ====================
+  static Future<void> refreshReadingWidget() async {
+    try {
+      final books = await DatabaseHelper.instance.getAllReadingBooks(includeCompleted: false);
+      
+      if (books.isEmpty) {
+        final data = <String, dynamic>{
+          'bookTitle': 'No Books',
+          'author': '',
+          'progressPercent': 0,
+          'currentPage': 0,
+          'totalPages': 0,
+          'pagesLeft': 0,
+          'minutesReadToday': 0,
+          'totalMinutesRead': 0,
+          'statusColor': 'grey',
+          'message': 'Add books to track reading',
+        };
+        await _writeWidgetData('reading_widget_data.json', data);
+        await _channel.invokeMethod('updateReadingWidget');
+        return;
+      }
+
+      // Pick the book with the most progress (closest to completion)
+      Map<String, dynamic>? featuredBook;
+      double bestProgress = -1;
+      
+      for (final book in books) {
+        final totalPages = (book['totalPages'] as int?) ?? 1;
+        final currentPage = (book['currentPage'] as int?) ?? 0;
+        final progress = totalPages > 0 ? currentPage / totalPages : 0.0;
+        if (progress > bestProgress) {
+          bestProgress = progress;
+          featuredBook = book;
+        }
+      }
+      
+      featuredBook ??= books.first;
+      final bookId = featuredBook['id'] as int;
+      final bookTitle = featuredBook['title'] as String;
+      final author = (featuredBook['author'] as String?) ?? 'Unknown Author';
+      final totalPages = (featuredBook['totalPages'] as int?) ?? 1;
+      final currentPage = (featuredBook['currentPage'] as int?) ?? 0;
+      final minutesReadToday = (featuredBook['minutesReadToday'] as int?) ?? 0;
+      final totalMinutesRead = (featuredBook['totalMinutesRead'] as int?) ?? 0;
+      
+      final progressPercent = totalPages > 0 ? (currentPage / totalPages * 100).round() : 0;
+      final pagesLeft = totalPages - currentPage;
+      
+      // Get detailed progress stats
+      final progressStats = await DatabaseHelper.instance.getReadingProgress(bookId);
+      final onTrack = progressStats['onTrack'] as bool? ?? true;
+      
+      // Determine status color
+      String statusColor;
+      if (progressPercent >= 90) {
+        statusColor = 'green';
+      } else if (progressPercent >= 60) {
+        statusColor = 'light_green';
+      } else if (progressPercent >= 30) {
+        statusColor = 'blue';
+      } else {
+        statusColor = 'orange';
+      }
+      if (!onTrack) statusColor = 'red';
+      
+      final data = <String, dynamic>{
+        'bookTitle': bookTitle,
+        'author': author,
+        'progressPercent': progressPercent,
+        'currentPage': currentPage,
+        'totalPages': totalPages,
+        'pagesLeft': pagesLeft,
+        'minutesReadToday': minutesReadToday,
+        'totalMinutesRead': totalMinutesRead,
+        'statusColor': statusColor,
+        'onTrack': onTrack,
+        'message': '$currentPage / $totalPages pages',
+        'dailyPageGoal': progressStats['dailyPageGoal'] ?? 20,
+        'pagesPerDayNeeded': progressStats['pagesPerDayNeeded'] ?? 0,
+      };
+
+      await _writeWidgetData('reading_widget_data.json', data);
+      await _channel.invokeMethod('updateReadingWidget');
+    } catch (e) {
+      debugPrint('Reading widget refresh error: $e');
     }
   }
 
