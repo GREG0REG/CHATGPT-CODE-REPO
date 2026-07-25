@@ -1,6 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     
-    <!-- Existing permissions preserved -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
@@ -33,7 +32,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Existing Event Countdown Widget -->
+        <!-- Event Countdown Widget -->
         <receiver 
             android:name=".EventCountdownWidgetProvider"
             android:exported="true">
@@ -49,7 +48,21 @@
                 android:resource="@xml/event_widget_info"/>
         </receiver>
 
-        <!-- NEW: Attendance Widget -->
+        <!-- Pomodoro Widget -->
+        <receiver 
+            android:name=".PomodoroWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+                <action android:name="com.example.event_countdown.POMODORO_WIDGET_TICK"/>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pomodoro_widget_info"/>
+        </receiver>
+
+        <!-- Attendance Widget -->
         <receiver 
             android:name=".AttendanceWidgetProvider"
             android:exported="true">
@@ -63,7 +76,7 @@
                 android:resource="@xml/attendance_widget_info"/>
         </receiver>
 
-        <!-- NEW: Timetable Widget -->
+        <!-- Timetable Widget -->
         <receiver 
             android:name=".TimetableWidgetProvider"
             android:exported="true">
@@ -77,7 +90,6 @@
                 android:resource="@xml/timetable_widget_info"/>
         </receiver>
 
-        <!-- Flutter plugin registrant -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
