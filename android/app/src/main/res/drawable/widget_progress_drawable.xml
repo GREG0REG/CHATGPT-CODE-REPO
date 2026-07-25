@@ -3,8 +3,8 @@
     <!-- Background track -->
     <item android:id="@android:id/background">
         <shape android:shape="rectangle">
-            <solid android:color="#33FFFFFF" />
-            <corners android:radius="2dp" />
+            <solid android:color="#20FFFFFF" />
+            <corners android:radius="3dp" />
         </shape>
     </item>
     <!-- Progress fill -->
@@ -12,7 +12,7 @@
         <clip>
             <shape android:shape="rectangle">
                 <solid android:color="#FFFFFF" />
-                <corners android:radius="2dp" />
+                <corners android:radius="3dp" />
             </shape>
         </clip>
     </item>
