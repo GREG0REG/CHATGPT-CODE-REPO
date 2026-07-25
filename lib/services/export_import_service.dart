@@ -1,5 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -12,6 +15,116 @@ import '../models/event.dart';
 class ExportImportService {
   ExportImportService._();
 
+  static const String _kAppVersion = '1.0.0';
+  static const String _kAppName = 'event_countdown';
+
+  // ==================== ZIP HELPERS ====================
+
+  static String _computeChecksum(String dataJsonString) {
+    final bytes = utf8.encode(dataJsonString);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  static Future<String> _writeZipFile({
+    required String exportType,
+    required String dataJsonString,
+    required String fileName,
+  }) async {
+    final manifest = {
+      'exportVersion': 2,
+      'appName': _kAppName,
+      'appVersion': _kAppVersion,
+      'exportedAt': DateTime.now().toUtc().toIso8601String(),
+      'exportType': exportType,
+      'checksum': _computeChecksum(dataJsonString),
+    };
+
+    final manifestJson = const JsonEncoder.withIndent('  ').convert(manifest);
+
+    final archive = Archive()
+      ..addFile(ArchiveFile('manifest.json', manifestJson.length, utf8.encode(manifestJson)))
+      ..addFile(ArchiveFile('data.json', dataJsonString.length, utf8.encode(dataJsonString)));
+
+    final zipEncoder = ZipEncoder();
+    final encoded = zipEncoder.encode(archive, level: 6);
+    if (encoded == null) {
+      throw Exception('Failed to encode ZIP archive');
+    }
+
+    final dir = await getApplicationDocumentsDirectory();
+    final appFile = File('${dir.path}/$fileName');
+    await appFile.writeAsBytes(encoded);
+
+    return appFile.path;
+  }
+
+  static Future<Map<String, dynamic>> _readZipFile(String filePath) async {
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw Exception('File not found: $filePath');
+    }
+
+    final bytes = await file.readAsBytes();
+    final archive = ZipDecoder().decodeBytes(bytes);
+
+    ArchiveFile? manifestFile;
+    ArchiveFile? dataFile;
+
+    for (final entry in archive) {
+      if (entry.name == 'manifest.json') {
+        manifestFile = entry;
+      } else if (entry.name == 'data.json') {
+        dataFile = entry;
+      }
+    }
+
+    if (manifestFile == null) {
+      throw Exception('Corrupted backup: manifest.json missing');
+    }
+    if (dataFile == null) {
+      throw Exception('Corrupted backup: data.json missing');
+    }
+
+    final manifestString = utf8.decode(manifestFile.content as List<int>);
+    final dataString = utf8.decode(dataFile.content as List<int>);
+
+    final manifest = jsonDecode(manifestString) as Map<String, dynamic>;
+
+    final exportVersion = manifest['exportVersion'];
+    if (exportVersion == null) {
+      throw Exception('Corrupted backup: exportVersion missing from manifest');
+    }
+    if (exportVersion != 2) {
+      throw Exception('Unsupported export version: $exportVersion');
+    }
+
+    final checksum = manifest['checksum'];
+    if (checksum == null) {
+      throw Exception('Corrupted backup: checksum missing from manifest');
+    }
+
+    final computed = _computeChecksum(dataString);
+    if (computed != checksum) {
+      throw Exception('Corrupted backup (checksum mismatch). The file may have been tampered with or is incomplete.');
+    }
+
+    final exportType = manifest['exportType'];
+    if (exportType == null) {
+      throw Exception('Corrupted backup: exportType missing from manifest');
+    }
+
+    return {
+      'exportType': exportType,
+      'data': jsonDecode(dataString),
+    };
+  }
+
+  static bool _isZipFile(String filePath) {
+    final ext = p.extension(filePath).toLowerCase();
+    return ext == '.zip' || ext == '.ecbackup';
+  }
+
   // ==================== INTERNAL EXPORT ====================
 
   static Future<String> exportToJson() async {
@@ -19,13 +132,14 @@ class ExportImportService {
     final jsonList = events.map((e) => e.toJson()).toList();
     final jsonString = const JsonEncoder.withIndent('  ').convert(jsonList);
 
-    final dir = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = 'event_countdown_export_$timestamp.json';
-    final appFile = File('${dir.path}/$fileName');
-    await appFile.writeAsString(jsonString);
+    final fileName = 'event_countdown_export_$timestamp.ecbackup';
 
-    return appFile.path;
+    return _writeZipFile(
+      exportType: 'events',
+      dataJsonString: jsonString,
+      fileName: fileName,
+    );
   }
 
   static Future<String> exportAllData() async {
@@ -33,20 +147,21 @@ class ExportImportService {
 
     final exportMap = {
       'exportVersion': 1,
-      'appName': 'event_countdown',
+      'appName': _kAppName,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
       'tables': allData,
     };
 
     final jsonString = const JsonEncoder.withIndent('  ').convert(exportMap);
 
-    final dir = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = 'event_countdown_full_export_$timestamp.json';
-    final appFile = File('${dir.path}/$fileName');
-    await appFile.writeAsString(jsonString);
+    final fileName = 'event_countdown_full_export_$timestamp.ecbackup';
 
-    return appFile.path;
+    return _writeZipFile(
+      exportType: 'full',
+      dataJsonString: jsonString,
+      fileName: fileName,
+    );
   }
 
   // ==================== SHARE EXPORT ====================
@@ -82,7 +197,7 @@ class ExportImportService {
       dialogTitle: 'Save Event Export',
       fileName: fileName,
       type: FileType.custom,
-      allowedExtensions: ['json'],
+      allowedExtensions: ['ecbackup'],
     );
 
     if (outputPath == null) return null;
@@ -100,7 +215,7 @@ class ExportImportService {
       dialogTitle: 'Save Full Export',
       fileName: fileName,
       type: FileType.custom,
-      allowedExtensions: ['json'],
+      allowedExtensions: ['ecbackup'],
     );
 
     if (outputPath == null) return null;
@@ -118,23 +233,49 @@ class ExportImportService {
       throw Exception('File not found: $filePath');
     }
 
-    final contents = await file.readAsString();
-    if (contents.trim().isEmpty) {
-      throw Exception('File is empty');
-    }
-
-    final decoded = jsonDecode(contents);
-
     List<dynamic> eventList;
-    if (decoded is List) {
-      eventList = decoded;
-    } else if (decoded is Map &&
-        decoded['tables'] != null &&
-        decoded['tables']['events'] != null) {
-      eventList = decoded['tables']['events'] as List;
+
+    if (_isZipFile(filePath)) {
+      // New .ecbackup / .zip format
+      final zipData = await _readZipFile(filePath);
+      final exportType = zipData['exportType'] as String;
+      final data = zipData['data'];
+
+      if (exportType != 'events') {
+        throw Exception(
+            'This backup is a full data export. Please use "Import All Data" instead.');
+      }
+
+      if (data is List) {
+        eventList = data;
+      } else if (data is Map && data['tables'] != null && data['tables']['events'] != null) {
+        eventList = data['tables']['events'] as List;
+      } else {
+        throw Exception(
+            'Invalid data format: expected a list of events inside the backup');
+      }
     } else {
-      throw Exception(
-          'Invalid JSON format: expected a list of events or a comprehensive export');
+      // Legacy .json format — backward compatibility
+      final contents = await file.readAsString();
+      if (contents.trim().isEmpty) {
+        throw Exception('File is empty');
+      }
+
+      final decoded = jsonDecode(contents);
+      if (decoded is List) {
+        eventList = decoded;
+      } else if (decoded is Map &&
+          decoded['tables'] != null &&
+          decoded['tables']['events'] != null) {
+        eventList = decoded['tables']['events'] as List;
+      } else {
+        throw Exception(
+            'Invalid JSON format: expected a list of events or a comprehensive export');
+      }
+
+      if (kDebugMode) {
+        debugPrint('Importing legacy .json file (deprecated format)');
+      }
     }
 
     final events = <Event>[];
@@ -171,14 +312,34 @@ class ExportImportService {
       throw Exception('File not found: $filePath');
     }
 
-    final contents = await file.readAsString();
-    if (contents.trim().isEmpty) {
-      throw Exception('File is empty');
-    }
+    Map<String, dynamic> decoded;
 
-    final decoded = jsonDecode(contents);
-    if (decoded is! Map) {
-      throw Exception('Invalid export format: expected a map');
+    if (_isZipFile(filePath)) {
+      // New .ecbackup / .zip format
+      final zipData = await _readZipFile(filePath);
+      final exportType = zipData['exportType'] as String;
+      decoded = zipData['data'] as Map<String, dynamic>;
+
+      if (exportType != 'full') {
+        throw Exception(
+            'This backup is an events-only export. Please use "Import Events" instead.');
+      }
+    } else {
+      // Legacy .json format — backward compatibility
+      final contents = await file.readAsString();
+      if (contents.trim().isEmpty) {
+        throw Exception('File is empty');
+      }
+
+      final raw = jsonDecode(contents);
+      if (raw is! Map) {
+        throw Exception('Invalid export format: expected a map');
+      }
+      decoded = raw;
+
+      if (kDebugMode) {
+        debugPrint('Importing legacy .json file (deprecated format)');
+      }
     }
 
     final exportVersion = decoded['exportVersion'];
@@ -229,7 +390,7 @@ class ExportImportService {
   static Future<int> importEventsFromPicker() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['json'],
+      allowedExtensions: ['ecbackup', 'json'],
       allowMultiple: false,
       withData: false,
     );
@@ -249,7 +410,7 @@ class ExportImportService {
   static Future<void> importAllDataFromPicker() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['json'],
+      allowedExtensions: ['ecbackup', 'json'],
       allowMultiple: false,
       withData: false,
     );
