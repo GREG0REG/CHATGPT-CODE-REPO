@@ -89,6 +89,19 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/timetable_widget_info"/>
         </receiver>
+                <!-- Habit Widget -->
+        <receiver 
+            android:name=".HabitWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+                <action android:name="com.example.event_countdown.HABIT_WIDGET_REFRESH"/>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/habit_widget_info"/>
+        </receiver>
 
         <meta-data
             android:name="flutterEmbedding"
