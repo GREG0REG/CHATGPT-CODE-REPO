@@ -5,12 +5,12 @@
         android:type="radial"
         android:centerX="0.5"
         android:centerY="0.5"
-        android:startColor="#E6FFFFFF"
-        android:centerColor="#E6F0F0F0"
-        android:endColor="#E6E0E0E0"
+        android:startColor="#E6004D40"
+        android:centerColor="#E6003830"
+        android:endColor="#E6002820"
         android:gradientRadius="100%" />
     <corners android:radius="16dp" />
     <stroke
         android:width="2dp"
-        android:color="#80FFFFFF" />
+        android:color="#4000BFA5" />
 </shape>
