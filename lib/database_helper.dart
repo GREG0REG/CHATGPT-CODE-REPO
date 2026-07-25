@@ -31,7 +31,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 11, // BUMPED: was 10, now 11 for attendance & timetable suite
+      version: 12, // BUMPED: was 11, now 12 for class_schedule, habits, habit_logs, reading_books
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -64,7 +64,10 @@ class DatabaseHelper {
           await _migrateV9ToV10(db);
         }
         if (oldVersion < 11) {
-          await _migrateV10ToV11(db); // NEW: v10→v11 adds attendance & timetable tables
+          await _migrateV10ToV11(db);
+        }
+        if (oldVersion < 12) {
+          await _migrateV11ToV12(db); // NEW: v11→v12 adds class_schedule, habits, habit_logs, reading_books
         }
       },
     );
@@ -333,6 +336,69 @@ class DatabaseHelper {
         isRecurringYearly INTEGER DEFAULT 0
       )
     """);
+
+    // ═══════════════════════════════════════════════════════════════
+    // NEW TABLES (v12): Weekly Timetable, Habit Tracker, Reading Tracker
+    // ═══════════════════════════════════════════════════════════════
+
+    // ---- CLASS SCHEDULE (v12) ----
+    // Simplified weekly recurring class schedule (distinct from attendance_schedules)
+    await db.execute("""
+      CREATE TABLE class_schedule (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subjectName TEXT NOT NULL,
+        dayOfWeek INTEGER NOT NULL,
+        startTimeMinutes INTEGER NOT NULL,
+        endTimeMinutes INTEGER NOT NULL,
+        room TEXT,
+        colorHex TEXT DEFAULT '#2196F3',
+        isActive INTEGER DEFAULT 1
+      )
+    """);
+
+    // ---- HABITS (v12) ----
+    await db.execute("""
+      CREATE TABLE habits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        subjectName TEXT,
+        colorHex TEXT DEFAULT '#4CAF50',
+        targetPerWeek INTEGER DEFAULT 7,
+        reminderTimeMinutes INTEGER,
+        createdAtMillis INTEGER NOT NULL,
+        isArchived INTEGER DEFAULT 0
+      )
+    """);
+
+    // ---- HABIT LOGS (v12) ----
+    await db.execute("""
+      CREATE TABLE habit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        habitId INTEGER NOT NULL,
+        dateMillis INTEGER NOT NULL,
+        completed INTEGER DEFAULT 1,
+        note TEXT
+      )
+    """);
+
+    // ---- READING BOOKS (v12) ----
+    await db.execute("""
+      CREATE TABLE reading_books (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        author TEXT,
+        totalPages INTEGER NOT NULL,
+        currentPage INTEGER DEFAULT 0,
+        subjectName TEXT,
+        startDateMillis INTEGER,
+        targetEndDateMillis INTEGER,
+        dailyPageGoal INTEGER DEFAULT 20,
+        minutesReadToday INTEGER DEFAULT 0,
+        totalMinutesRead INTEGER DEFAULT 0,
+        isCompleted INTEGER DEFAULT 0,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
   }
 
   // ============================================
@@ -506,7 +572,7 @@ class DatabaseHelper {
     """);
   }
 
-  // NEW: v10 -> v11 migration
+  // v10 -> v11 migration
   Future<void> _migrateV10ToV11(Database db) async {
     // Enhance existing attendance_logs with new columns
     await db.execute('ALTER TABLE attendance_logs ADD COLUMN subjectId INTEGER');
@@ -590,6 +656,67 @@ class DatabaseHelper {
         name TEXT NOT NULL,
         type TEXT NOT NULL,
         isRecurringYearly INTEGER DEFAULT 0
+      )
+    """);
+  }
+
+  // NEW: v11 -> v12 migration
+  Future<void> _migrateV11ToV12(Database db) async {
+    // Create class_schedule table
+    await db.execute("""
+      CREATE TABLE class_schedule (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subjectName TEXT NOT NULL,
+        dayOfWeek INTEGER NOT NULL,
+        startTimeMinutes INTEGER NOT NULL,
+        endTimeMinutes INTEGER NOT NULL,
+        room TEXT,
+        colorHex TEXT DEFAULT '#2196F3',
+        isActive INTEGER DEFAULT 1
+      )
+    """);
+
+    // Create habits table
+    await db.execute("""
+      CREATE TABLE habits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        subjectName TEXT,
+        colorHex TEXT DEFAULT '#4CAF50',
+        targetPerWeek INTEGER DEFAULT 7,
+        reminderTimeMinutes INTEGER,
+        createdAtMillis INTEGER NOT NULL,
+        isArchived INTEGER DEFAULT 0
+      )
+    """);
+
+    // Create habit_logs table
+    await db.execute("""
+      CREATE TABLE habit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        habitId INTEGER NOT NULL,
+        dateMillis INTEGER NOT NULL,
+        completed INTEGER DEFAULT 1,
+        note TEXT
+      )
+    """);
+
+    // Create reading_books table
+    await db.execute("""
+      CREATE TABLE reading_books (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        author TEXT,
+        totalPages INTEGER NOT NULL,
+        currentPage INTEGER DEFAULT 0,
+        subjectName TEXT,
+        startDateMillis INTEGER,
+        targetEndDateMillis INTEGER,
+        dailyPageGoal INTEGER DEFAULT 20,
+        minutesReadToday INTEGER DEFAULT 0,
+        totalMinutesRead INTEGER DEFAULT 0,
+        isCompleted INTEGER DEFAULT 0,
+        createdAtMillis INTEGER NOT NULL
       )
     """);
   }
@@ -1804,6 +1931,499 @@ class DatabaseHelper {
     return rows;
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // NEW CRUD: CLASS SCHEDULE (v12)
+  // ═══════════════════════════════════════════════════════════════
+
+  Future<int> insertClassSchedule(Map<String, dynamic> schedule) async {
+    final db = await database;
+    final data = {
+      'subjectName': schedule['subjectName'],
+      'dayOfWeek': schedule['dayOfWeek'],
+      'startTimeMinutes': schedule['startTimeMinutes'],
+      'endTimeMinutes': schedule['endTimeMinutes'],
+      'room': schedule['room'],
+      'colorHex': schedule['colorHex'] ?? '#2196F3',
+      'isActive': schedule['isActive'] ?? 1,
+    };
+    return db.insert('class_schedule', data);
+  }
+
+  Future<int> updateClassSchedule(int id, Map<String, dynamic> schedule) async {
+    final db = await database;
+    final data = {
+      'subjectName': schedule['subjectName'],
+      'dayOfWeek': schedule['dayOfWeek'],
+      'startTimeMinutes': schedule['startTimeMinutes'],
+      'endTimeMinutes': schedule['endTimeMinutes'],
+      'room': schedule['room'],
+      'colorHex': schedule['colorHex'] ?? '#2196F3',
+      'isActive': schedule['isActive'] ?? 1,
+    };
+    return db.update('class_schedule', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteClassSchedule(int id) async {
+    final db = await database;
+    return db.delete('class_schedule', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllClassSchedules() async {
+    final db = await database;
+    final rows = await db.query('class_schedule', orderBy: 'dayOfWeek ASC, startTimeMinutes ASC');
+    return rows;
+  }
+
+  Future<Map<String, dynamic>?> getClassScheduleById(int id) async {
+    final db = await database;
+    final rows = await db.query('class_schedule', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> getClassSchedulesForDay(int dayOfWeek) async {
+    final db = await database;
+    final rows = await db.query(
+      'class_schedule',
+      where: 'dayOfWeek = ? AND isActive = 1',
+      whereArgs: [dayOfWeek],
+      orderBy: 'startTimeMinutes ASC',
+    );
+    return rows;
+  }
+
+  Future<List<Map<String, dynamic>>> getClassSchedulesForSubject(String subjectName) async {
+    final db = await database;
+    final rows = await db.query(
+      'class_schedule',
+      where: 'subjectName = ? AND isActive = 1',
+      whereArgs: [subjectName],
+      orderBy: 'dayOfWeek ASC, startTimeMinutes ASC',
+    );
+    return rows;
+  }
+
+  Future<List<Map<String, dynamic>>> getActiveClassSchedules() async {
+    final db = await database;
+    final rows = await db.query(
+      'class_schedule',
+      where: 'isActive = 1',
+      orderBy: 'dayOfWeek ASC, startTimeMinutes ASC',
+    );
+    return rows;
+  }
+
+    Future<void> toggleClassScheduleActive(int id, bool isActive) async {
+    final db = await database;
+    await db.update(
+      'class_schedule',
+      {'isActive': isActive ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // NEW CRUD: HABITS (v12)
+  // ═══════════════════════════════════════════════════════════════
+
+  Future<int> insertHabit(Map<String, dynamic> habit) async {
+    final db = await database;
+    final data = {
+      'name': habit['name'],
+      'subjectName': habit['subjectName'],
+      'colorHex': habit['colorHex'] ?? '#4CAF50',
+      'targetPerWeek': habit['targetPerWeek'] ?? 7,
+      'reminderTimeMinutes': habit['reminderTimeMinutes'],
+      'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
+      'isArchived': habit['isArchived'] ?? 0,
+    };
+    return db.insert('habits', data);
+  }
+
+  Future<int> updateHabit(int id, Map<String, dynamic> habit) async {
+    final db = await database;
+    final data = {
+      'name': habit['name'],
+      'subjectName': habit['subjectName'],
+      'colorHex': habit['colorHex'] ?? '#4CAF50',
+      'targetPerWeek': habit['targetPerWeek'] ?? 7,
+      'reminderTimeMinutes': habit['reminderTimeMinutes'],
+      'isArchived': habit['isArchived'] ?? 0,
+    };
+    return db.update('habits', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteHabit(int id) async {
+    final db = await database;
+    // Cascade delete habit logs
+    await db.delete('habit_logs', where: 'habitId = ?', whereArgs: [id]);
+    return db.delete('habits', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllHabits({bool includeArchived = false}) async {
+    final db = await database;
+    if (includeArchived) {
+      final rows = await db.query('habits', orderBy: 'createdAtMillis DESC');
+      return rows;
+    }
+    final rows = await db.query(
+      'habits',
+      where: 'isArchived = 0',
+      orderBy: 'createdAtMillis DESC',
+    );
+    return rows;
+  }
+
+  Future<Map<String, dynamic>?> getHabitById(int id) async {
+    final db = await database;
+    final rows = await db.query('habits', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> getHabitsBySubject(String subjectName) async {
+    final db = await database;
+    final rows = await db.query(
+      'habits',
+      where: 'subjectName = ? AND isArchived = 0',
+      whereArgs: [subjectName],
+      orderBy: 'createdAtMillis DESC',
+    );
+    return rows;
+  }
+
+  Future<void> archiveHabit(int id, bool archive) async {
+    final db = await database;
+    await db.update(
+      'habits',
+      {'isArchived': archive ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // NEW CRUD: HABIT LOGS (v12)
+  // ═══════════════════════════════════════════════════════════════
+
+  Future<int> insertHabitLog(Map<String, dynamic> log) async {
+    final db = await database;
+    final data = {
+      'habitId': log['habitId'],
+      'dateMillis': log['dateMillis'],
+      'completed': log['completed'] ?? 1,
+      'note': log['note'],
+    };
+    return db.insert('habit_logs', data);
+  }
+
+  Future<int> updateHabitLog(int id, Map<String, dynamic> log) async {
+    final db = await database;
+    final data = {
+      'habitId': log['habitId'],
+      'dateMillis': log['dateMillis'],
+      'completed': log['completed'] ?? 1,
+      'note': log['note'],
+    };
+    return db.update('habit_logs', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteHabitLog(int id) async {
+    final db = await database;
+    return db.delete('habit_logs', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getHabitLogsForHabit(int habitId) async {
+    final db = await database;
+    final rows = await db.query(
+      'habit_logs',
+      where: 'habitId = ?',
+      whereArgs: [habitId],
+      orderBy: 'dateMillis DESC',
+    );
+    return rows;
+  }
+
+  Future<Map<String, dynamic>?> getHabitLogForDate(int habitId, int dateMillis) async {
+    final db = await database;
+    final endOfDay = dateMillis + const Duration(days: 1).inMilliseconds;
+    final rows = await db.query(
+      'habit_logs',
+      where: 'habitId = ? AND dateMillis >= ? AND dateMillis < ?',
+      whereArgs: [habitId, dateMillis, endOfDay],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> getHabitLogsForDateRange(int habitId, int startMillis, int endMillis) async {
+    final db = await database;
+    final rows = await db.query(
+      'habit_logs',
+      where: 'habitId = ? AND dateMillis >= ? AND dateMillis < ?',
+      whereArgs: [habitId, startMillis, endMillis],
+      orderBy: 'dateMillis ASC',
+    );
+    return rows;
+  }
+
+  Future<int> getHabitCompletionCountForWeek(int habitId, int weekStartMillis) async {
+    final db = await database;
+    final weekEndMillis = weekStartMillis + const Duration(days: 7).inMilliseconds;
+    final result = await db.rawQuery("""
+      SELECT COUNT(*) as count FROM habit_logs
+      WHERE habitId = ? AND dateMillis >= ? AND dateMillis < ? AND completed = 1
+    """, [habitId, weekStartMillis, weekEndMillis]);
+    return (result.first['count'] as int?) ?? 0;
+  }
+
+  Future<int> getHabitStreak(int habitId) async {
+    final db = await database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    
+    // Get all completed logs ordered by date descending
+    final rows = await db.query(
+      'habit_logs',
+      where: 'habitId = ? AND completed = 1',
+      whereArgs: [habitId],
+      orderBy: 'dateMillis DESC',
+    );
+    
+    if (rows.isEmpty) return 0;
+    
+    int streak = 0;
+    int expectedDateMillis = todayStart;
+    
+    for (final row in rows) {
+      final dateMillis = row['dateMillis'] as int;
+      // Normalize to start of day
+      final date = DateTime.fromMillisecondsSinceEpoch(dateMillis);
+      final dayStart = DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
+      
+      if (dayStart == expectedDateMillis) {
+        streak++;
+        expectedDateMillis -= const Duration(days: 1).inMilliseconds;
+      } else if (dayStart < expectedDateMillis) {
+        // Gap found, stop counting
+        break;
+      }
+      // If same day duplicate, skip (don't increment streak but continue)
+    }
+    
+    return streak;
+  }
+
+  Future<Map<String, dynamic>> getHabitWeeklyStats(int habitId, int weekStartMillis) async {
+    final db = await database;
+    final weekEndMillis = weekStartMillis + const Duration(days: 7).inMilliseconds;
+    
+    final completedResult = await db.rawQuery("""
+      SELECT COUNT(*) as completed FROM habit_logs
+      WHERE habitId = ? AND dateMillis >= ? AND dateMillis < ? AND completed = 1
+    """, [habitId, weekStartMillis, weekEndMillis]);
+    
+    final totalResult = await db.rawQuery("""
+      SELECT COUNT(*) as total FROM habit_logs
+      WHERE habitId = ? AND dateMillis >= ? AND dateMillis < ?
+    """, [habitId, weekStartMillis, weekEndMillis]);
+    
+    final habit = await getHabitById(habitId);
+    final targetPerWeek = (habit?['targetPerWeek'] as int?) ?? 7;
+    
+    return {
+      'completed': (completedResult.first['completed'] as int?) ?? 0,
+      'total': (totalResult.first['total'] as int?) ?? 0,
+      'targetPerWeek': targetPerWeek,
+      'percentage': targetPerWeek > 0 
+          ? (((completedResult.first['completed'] as int?) ?? 0) / targetPerWeek * 100).round()
+          : 0,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // NEW CRUD: READING BOOKS (v12)
+  // ═══════════════════════════════════════════════════════════════
+
+  Future<int> insertReadingBook(Map<String, dynamic> book) async {
+    final db = await database;
+    final data = {
+      'title': book['title'],
+      'author': book['author'],
+      'totalPages': book['totalPages'],
+      'currentPage': book['currentPage'] ?? 0,
+      'subjectName': book['subjectName'],
+      'startDateMillis': book['startDateMillis'],
+      'targetEndDateMillis': book['targetEndDateMillis'],
+      'dailyPageGoal': book['dailyPageGoal'] ?? 20,
+      'minutesReadToday': book['minutesReadToday'] ?? 0,
+      'totalMinutesRead': book['totalMinutesRead'] ?? 0,
+      'isCompleted': book['isCompleted'] ?? 0,
+      'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
+    };
+    return db.insert('reading_books', data);
+  }
+
+  Future<int> updateReadingBook(int id, Map<String, dynamic> book) async {
+    final db = await database;
+    final data = {
+      'title': book['title'],
+      'author': book['author'],
+      'totalPages': book['totalPages'],
+      'currentPage': book['currentPage'] ?? 0,
+      'subjectName': book['subjectName'],
+      'startDateMillis': book['startDateMillis'],
+      'targetEndDateMillis': book['targetEndDateMillis'],
+      'dailyPageGoal': book['dailyPageGoal'] ?? 20,
+      'minutesReadToday': book['minutesReadToday'] ?? 0,
+      'totalMinutesRead': book['totalMinutesRead'] ?? 0,
+      'isCompleted': book['isCompleted'] ?? 0,
+    };
+    return db.update('reading_books', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteReadingBook(int id) async {
+    final db = await database;
+    return db.delete('reading_books', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllReadingBooks({bool includeCompleted = true}) async {
+    final db = await database;
+    if (includeCompleted) {
+      final rows = await db.query('reading_books', orderBy: 'createdAtMillis DESC');
+      return rows;
+    }
+    final rows = await db.query(
+      'reading_books',
+      where: 'isCompleted = 0',
+      orderBy: 'createdAtMillis DESC',
+    );
+    return rows;
+  }
+
+  Future<Map<String, dynamic>?> getReadingBookById(int id) async {
+    final db = await database;
+    final rows = await db.query('reading_books', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> getReadingBooksBySubject(String subjectName) async {
+    final db = await database;
+    final rows = await db.query(
+      'reading_books',
+      where: 'subjectName = ?',
+      whereArgs: [subjectName],
+      orderBy: 'createdAtMillis DESC',
+    );
+    return rows;
+  }
+
+  Future<void> updateReadingProgress(int id, int currentPage, int minutesRead) async {
+    final db = await database;
+    final book = await getReadingBookById(id);
+    if (book == null) return;
+    
+    final totalPages = (book['totalPages'] as int?) ?? 1;
+    final isCompleted = currentPage >= totalPages;
+    
+    await db.update(
+      'reading_books',
+      {
+        'currentPage': currentPage,
+        'minutesReadToday': (book['minutesReadToday'] as int?) ?? 0 + minutesRead,
+        'totalMinutesRead': (book['totalMinutesRead'] as int?) ?? 0 + minutesRead,
+        'isCompleted': isCompleted ? 1 : 0,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> resetDailyReadingStats() async {
+    final db = await database;
+    await db.update(
+      'reading_books',
+      {'minutesReadToday': 0},
+    );
+  }
+
+  Future<Map<String, dynamic>> getReadingProgress(int bookId) async {
+    final db = await database;
+    final book = await getReadingBookById(bookId);
+    if (book == null) {
+      return {
+        'percentage': 0,
+        'pagesLeft': 0,
+        'daysLeft': 0,
+        'pagesPerDayNeeded': 0,
+        'onTrack': false,
+      };
+    }
+    
+    final totalPages = (book['totalPages'] as int?) ?? 1;
+    final currentPage = (book['currentPage'] as int?) ?? 0;
+    final dailyGoal = (book['dailyPageGoal'] as int?) ?? 20;
+    final targetEndMillis = book['targetEndDateMillis'] as int?;
+    
+    final percentage = totalPages > 0 ? (currentPage / totalPages * 100).round() : 0;
+    final pagesLeft = totalPages - currentPage;
+    
+    int daysLeft = 0;
+    double pagesPerDayNeeded = 0;
+    bool onTrack = true;
+    
+    if (targetEndMillis != null && pagesLeft > 0) {
+      final now = DateTime.now();
+      final targetDate = DateTime.fromMillisecondsSinceEpoch(targetEndMillis);
+      daysLeft = targetDate.difference(now).inDays;
+      if (daysLeft > 0) {
+        pagesPerDayNeeded = pagesLeft / daysLeft;
+        onTrack = pagesPerDayNeeded <= dailyGoal;
+      } else {
+        onTrack = false;
+      }
+    }
+    
+    return {
+      'percentage': percentage,
+      'pagesLeft': pagesLeft,
+      'daysLeft': daysLeft,
+      'pagesPerDayNeeded': pagesPerDayNeeded.ceil(),
+      'dailyPageGoal': dailyGoal,
+      'onTrack': onTrack,
+      'totalMinutesRead': book['totalMinutesRead'] ?? 0,
+      'minutesReadToday': book['minutesReadToday'] ?? 0,
+    };
+  }
+
+  Future<Map<String, dynamic>> getOverallReadingStats() async {
+    final db = await database;
+    final books = await getAllReadingBooks();
+    
+    int totalBooks = books.length;
+    int completedBooks = 0;
+    int totalPagesRead = 0;
+    int totalMinutesRead = 0;
+    
+    for (final book in books) {
+      if ((book['isCompleted'] as int?) == 1) completedBooks++;
+      totalPagesRead += (book['currentPage'] as int?) ?? 0;
+      totalMinutesRead += (book['totalMinutesRead'] as int?) ?? 0;
+    }
+    
+    return {
+      'totalBooks': totalBooks,
+      'completedBooks': completedBooks,
+      'inProgressBooks': totalBooks - completedBooks,
+      'totalPagesRead': totalPagesRead,
+      'totalMinutesRead': totalMinutesRead,
+      'completionRate': totalBooks > 0 ? (completedBooks / totalBooks * 100).round() : 0,
+    };
+  }
+
   // ============================================
   // COMPREHENSIVE EXPORT/IMPORT (FIX for Issue 56)
   // ============================================
@@ -1834,6 +2454,10 @@ class DatabaseHelper {
       'timetable_classes',
       'timetable_tasks',
       'academic_calendar',
+      'class_schedule',
+      'habits',
+      'habit_logs',
+      'reading_books',
     ];
 
     for (final table in tables) {
@@ -1881,3 +2505,4 @@ class DatabaseHelper {
     await db.execute('VACUUM');
   }
 }
+
