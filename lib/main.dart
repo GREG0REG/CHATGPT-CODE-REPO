@@ -19,6 +19,8 @@ import 'theme/app_themes.dart';
 const String kWidgetRefreshTaskName = 'event_countdown_widget_refresh';
 const String kWidgetRefreshFrequentTaskName = 'event_countdown_widget_frequent';
 const String kBackupTaskName = 'event_countdown_weekly_backup';
+const String kAttendanceWidgetRefreshTaskName = 'event_countdown_attendance_widget_refresh';
+const String kTimetableWidgetRefreshTaskName = 'event_countdown_timetable_widget_refresh';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -37,6 +39,8 @@ void callbackDispatcher() {
         }
         await WidgetService.refreshWidget();
         await WidgetService.refreshPomodoroWidget();
+        await WidgetService.refreshAttendanceWidget();
+        await WidgetService.refreshTimetableWidget();
         return true;
       } catch (e) {
         debugPrint('Background widget refresh error: $e');
@@ -46,9 +50,27 @@ void callbackDispatcher() {
       try {
         await WidgetService.refreshWidget();
         await WidgetService.refreshPomodoroWidget();
+        await WidgetService.refreshAttendanceWidget();
+        await WidgetService.refreshTimetableWidget();
         return true;
       } catch (e) {
         debugPrint('Background widget refresh error: $e');
+        return false;
+      }
+    } else if (task == kAttendanceWidgetRefreshTaskName) {
+      try {
+        await WidgetService.refreshAttendanceWidget();
+        return true;
+      } catch (e) {
+        debugPrint('Attendance widget refresh error: $e');
+        return false;
+      }
+    } else if (task == kTimetableWidgetRefreshTaskName) {
+      try {
+        await WidgetService.refreshTimetableWidget();
+        return true;
+      } catch (e) {
+        debugPrint('Timetable widget refresh error: $e');
         return false;
       }
     } else if (task == kBackupTaskName) {
@@ -95,11 +117,29 @@ Future<void> main() async {
     existingWorkPolicy: ExistingWorkPolicy.keep,
   );
 
+  await Workmanager().registerPeriodicTask(
+    kAttendanceWidgetRefreshTaskName,
+    kAttendanceWidgetRefreshTaskName,
+    frequency: const Duration(hours: 6),
+    constraints: Constraints(networkType: NetworkType.not_required),
+    existingWorkPolicy: ExistingWorkPolicy.keep,
+  );
+
+  await Workmanager().registerPeriodicTask(
+    kTimetableWidgetRefreshTaskName,
+    kTimetableWidgetRefreshTaskName,
+    frequency: const Duration(hours: 6),
+    constraints: Constraints(networkType: NetworkType.not_required),
+    existingWorkPolicy: ExistingWorkPolicy.keep,
+  );
+
   await BackupService.registerWeeklyBackup();
   
   try {
     await WidgetService.refreshWidget();
     await WidgetService.refreshPomodoroWidget();
+    await WidgetService.refreshAttendanceWidget();
+    await WidgetService.refreshTimetableWidget();
   } catch (e) {
     debugPrint('Widget refresh error: $e');
   }
@@ -142,6 +182,8 @@ class EventCountdownAppState extends State<EventCountdownApp>
     if (state == AppLifecycleState.resumed) {
       WidgetService.refreshWidget();
       WidgetService.refreshPomodoroWidget();
+      WidgetService.refreshAttendanceWidget();
+      WidgetService.refreshTimetableWidget();
       PomodoroService.instance.recalculateFromEndTime();
     }
   }
@@ -202,6 +244,8 @@ class EventCountdownAppState extends State<EventCountdownApp>
         await NotificationService.instance.rescheduleAll(events);
         await WidgetService.refreshWidget();
         await WidgetService.refreshPomodoroWidget();
+        await WidgetService.refreshAttendanceWidget();
+        await WidgetService.refreshTimetableWidget();
 
         if (mounted) {
           ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
@@ -242,7 +286,7 @@ class EventCountdownAppState extends State<EventCountdownApp>
     return DynamicColorBuilder(
       builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
         return MaterialApp(
-          title: 'Event Countdown',
+          title: 'StudyFlow',
           debugShowCheckedModeBanner: false,
           navigatorKey: navigatorKey,
           themeMode: _themeMode,
