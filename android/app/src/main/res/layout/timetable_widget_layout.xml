@@ -8,6 +8,7 @@
     android:padding="12dp"
     android:background="@drawable/widget_glass_background">
 
+    <!-- Header: Day name + Date -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -53,7 +54,7 @@
 
     <!-- Class row 1 -->
     <LinearLayout
-        android:id="@+id/timetable_class_1"
+        android:id="@+id/timetable_class_row_1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -62,7 +63,7 @@
         android:visibility="gone">
 
         <View
-            android:id="@+id/timetable_class_1_dot"
+            android:id="@+id/timetable_class_dot_1"
             android:layout_width="8dp"
             android:layout_height="8dp"
             android:background="@drawable/widget_dot_circle" />
@@ -75,7 +76,7 @@
             android:layout_marginStart="10dp">
 
             <TextView
-                android:id="@+id/timetable_class_1_subject"
+                android:id="@+id/timetable_class_subject_1"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Subject"
@@ -86,26 +87,20 @@
                 android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/timetable_class_1_time"
+                android:id="@+id/timetable_class_info_1"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="09:00 - 10:00"
+                android:text="9:00 - 10:00  •  Math  •  Hall A  •  25 min"
                 android:textColor="#AAFFFFFF"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/timetable_class_1_room"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Room 101"
-                android:textColor="#88FFFFFF"
-                android:textSize="10sp" />
+                android:textSize="11sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
         </LinearLayout>
     </LinearLayout>
 
     <!-- Class row 2 -->
     <LinearLayout
-        android:id="@+id/timetable_class_2"
+        android:id="@+id/timetable_class_row_2"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -114,7 +109,7 @@
         android:visibility="gone">
 
         <View
-            android:id="@+id/timetable_class_2_dot"
+            android:id="@+id/timetable_class_dot_2"
             android:layout_width="8dp"
             android:layout_height="8dp"
             android:background="@drawable/widget_dot_circle" />
@@ -127,7 +122,7 @@
             android:layout_marginStart="10dp">
 
             <TextView
-                android:id="@+id/timetable_class_2_subject"
+                android:id="@+id/timetable_class_subject_2"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Subject"
@@ -138,26 +133,20 @@
                 android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/timetable_class_2_time"
+                android:id="@+id/timetable_class_info_2"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="09:00 - 10:00"
+                android:text="9:00 - 10:00  •  Math  •  Hall A  •  25 min"
                 android:textColor="#AAFFFFFF"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/timetable_class_2_room"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Room 101"
-                android:textColor="#88FFFFFF"
-                android:textSize="10sp" />
+                android:textSize="11sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
         </LinearLayout>
     </LinearLayout>
 
     <!-- Class row 3 -->
     <LinearLayout
-        android:id="@+id/timetable_class_3"
+        android:id="@+id/timetable_class_row_3"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -166,7 +155,7 @@
         android:visibility="gone">
 
         <View
-            android:id="@+id/timetable_class_3_dot"
+            android:id="@+id/timetable_class_dot_3"
             android:layout_width="8dp"
             android:layout_height="8dp"
             android:background="@drawable/widget_dot_circle" />
@@ -179,7 +168,7 @@
             android:layout_marginStart="10dp">
 
             <TextView
-                android:id="@+id/timetable_class_3_subject"
+                android:id="@+id/timetable_class_subject_3"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Subject"
@@ -190,20 +179,14 @@
                 android:ellipsize="end" />
 
             <TextView
-                android:id="@+id/timetable_class_3_time"
+                android:id="@+id/timetable_class_info_3"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="09:00 - 10:00"
+                android:text="9:00 - 10:00  •  Math  •  Hall A  •  25 min"
                 android:textColor="#AAFFFFFF"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/timetable_class_3_room"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Room 101"
-                android:textColor="#88FFFFFF"
-                android:textSize="10sp" />
+                android:textSize="11sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
         </LinearLayout>
     </LinearLayout>
 
