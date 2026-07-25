@@ -312,18 +312,23 @@ class ExportImportService {
       throw Exception('File not found: $filePath');
     }
 
-    Map<String, dynamic> decoded;
+    late final Map<String, dynamic> decoded;
 
     if (_isZipFile(filePath)) {
       // New .ecbackup / .zip format
       final zipData = await _readZipFile(filePath);
       final exportType = zipData['exportType'] as String;
-      decoded = zipData['data'] as Map<String, dynamic>;
+      final rawData = zipData['data'];
 
       if (exportType != 'full') {
         throw Exception(
             'This backup is an events-only export. Please use "Import Events" instead.');
       }
+
+      if (rawData is! Map) {
+        throw Exception('Invalid export format: expected a map inside .ecbackup');
+      }
+      decoded = rawData.cast<String, dynamic>();
     } else {
       // Legacy .json format — backward compatibility
       final contents = await file.readAsString();
@@ -335,7 +340,7 @@ class ExportImportService {
       if (raw is! Map) {
         throw Exception('Invalid export format: expected a map');
       }
-      decoded = raw;
+      decoded = raw.cast<String, dynamic>();
 
       if (kDebugMode) {
         debugPrint('Importing legacy .json file (deprecated format)');
