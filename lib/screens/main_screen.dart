@@ -1,8 +1,5 @@
 // FILE: lib/screens/main_screen.dart
-// COMPLETE REPLACEMENT — copy and paste entire file
-
-// CHATGPT-CODE-REPO-TEST/lib/screens/main_screen.dart
-// UPDATED - Side drawer navigation + Attendance + Timetable
+// COMPLETE REPLACEMENT — Fixed double headings
 
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
@@ -17,8 +14,6 @@ import 'attendance_screen.dart';
 import 'timetable_screen.dart';
 import 'settings_screen.dart';
 
-/// Side-drawer host for all primary destinations.
-/// Uses IndexedStack so that all screens maintain their state across navigation.
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -96,7 +91,7 @@ class _MainScreenState extends State<MainScreen>
     if (_currentIndex != index) {
       setState(() => _currentIndex = index);
     }
-    Navigator.of(context).pop(); // Close drawer
+    Navigator.of(context).pop();
   }
 
   String _getAppBarTitle() {
@@ -121,7 +116,6 @@ class _MainScreenState extends State<MainScreen>
         child: SafeArea(
           child: Column(
             children: [
-              // Header
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -188,20 +182,14 @@ class _MainScreenState extends State<MainScreen>
                   ],
                 ),
               ),
-
-              // Main section
               Expanded(
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
                     const SizedBox(height: 8),
                     ..._mainItems.map((item) => _buildDrawerItem(item, cs)),
-
                     const Divider(height: 24, indent: 16, endIndent: 16),
-
-                    // Tracking expandable section
                     _buildTrackingHeader(cs),
-
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       curve: Curves.easeOutCubic,
@@ -220,13 +208,10 @@ class _MainScreenState extends State<MainScreen>
                             : const SizedBox.shrink(),
                       ),
                     ),
-
                     const SizedBox(height: 8),
                   ],
                 ),
               ),
-
-              // Bottom section
               const Divider(height: 1),
               ListTile(
                 leading: Icon(Icons.settings, color: cs.onSurfaceVariant),
