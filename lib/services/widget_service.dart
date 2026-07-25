@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:home_widget/home_widget.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import '../database_helper.dart';
 import '../models/event.dart';
@@ -10,6 +10,8 @@ import 'settings_service.dart';
 class WidgetService {
   WidgetService._internal();
   static final WidgetService instance = WidgetService._internal();
+
+  static const MethodChannel _channel = MethodChannel('com.example.event_countdown/widget');
 
   // ==================== EXISTING: Event Widget ====================
   static Future<void> refreshWidget() async {
@@ -92,10 +94,7 @@ class WidgetService {
       }
 
       await _writeWidgetData('widget_data.json', data);
-      await HomeWidget.updateWidget(
-        name: 'EventCountdownWidgetProvider',
-        androidName: 'EventCountdownWidgetProvider',
-      );
+      await _sendWidgetBroadcast('com.example.event_countdown.EVENT_WIDGET_TICK');
     } catch (e) {
       debugPrint('Widget refresh error: $e');
     }
@@ -104,10 +103,7 @@ class WidgetService {
   // ==================== EXISTING: Pomodoro Widget ====================
   static Future<void> refreshPomodoroWidget() async {
     try {
-      await HomeWidget.updateWidget(
-        name: 'PomodoroWidgetProvider',
-        androidName: 'PomodoroWidgetProvider',
-      );
+      await _sendWidgetBroadcast('com.example.event_countdown.POMODORO_WIDGET_TICK');
     } catch (e) {
       debugPrint('Pomodoro widget refresh error: $e');
     }
@@ -123,10 +119,8 @@ class WidgetService {
       int percentage = 0;
 
       if (subjects.isNotEmpty) {
-        // Pick first subject or most recently viewed (stored in prefs)
         targetSubject = subjects.first;
         
-        // Try to get last viewed subject from settings
         final lastSubject = await SettingsService.instance.getLastViewedAttendanceSubject();
         if (lastSubject != null && subjects.contains(lastSubject)) {
           targetSubject = lastSubject;
@@ -134,8 +128,6 @@ class WidgetService {
 
         final stats = await DatabaseHelper.instance.getAttendanceStatsForSubject(targetSubject);
         attended = (stats['present'] as int?) ?? 0;
-        final absent = (stats['absent'] as int?) ?? 0;
-        final late = (stats['late'] as int?) ?? 0;
         final excused = (stats['excused'] as int?) ?? 0;
         total = (stats['total'] as int?) ?? 0;
         
@@ -152,16 +144,7 @@ class WidgetService {
       };
 
       await _writeWidgetData('attendance_widget_data.json', data);
-
-      // Send broadcast to update Android widget
-      try {
-        await HomeWidget.updateWidget(
-          name: 'AttendanceWidgetProvider',
-          androidName: 'AttendanceWidgetProvider',
-        );
-      } catch (e) {
-        debugPrint('HomeWidget attendance update error: $e');
-      }
+      await _sendWidgetBroadcast('com.example.event_countdown.ATTENDANCE_WIDGET_REFRESH');
     } catch (e) {
       debugPrint('Attendance widget refresh error: $e');
     }
@@ -174,7 +157,6 @@ class WidgetService {
       final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       final todayName = dayNames[now.weekday - 1];
       
-      // Get today's classes from quick_notes with TT_ prefix
       final notes = await DatabaseHelper.instance.getAllQuickNotes();
       final dayPrefix = 'TT_$todayName';
       
@@ -195,7 +177,6 @@ class WidgetService {
         }
       }
 
-      // Sort by time slot
       classesList.sort((a, b) => (a['timeSlot'] as String).compareTo(b['timeSlot'] as String));
 
       final data = <String, dynamic>{
@@ -205,15 +186,7 @@ class WidgetService {
       };
 
       await _writeWidgetData('timetable_widget_data.json', data);
-
-      try {
-        await HomeWidget.updateWidget(
-          name: 'TimetableWidgetProvider',
-          androidName: 'TimetableWidgetProvider',
-        );
-      } catch (e) {
-        debugPrint('HomeWidget timetable update error: $e');
-      }
+      await _sendWidgetBroadcast('com.example.event_countdown.TIMETABLE_WIDGET_REFRESH');
     } catch (e) {
       debugPrint('Timetable widget refresh error: $e');
     }
@@ -227,6 +200,14 @@ class WidgetService {
       await file.writeAsString(jsonEncode(data));
     } catch (e) {
       debugPrint('Widget data write error: $e');
+    }
+  }
+
+  static Future<void> _sendWidgetBroadcast(String action) async {
+    try {
+      await _channel.invokeMethod('sendBroadcast', {'action': action});
+    } catch (e) {
+      debugPrint('Widget broadcast error: $e');
     }
   }
 
