@@ -232,11 +232,6 @@ class WidgetService {
         
         // Calculate "can miss X more" text
         if (isAtRisk) {
-          // How many more classes can they miss before dropping below threshold?
-          // (attended / (total + x)) * 100 = threshold
-          // attended / (total + x) = threshold / 100
-          // total + x = attended / (threshold / 100)
-          // x = (attended / (threshold / 100)) - total
           final canMiss = ((attended / (threshold / 100)) - total).floor();
           if (canMiss <= 0) {
             canMissText = 'CRITICAL: Cannot miss any more classes!';
@@ -246,7 +241,6 @@ class WidgetService {
             canMissText = 'Can miss $canMiss more classes';
           }
         } else {
-          // How many more classes can they miss while staying above threshold?
           final canMiss = ((attended / (threshold / 100)) - total).floor();
           if (canMiss <= 0) {
             canMissText = 'At threshold - cannot miss any';
@@ -388,9 +382,11 @@ class WidgetService {
   // ==================== HELPER METHODS ====================
   static Future<void> _writeWidgetData(String filename, Map<String, dynamic> data) async {
     try {
-      final dir = await getApplicationSupportDirectory();
+      // FIXED: Write to filesDir so Android Kotlin side can read from context.filesDir
+      final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/$filename');
       await file.writeAsString(jsonEncode(data));
+      debugPrint('Widget data written to: ${file.path}');
     } catch (e) {
       debugPrint('Widget data write error: $e');
     }
