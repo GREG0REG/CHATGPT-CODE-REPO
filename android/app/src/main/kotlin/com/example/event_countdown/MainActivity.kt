@@ -16,10 +16,6 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "updateWidget" -> {
                     try {
-                        // CRITICAL FIX: Direct static call instead of unreliable broadcast.
-                        // Broadcasts sent from the app to its own widget are often swallowed
-                        // by the system. Calling the companion object method directly is
-                        // guaranteed to execute in the same process.
                         EventCountdownWidgetProvider.updateAllWidgets(this)
                         result.success("ok")
                     } catch (e: Exception) {
@@ -28,8 +24,23 @@ class MainActivity : FlutterActivity() {
                 }
                 "updatePomodoroWidget" -> {
                     try {
-                        // CRITICAL FIX: Direct static call instead of broadcast.
                         PomodoroWidgetProvider.updateAllWidgets(this)
+                        result.success("ok")
+                    } catch (e: Exception) {
+                        result.error("ERR", e.message, null)
+                    }
+                }
+                "updateAttendanceWidget" -> {
+                    try {
+                        AttendanceWidgetProvider.updateAllWidgets(this)
+                        result.success("ok")
+                    } catch (e: Exception) {
+                        result.error("ERR", e.message, null)
+                    }
+                }
+                "updateTimetableWidget" -> {
+                    try {
+                        TimetableWidgetProvider.updateAllWidgets(this)
                         result.success("ok")
                     } catch (e: Exception) {
                         result.error("ERR", e.message, null)
