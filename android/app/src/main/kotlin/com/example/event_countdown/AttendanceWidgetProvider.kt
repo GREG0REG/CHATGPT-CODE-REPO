@@ -22,12 +22,12 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
             widgetId: Int
         ) {
             try {
-                var subjectName = "No Subject"
+                var subjectName = "No Subjects"
                 var attended = 0
                 var total = 0
                 var percentage = 0
                 var statusColorStr = "grey"
-                var canMissText = "No data"
+                var canMissText = "Add subjects to track attendance"
 
                 try {
                     val file = File(context.filesDir, ATTENDANCE_DATA_FILE)
@@ -38,7 +38,7 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                         total = json.optInt("total", 0)
                         percentage = json.optInt("percentage", 0)
                         statusColorStr = json.optString("statusColor", "grey")
-                        canMissText = json.optString("canMissText", "No data")
+                        canMissText = json.optString("canMissText", canMissText)
                     } else {
                         android.util.Log.w("AttendanceWidget", "Data file not found: ${file.absolutePath}")
                     }
@@ -48,34 +48,42 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
 
                 val views = RemoteViews(context.packageName, R.layout.attendance_widget_layout)
 
+                // Subject name
                 views.setTextViewText(R.id.attendance_widget_subject, subjectName)
-                views.setTextViewText(R.id.attendance_widget_ratio, "$attended/$total")
+
+                // Ratio: attended/total
+                views.setTextViewText(R.id.attendance_widget_ratio, "$attended / $total")
+
+                // Percentage inside the ring
                 views.setTextViewText(R.id.attendance_widget_percent, "$percentage%")
+
+                // Progress ring (0-100)
                 views.setProgressBar(R.id.attendance_widget_progress, 100, percentage.coerceIn(0, 100), false)
 
-                // Use status color from JSON (red/orange/yellow/green/grey)
-                val colorHex = when (statusColorStr) {
-                    "red" -> "#FFF44336"
-                    "orange" -> "#FFFF9800"
-                    "yellow" -> "#FFFFEB3B"
-                    "green" -> "#FF4CAF50"
-                    else -> "#FF888888"
+                // Color logic: green >=75%, orange 60-74%, red <60%
+                val (progressDrawableRes, statusColorHex) = when {
+                    percentage >= 75 -> Pair(
+                        R.drawable.widget_circular_progress_green,
+                        "#FF4CAF50"
+                    )
+                    percentage >= 60 -> Pair(
+                        R.drawable.widget_circular_progress_orange,
+                        "#FFFF9800"
+                    )
+                    else -> Pair(
+                        R.drawable.widget_circular_progress_red,
+                        "#FFF44336"
+                    )
                 }
 
-                views.setTextViewText(R.id.attendance_widget_status, canMissText)
-                views.setTextColor(R.id.attendance_widget_status, Color.parseColor(colorHex))
-
-                // Progress ring color
-                val progressDrawableRes = when (statusColorStr) {
-                    "red" -> R.drawable.widget_circular_progress_red
-                    "orange" -> R.drawable.widget_circular_progress_orange
-                    "yellow" -> R.drawable.widget_circular_progress_orange
-                    "green" -> R.drawable.widget_circular_progress_green
-                    else -> R.drawable.widget_circular_progress_green
-                }
+                // Apply progress drawable
                 views.setInt(R.id.attendance_widget_progress, "setProgressDrawable", progressDrawableRes)
 
-                // Launch intent
+                // Risk text ("X left" or "Can miss Y more classes")
+                views.setTextViewText(R.id.attendance_widget_status, canMissText)
+                views.setTextColor(R.id.attendance_widget_status, Color.parseColor(statusColorHex))
+
+                // Tap opens app to /attendance
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 if (launchIntent != null) {
                     launchIntent.putExtra("route", "/attendance")
