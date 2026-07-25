@@ -57,5 +57,13 @@ class MainActivity : FlutterActivity() {
                         result.error("ERR", e.message, null)
              }  
          }
+                "updateReadingWidget" -> {
+                    try {
+                        ReadingWidgetProvider.updateAllWidgets(this)
+                        result.success("ok")
+                    } catch (e: Exception) {
+                        result.error("ERR", e.message, null)
+           } 
+        }
     }
 }
