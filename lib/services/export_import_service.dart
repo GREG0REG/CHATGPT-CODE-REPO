@@ -8,9 +8,368 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:workmanager/workmanager.dart';
 
 import '../database_helper.dart';
 import '../models/event.dart';
+
+// ============================================================================
+// DATA MODELS FOR ATTENDANCE & TIMETABLE
+// ============================================================================
+
+/// Represents a single attendance record
+class AttendanceRecord {
+  final String subject;
+  final DateTime date;
+  final String status; // 'present', 'absent', 'late', 'excused'
+  final String? note;
+
+  AttendanceRecord({
+    required this.subject,
+    required this.date,
+    required this.status,
+    this.note,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'subject': subject,
+        'date': date.toIso8601String(),
+        'status': status,
+        'note': note,
+      };
+
+  factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
+    return AttendanceRecord(
+      subject: json['subject'] as String,
+      date: DateTime.parse(json['date'] as String),
+      status: json['status'] as String,
+      note: json['note'] as String?,
+    );
+  }
+
+  List<String> toCsvRow() => [
+        subject,
+        _formatDate(date),
+        status,
+        note ?? '',
+      ];
+
+  static List<String> get csvHeaders => ['Subject', 'Date', 'Status', 'Note'];
+
+  static AttendanceRecord fromCsvRow(List<String> row) {
+    if (row.length < 3) {
+      throw Exception('CSV row must have at least 3 columns: subject, date, status');
+    }
+    return AttendanceRecord(
+      subject: row[0].trim(),
+      date: _parseDate(row[1].trim()),
+      status: row[2].trim().toLowerCase(),
+      note: row.length > 3 ? row[3].trim() : null,
+    );
+  }
+
+  static String _formatDate(DateTime dt) =>
+      '${dt.year}-${_two(dt.month)}-${_two(dt.day)}';
+
+  static DateTime _parseDate(String s) {
+    // Try ISO format first
+    try {
+      return DateTime.parse(s);
+    } catch (_) {}
+    // Try yyyy-MM-dd
+    final parts = s.split('-');
+    if (parts.length == 3) {
+      return DateTime(
+        int.parse(parts[0]),
+        int.parse(parts[1]),
+        int.parse(parts[2]),
+      );
+    }
+    throw Exception('Cannot parse date: $s');
+  }
+
+  static String _two(int n) => n.toString().padLeft(2, '0');
+}
+
+/// Represents a single timetable entry
+class TimetableEntry {
+  final String day; // e.g., 'Monday', 'Tuesday', or '1', '2', etc.
+  final String time; // e.g., '09:00 - 10:30'
+  final String subject;
+  final String? room;
+  final String? professor;
+
+  TimetableEntry({
+    required this.day,
+    required this.time,
+    required this.subject,
+    this.room,
+    this.professor,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'day': day,
+        'time': time,
+        'subject': subject,
+        'room': room,
+        'professor': professor,
+      };
+
+  factory TimetableEntry.fromJson(Map<String, dynamic> json) {
+    return TimetableEntry(
+      day: json['day'] as String,
+      time: json['time'] as String,
+      subject: json['subject'] as String,
+      room: json['room'] as String?,
+      professor: json['professor'] as String?,
+    );
+  }
+
+  List<String> toCsvRow() => [
+        day,
+        time,
+        subject,
+        room ?? '',
+        professor ?? '',
+      ];
+
+  static List<String> get csvHeaders => ['Day', 'Time', 'Subject', 'Room', 'Professor'];
+
+  static TimetableEntry fromCsvRow(List<String> row) {
+    if (row.length < 3) {
+      throw Exception('CSV row must have at least 3 columns: day, time, subject');
+    }
+    return TimetableEntry(
+      day: row[0].trim(),
+      time: row[1].trim(),
+      subject: row[2].trim(),
+      room: row.length > 3 ? row[3].trim() : null,
+      professor: row.length > 4 ? row[4].trim() : null,
+    );
+  }
+}
+
+// ============================================================================
+// CSV HELPERS
+// ============================================================================
+
+class _CsvHelper {
+  static const String _eol = '\r\n';
+
+  /// Convert list of string rows to CSV string
+  static String encode(List<List<String>> rows) {
+    final buffer = StringBuffer();
+    for (final row in rows) {
+      final escaped = row.map(_escapeField).join(',');
+      buffer.write(escaped);
+      buffer.write(_eol);
+    }
+    return buffer.toString();
+  }
+
+  /// Parse CSV string into list of string rows
+  static List<List<String>> decode(String csv) {
+    final rows = <List<String>>[];
+    final lines = csv.split(_eol);
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      rows.add(_parseLine(trimmed));
+    }
+    return rows;
+  }
+
+  static String _escapeField(String field) {
+    if (field.contains(',') || field.contains('"') || field.contains('\n')) {
+      final escaped = field.replaceAll('"', '""');
+      return '"$escaped"';
+    }
+    return field;
+  }
+
+  static List<String> _parseLine(String line) {
+    final fields = <String>[];
+    final buffer = StringBuffer();
+    var inQuotes = false;
+
+    for (var i = 0; i < line.length; i++) {
+      final char = line[i];
+      if (char == '"') {
+        if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+          buffer.write('"');
+          i++; // skip next quote
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char == ',' && !inQuotes) {
+        fields.add(buffer.toString());
+        buffer.clear();
+      } else {
+        buffer.write(char);
+      }
+    }
+    fields.add(buffer.toString());
+    return fields;
+  }
+}
+
+// ============================================================================
+// PDF PLACEHOLDER HELPERS
+// ============================================================================
+
+class PdfPlaceholderService {
+  PdfPlaceholderService._();
+
+  /// Generates a simple text-based "PDF-like" report.
+  /// This is a placeholder until a real PDF library (like pdf package) is added.
+  /// Returns a .txt file formatted like a report that can be shared.
+  static Future<String> generateTextReport({
+    required String title,
+    required List<String> headers,
+    required List<List<String>> rows,
+    String? subtitle,
+  }) async {
+    final buffer = StringBuffer();
+    final width = 80;
+
+    // Header
+    buffer.writeln('=' * width);
+    buffer.writeln(_center(title, width));
+    if (subtitle != null) {
+      buffer.writeln(_center(subtitle, width));
+    }
+    buffer.writeln(_center('Generated: ${DateTime.now().toLocal()}', width));
+    buffer.writeln('=' * width);
+    buffer.writeln();
+
+    // Table
+    if (rows.isEmpty) {
+      buffer.writeln('No data available.');
+    } else {
+      // Calculate column widths
+      final colCount = headers.length;
+      final colWidths = List<int>.filled(colCount, 0);
+      for (var i = 0; i < colCount; i++) {
+        colWidths[i] = headers[i].length;
+        for (final row in rows) {
+          if (i < row.length && row[i].length > colWidths[i]) {
+            colWidths[i] = row[i].length;
+          }
+        }
+        colWidths[i] = (colWidths[i] + 2).clamp(3, 30);
+      }
+
+      // Print headers
+      _printRow(buffer, headers, colWidths);
+      buffer.writeln('-' * colWidths.reduce((a, b) => a + b + 3));
+      for (final row in rows) {
+        _printRow(buffer, row, colWidths);
+      }
+    }
+
+    buffer.writeln();
+    buffer.writeln('=' * width);
+    buffer.writeln(_center('End of Report', width));
+    buffer.writeln('=' * width);
+
+    final dir = await getApplicationDocumentsDirectory();
+    final safeTitle = title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
+    final fileName = '${safeTitle}_${DateTime.now().millisecondsSinceEpoch}.txt';
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsString(buffer.toString());
+    return file.path;
+  }
+
+  static String _center(String text, int width) {
+    if (text.length >= width) return text;
+    final padding = (width - text.length) ~/ 2;
+    return ' ' * padding + text;
+  }
+
+  static void _printRow(StringBuffer buffer, List<String> row, List<int> widths) {
+    for (var i = 0; i < widths.length; i++) {
+      final text = i < row.length ? row[i] : '';
+      buffer.write(text.padRight(widths[i]));
+      if (i < widths.length - 1) buffer.write(' | ');
+    }
+    buffer.writeln();
+  }
+}
+
+// ============================================================================
+// WORKMANAGER BACKUP TASK
+// ============================================================================
+
+class BackupWorkManager {
+  BackupWorkManager._();
+
+  static const String _backupTaskName = 'event_countdown_monthly_backup';
+  static const String _backupTaskTag = 'monthly_auto_backup';
+
+  /// Initialize Workmanager with the backup callback
+  static void initialize() {
+    Workmanager().initialize(
+      _callbackDispatcher,
+      isInDebugMode: kDebugMode,
+    );
+  }
+
+  /// Register the monthly backup task
+  static Future<void> registerMonthlyBackup() async {
+    await Workmanager().registerPeriodicTask(
+      _backupTaskName,
+      _backupTaskName,
+      tag: _backupTaskTag,
+      frequency: const Duration(days: 30), // Approximate monthly
+      constraints: Constraints(
+        networkType: NetworkType.not_required,
+        requiresBatteryNotLow: true,
+        requiresStorageNotLow: true,
+      ),
+      existingWorkPolicy: ExistingWorkPolicy.replace,
+    );
+  }
+
+  /// Cancel the monthly backup task
+  static Future<void> cancelMonthlyBackup() async {
+    await Workmanager().cancelByTag(_backupTaskTag);
+  }
+
+  /// Check if monthly backup is scheduled
+  static Future<bool> isMonthlyBackupScheduled() async {
+    // Workmanager doesn't expose a direct "is scheduled" API,
+    // so we track this via SharedPreferences in the app layer.
+    // This method is a placeholder for that check.
+    return false;
+  }
+
+  /// The callback dispatcher that runs in the background
+  @pragma('vm:entry-point')
+  static void _callbackDispatcher() {
+    Workmanager().executeTask((taskName, inputData) async {
+      try {
+        if (taskName == _backupTaskName) {
+          final path = await ExportImportService.exportAllData();
+          if (kDebugMode) {
+            debugPrint('Monthly auto-backup completed: $path');
+          }
+          return Future.value(true);
+        }
+        return Future.value(true);
+      } catch (e, stackTrace) {
+        if (kDebugMode) {
+          debugPrint('Monthly auto-backup failed: $e');
+          debugPrint(stackTrace.toString());
+        }
+        return Future.value(false);
+      }
+    });
+  }
+}
+
+// ============================================================================
+// MAIN EXPORT/IMPORT SERVICE
+// ============================================================================
 
 class ExportImportService {
   ExportImportService._();
@@ -110,7 +469,8 @@ class ExportImportService {
 
     final computed = _computeChecksum(dataString);
     if (computed != checksum) {
-      throw Exception('Corrupted backup (checksum mismatch). The file may have been tampered with or is incomplete.');
+      throw Exception(
+          'Corrupted backup (checksum mismatch). The file may have been tampered with or is incomplete.');
     }
 
     final exportType = manifest['exportType'];
@@ -434,5 +794,287 @@ class ExportImportService {
     }
 
     return importAllData(path);
+  }
+
+  // ==================== ATTENDANCE CSV EXPORT ====================
+
+  /// Export attendance records to CSV file
+  static Future<String> exportAttendanceToCsv(List<AttendanceRecord> records) async {
+    final rows = <List<String>>[
+      AttendanceRecord.csvHeaders,
+      ...records.map((r) => r.toCsvRow()),
+    ];
+    final csvContent = _CsvHelper.encode(rows);
+
+    final dir = await getApplicationDocumentsDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = 'attendance_report_$timestamp.csv';
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsString(csvContent, encoding: utf8);
+    return file.path;
+  }
+
+  /// Export attendance from database and share via system share sheet
+  static Future<void> exportAndShareAttendance(List<AttendanceRecord> records) async {
+    final path = await exportAttendanceToCsv(records);
+    await Share.shareXFiles(
+      [XFile(path, mimeType: 'text/csv')],
+      subject: 'Attendance Report',
+      text: 'Here is the attendance report.',
+    );
+  }
+
+  /// Save attendance CSV to device via file picker
+  static Future<String?> saveAttendanceToDevice(List<AttendanceRecord> records) async {
+    final exportPath = await exportAttendanceToCsv(records);
+    final fileName = p.basename(exportPath);
+
+    final String? outputPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save Attendance Report',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+
+    if (outputPath == null) return null;
+
+    final fileBytes = await File(exportPath).readAsBytes();
+    await File(outputPath).writeAsBytes(fileBytes);
+    return outputPath;
+  }
+
+  // ==================== TIMETABLE CSV EXPORT ====================
+
+  /// Export timetable entries to CSV file
+  static Future<String> exportTimetableToCsv(List<TimetableEntry> entries) async {
+    final rows = <List<String>>[
+      TimetableEntry.csvHeaders,
+      ...entries.map((e) => e.toCsvRow()),
+    ];
+    final csvContent = _CsvHelper.encode(rows);
+
+    final dir = await getApplicationDocumentsDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = 'timetable_export_$timestamp.csv';
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsString(csvContent, encoding: utf8);
+    return file.path;
+  }
+
+  /// Export timetable from database and share via system share sheet
+  static Future<void> exportAndShareTimetable(List<TimetableEntry> entries) async {
+    final path = await exportTimetableToCsv(entries);
+    await Share.shareXFiles(
+      [XFile(path, mimeType: 'text/csv')],
+      subject: 'Timetable Export',
+      text: 'Here is the timetable export.',
+    );
+  }
+
+  /// Save timetable CSV to device via file picker
+  static Future<String?> saveTimetableToDevice(List<TimetableEntry> entries) async {
+    final exportPath = await exportTimetableToCsv(entries);
+    final fileName = p.basename(exportPath);
+
+    final String? outputPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save Timetable',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+
+    if (outputPath == null) return null;
+
+    final fileBytes = await File(exportPath).readAsBytes();
+    await File(outputPath).writeAsBytes(fileBytes);
+    return outputPath;
+  }
+
+  // ==================== PDF PLACEHOLDER EXPORT ====================
+
+  /// Generate a text-based PDF placeholder report for attendance
+  static Future<String> exportAttendanceToPdfPlaceholder(List<AttendanceRecord> records) async {
+    return PdfPlaceholderService.generateTextReport(
+      title: 'ATTENDANCE REPORT',
+      subtitle: 'Event Countdown App',
+      headers: AttendanceRecord.csvHeaders,
+      rows: records.map((r) => r.toCsvRow()).toList(),
+    );
+  }
+
+  /// Generate a text-based PDF placeholder report for timetable
+  static Future<String> exportTimetableToPdfPlaceholder(List<TimetableEntry> entries) async {
+    return PdfPlaceholderService.generateTextReport(
+      title: 'TIMETABLE REPORT',
+      subtitle: 'Event Countdown App',
+      headers: TimetableEntry.csvHeaders,
+      rows: entries.map((e) => e.toCsvRow()).toList(),
+    );
+  }
+
+  /// Share attendance PDF placeholder via system share sheet
+  static Future<void> shareAttendancePdfPlaceholder(List<AttendanceRecord> records) async {
+    final path = await exportAttendanceToPdfPlaceholder(records);
+    await Share.shareXFiles(
+      [XFile(path, mimeType: 'text/plain')],
+      subject: 'Attendance Report (PDF Placeholder)',
+      text: 'Here is the attendance report (text-based PDF placeholder).',
+    );
+  }
+
+  /// Share timetable PDF placeholder via system share sheet
+  static Future<void> shareTimetablePdfPlaceholder(List<TimetableEntry> entries) async {
+    final path = await exportTimetableToPdfPlaceholder(entries);
+    await Share.shareXFiles(
+      [XFile(path, mimeType: 'text/plain')],
+      subject: 'Timetable Report (PDF Placeholder)',
+      text: 'Here is the timetable report (text-based PDF placeholder).',
+    );
+  }
+
+  // ==================== CSV IMPORT (BULK ENTRY) ====================
+
+  /// Import attendance records from a CSV file
+  static Future<List<AttendanceRecord>> importAttendanceFromCsv(String filePath) async {
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw Exception('File not found: $filePath');
+    }
+
+    final contents = await file.readAsString(encoding: utf8);
+    if (contents.trim().isEmpty) {
+      throw Exception('File is empty');
+    }
+
+    final rows = _CsvHelper.decode(contents);
+    if (rows.isEmpty) {
+      throw Exception('CSV file has no data rows');
+    }
+
+    // Skip header row if it matches expected headers
+    var startIndex = 0;
+    final firstRow = rows.first.map((c) => c.toLowerCase().trim()).toList();
+    final expectedHeaders = AttendanceRecord.csvHeaders.map((h) => h.toLowerCase()).toList();
+    if (_rowsMatchHeaders(firstRow, expectedHeaders)) {
+      startIndex = 1;
+    }
+
+    final records = <AttendanceRecord>[];
+    for (var i = startIndex; i < rows.length; i++) {
+      try {
+        final record = AttendanceRecord.fromCsvRow(rows[i]);
+        records.add(record);
+      } catch (e) {
+        throw Exception('Error parsing attendance row ${i + 1}: $e');
+      }
+    }
+
+    return records;
+  }
+
+  /// Import timetable entries from a CSV file
+  static Future<List<TimetableEntry>> importTimetableFromCsv(String filePath) async {
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw Exception('File not found: $filePath');
+    }
+
+    final contents = await file.readAsString(encoding: utf8);
+    if (contents.trim().isEmpty) {
+      throw Exception('File is empty');
+    }
+
+    final rows = _CsvHelper.decode(contents);
+    if (rows.isEmpty) {
+      throw Exception('CSV file has no data rows');
+    }
+
+    // Skip header row if it matches expected headers
+    var startIndex = 0;
+    final firstRow = rows.first.map((c) => c.toLowerCase().trim()).toList();
+    final expectedHeaders = TimetableEntry.csvHeaders.map((h) => h.toLowerCase()).toList();
+    if (_rowsMatchHeaders(firstRow, expectedHeaders)) {
+      startIndex = 1;
+    }
+
+    final entries = <TimetableEntry>[];
+    for (var i = startIndex; i < rows.length; i++) {
+      try {
+        final entry = TimetableEntry.fromCsvRow(rows[i]);
+        entries.add(entry);
+      } catch (e) {
+        throw Exception('Error parsing timetable row ${i + 1}: $e');
+      }
+    }
+
+    return entries;
+  }
+
+  /// Pick and import attendance CSV from file picker
+  static Future<List<AttendanceRecord>> importAttendanceFromPicker() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+      allowMultiple: false,
+      withData: false,
+    );
+
+    if (result == null || result.files.isEmpty) {
+      throw Exception('No file selected');
+    }
+
+    final path = result.files.single.path;
+    if (path == null) {
+      throw Exception('Could not access file path');
+    }
+
+    return importAttendanceFromCsv(path);
+  }
+
+  /// Pick and import timetable CSV from file picker
+  static Future<List<TimetableEntry>> importTimetableFromPicker() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+      allowMultiple: false,
+      withData: false,
+    );
+
+    if (result == null || result.files.isEmpty) {
+      throw Exception('No file selected');
+    }
+
+    final path = result.files.single.path;
+    if (path == null) {
+      throw Exception('Could not access file path');
+    }
+
+    return importTimetableFromCsv(path);
+  }
+
+  static bool _rowsMatchHeaders(List<String> row, List<String> headers) {
+    if (row.length < headers.length) return false;
+    for (var i = 0; i < headers.length; i++) {
+      if (row[i] != headers[i]) return false;
+    }
+    return true;
+  }
+
+  // ==================== MONTHLY AUTO-BACKUP ====================
+
+  /// Trigger a manual backup (can be called from UI or Workmanager)
+  static Future<String> triggerAutoBackup() async {
+    return exportAllData();
+  }
+
+  /// Initialize the monthly auto-backup system
+  static Future<void> initializeMonthlyAutoBackup() async {
+    BackupWorkManager.initialize();
+    await BackupWorkManager.registerMonthlyBackup();
+  }
+
+  /// Cancel monthly auto-backup
+  static Future<void> cancelMonthlyAutoBackup() async {
+    await BackupWorkManager.cancelMonthlyBackup();
   }
 }
