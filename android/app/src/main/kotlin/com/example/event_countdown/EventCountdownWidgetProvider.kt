@@ -42,7 +42,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 var countdownText = "Open app to add events"
                 var progress = 0
                 var urgencyLabel = ""
-                var urgencyColorStr = "#FF9800"
+                var urgencyColorKey = ""
 
                 try {
                     // This path MUST match Dart's getApplicationSupportDirectory()
@@ -53,13 +53,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                         countdownText = json.optString("countdown", countdownText)
                         progress = json.optInt("progressPercent", 0)
                         urgencyLabel = json.optString("urgencyLabel", "")
-                        urgencyColorStr = when (json.optString("urgencyColor", null)) {
-                            "red" -> "#F44336"
-                            "deepOrange" -> "#FF5722"
-                            "orange" -> "#FF9800"
-                            "green" -> "#4CAF50"
-                            else -> "#FF9800"
-                        }
+                        urgencyColorKey = json.optString("urgencyColor", "")
 
                         // CRITICAL FIX: If smart countdown is OFF, show absolute date
                         val deadlineMillis = json.optLong("deadlineMillis", 0L)
@@ -78,18 +72,23 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_countdown, countdownText)
                 views.setProgressBar(R.id.widget_progress_ring, 100, progress.coerceIn(0, 100), false)
 
-                // Urgency row
+                // Urgency row: white text on colored pill background
                 if (urgencyLabel.isNotEmpty()) {
                     views.setViewVisibility(R.id.widget_urgency_row, View.VISIBLE)
+                    views.setTextViewText(R.id.widget_urgency_dot, "●")
+                    views.setTextColor(R.id.widget_urgency_dot, Color.parseColor("#FFFFFF"))
                     views.setTextViewText(R.id.widget_urgency_label, urgencyLabel)
-                    try {
-                        val color = Color.parseColor(urgencyColorStr)
-                        views.setTextColor(R.id.widget_urgency_dot, color)
-                        views.setTextColor(R.id.widget_urgency_label, color)
-                    } catch (_: IllegalArgumentException) {
-                        views.setTextColor(R.id.widget_urgency_dot, Color.parseColor("#FF9800"))
-                        views.setTextColor(R.id.widget_urgency_label, Color.parseColor("#FF9800"))
+                    views.setTextColor(R.id.widget_urgency_label, Color.parseColor("#FFFFFF"))
+
+                    // Map urgency color key to pill background drawable
+                    val pillDrawableRes = when (urgencyColorKey) {
+                        "red" -> R.drawable.widget_pill_red
+                        "deepOrange" -> R.drawable.widget_pill_orange
+                        "orange" -> R.drawable.widget_pill_orange
+                        "green" -> R.drawable.widget_pill_green
+                        else -> R.drawable.widget_pill_orange
                     }
+                    views.setInt(R.id.widget_urgency_label, "setBackgroundResource", pillDrawableRes)
                 } else {
                     views.setViewVisibility(R.id.widget_urgency_row, View.GONE)
                 }
