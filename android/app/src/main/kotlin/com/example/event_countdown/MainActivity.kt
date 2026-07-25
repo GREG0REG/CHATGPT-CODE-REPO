@@ -49,5 +49,13 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+                "updateHabitWidget" -> {
+                    try {
+                        HabitWidgetProvider.updateAllWidgets(this)
+                        result.success("ok")
+                    } catch (e: Exception) {
+                        result.error("ERR", e.message, null)
+             }  
+         }
     }
 }
