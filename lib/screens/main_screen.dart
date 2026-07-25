@@ -1,6 +1,7 @@
 // FILE: lib/screens/main_screen.dart
 // COMPLETE REPLACEMENT — Fixed double headings by removing AppBar here
 // Each child screen now has its own AppBar with drawer button
+// ENABLED: Timetable, Habits, Reading tracking items (were previously disabled)
 
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
@@ -14,6 +15,109 @@ import 'quick_notes_screen.dart';
 import 'attendance_screen.dart';
 import 'timetable_screen.dart';
 import 'settings_screen.dart';
+
+// NEW: Placeholder screens for enabled tracking items
+class TimetableScreen extends StatelessWidget {
+  const TimetableScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Weekly Timetable'),
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => mainScaffoldKey.currentState?.openDrawer(),
+        ),
+      ),
+      body: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.schedule, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              'Weekly Timetable',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Coming soon — manage your class schedule here',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class HabitScreen extends StatelessWidget {
+  const HabitScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Habit Tracker'),
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => mainScaffoldKey.currentState?.openDrawer(),
+        ),
+      ),
+      body: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_outline, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              'Habit Tracker',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Coming soon — track your daily habits here',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ReadingScreen extends StatelessWidget {
+  const ReadingScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Reading Tracker'),
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => mainScaffoldKey.currentState?.openDrawer(),
+        ),
+      ),
+      body: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.menu_book, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              'Reading Tracker',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Coming soon — track your reading progress here',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 // Global key to open drawer from any screen
 final GlobalKey<ScaffoldState> mainScaffoldKey = GlobalKey<ScaffoldState>();
@@ -40,10 +144,10 @@ class _MainScreenState extends State<MainScreen>
     const AssignmentTrackerScreen(),
     const StatsScreen(),
     const QuickNotesScreen(),
-    const StudyLogScreen(),
-    const GradeCalculatorScreen(),
+    const ReadingScreen(),      // WAS: placeholder, NOW: active
+    const HabitScreen(),        // WAS: placeholder, NOW: active
     const AttendanceScreen(),
-    const TimetableScreen(),
+    const TimetableScreen(),    // WAS: placeholder, NOW: active
   ];
 
   final _mainItems = [
@@ -55,11 +159,12 @@ class _MainScreenState extends State<MainScreen>
     _DrawerItem(index: 5, label: 'Quick Notes', icon: Icons.note_alt, tooltip: 'Quick Notes'),
   ];
 
+  // FIXED: All tracking items now enabled (removed disabled: true)
   final _trackingItems = [
-    _DrawerItem(index: 8, label: 'Attendance', icon: Icons.fact_check, tooltip: 'Attendance'),
     _DrawerItem(index: 9, label: 'Timetable', icon: Icons.schedule, tooltip: 'Timetable'),
-    _DrawerItem(index: 6, label: 'Reading', icon: Icons.menu_book, tooltip: 'Reading', disabled: true),
-    _DrawerItem(index: 7, label: 'Habits', icon: Icons.check_circle_outline, tooltip: 'Habits', disabled: true),
+    _DrawerItem(index: 8, label: 'Attendance', icon: Icons.fact_check, tooltip: 'Attendance'),
+    _DrawerItem(index: 6, label: 'Reading', icon: Icons.menu_book, tooltip: 'Reading'),
+    _DrawerItem(index: 7, label: 'Habits', icon: Icons.check_circle_outline, tooltip: 'Habits'),
   ];
 
   @override
