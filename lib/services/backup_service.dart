@@ -118,13 +118,17 @@ class BackupService {
     };
 
     final manifestJson = const JsonEncoder.withIndent('  ').convert(manifest);
+    final manifestBytes = utf8.encode(manifestJson);
+    final dataBytes = utf8.encode(jsonString);
 
     final archive = Archive()
-      ..addFile(ArchiveFile('manifest.json', manifestJson.length, utf8.encode(manifestJson)))
-      ..addFile(ArchiveFile('data.json', jsonString.length, utf8.encode(jsonString)));
+      ..addFile(ArchiveFile('manifest.json', manifestBytes.length, manifestBytes)
+        ..compressionLevel = 6)
+      ..addFile(ArchiveFile('data.json', dataBytes.length, dataBytes)
+        ..compressionLevel = 6);
 
     final zipEncoder = ZipEncoder();
-    final encoded = zipEncoder.encode(archive, level: 6);
+    final encoded = zipEncoder.encode(archive);
     if (encoded == null) {
       throw Exception('Failed to encode backup ZIP archive');
     }
