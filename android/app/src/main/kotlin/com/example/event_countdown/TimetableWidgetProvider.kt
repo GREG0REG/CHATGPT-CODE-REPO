@@ -17,6 +17,28 @@ class TimetableWidgetProvider : AppWidgetProvider() {
     companion object {
         private const val TIMETABLE_DATA_FILE = "timetable_widget_data.json"
 
+        // IDs for the 3 preset class rows
+        private val ROW_IDS = listOf(
+            R.id.timetable_class_row_1,
+            R.id.timetable_class_row_2,
+            R.id.timetable_class_row_3
+        )
+        private val DOT_IDS = listOf(
+            R.id.timetable_class_dot_1,
+            R.id.timetable_class_dot_2,
+            R.id.timetable_class_dot_3
+        )
+        private val SUBJECT_IDS = listOf(
+            R.id.timetable_class_subject_1,
+            R.id.timetable_class_subject_2,
+            R.id.timetable_class_subject_3
+        )
+        private val INFO_IDS = listOf(
+            R.id.timetable_class_info_1,
+            R.id.timetable_class_info_2,
+            R.id.timetable_class_info_3
+        )
+
         fun updateWidgetDirectly(
             context: Context,
             appWidgetManager: AppWidgetManager,
@@ -56,70 +78,51 @@ class TimetableWidgetProvider : AppWidgetProvider() {
 
                 val views = RemoteViews(context.packageName, R.layout.timetable_widget_layout)
 
+                // Header: day name + date
                 views.setTextViewText(R.id.timetable_widget_day, dayName)
                 views.setTextViewText(R.id.timetable_widget_date, dateText)
 
                 if (classesList.isEmpty()) {
+                    // Show empty state, hide all rows
                     views.setViewVisibility(R.id.timetable_widget_empty, View.VISIBLE)
-                    views.setTextViewText(R.id.timetable_widget_empty, "No upcoming classes")
-                    views.setTextColor(R.id.timetable_widget_empty, Color.parseColor("#88FFFFFF"))
-                    
-                    // Hide class rows
-                    views.setViewVisibility(R.id.timetable_class_1, View.GONE)
-                    views.setViewVisibility(R.id.timetable_class_2, View.GONE)
-                    views.setViewVisibility(R.id.timetable_class_3, View.GONE)
+                    for (rowId in ROW_IDS) {
+                        views.setViewVisibility(rowId, View.GONE)
+                    }
                 } else {
+                    // Hide empty state
                     views.setViewVisibility(R.id.timetable_widget_empty, View.GONE)
-                    
-                    // Show up to 3 classes using preset rows
-                    val rowIds = listOf(
-                        R.id.timetable_class_1,
-                        R.id.timetable_class_2,
-                        R.id.timetable_class_3
-                    )
-                    val subjectIds = listOf(
-                        R.id.timetable_class_1_subject,
-                        R.id.timetable_class_2_subject,
-                        R.id.timetable_class_3_subject
-                    )
-                    val timeIds = listOf(
-                        R.id.timetable_class_1_time,
-                        R.id.timetable_class_2_time,
-                        R.id.timetable_class_3_time
-                    )
-                    val roomIds = listOf(
-                        R.id.timetable_class_1_room,
-                        R.id.timetable_class_2_room,
-                        R.id.timetable_class_3_room
-                    )
-                    val dotIds = listOf(
-                        R.id.timetable_class_1_dot,
-                        R.id.timetable_class_2_dot,
-                        R.id.timetable_class_3_dot
-                    )
 
+                    // Show up to 3 classes
                     for (i in 0 until 3) {
                         if (i < classesList.size) {
                             val cls = classesList[i]
                             val colorHex = cls["colorHex"] ?: "#2196F3"
+                            val subject = cls["subject"] ?: "Unknown"
+                            val timeSlot = cls["timeSlot"] ?: ""
+                            val room = cls["room"] ?: "TBD"
+                            val countdownText = cls["countdownText"] ?: ""
+
                             val color = try {
                                 Color.parseColor(colorHex)
                             } catch (e: Exception) {
                                 Color.parseColor("#2196F3")
                             }
 
-                            views.setViewVisibility(rowIds[i], View.VISIBLE)
-                            views.setTextViewText(subjectIds[i], cls["subject"])
-                            views.setTextViewText(timeIds[i], "${cls["timeSlot"]}  •  ${cls["countdownText"]}")
-                            views.setTextViewText(roomIds[i], "📍 ${cls["room"]}")
-                            views.setTextColor(dotIds[i], color)
+                            // Format: "9:00 Math • Hall A • 25 min"
+                            val infoText = "$timeSlot  •  $subject  •  $room  •  $countdownText"
+
+                            views.setViewVisibility(ROW_IDS[i], View.VISIBLE)
+                            views.setInt(DOT_IDS[i], "setBackgroundColor", color)
+                            views.setTextViewText(SUBJECT_IDS[i], subject)
+                            views.setTextViewText(INFO_IDS[i], infoText)
+                            views.setTextColor(SUBJECT_IDS[i], color)
                         } else {
-                            views.setViewVisibility(rowIds[i], View.GONE)
+                            views.setViewVisibility(ROW_IDS[i], View.GONE)
                         }
                     }
                 }
 
-                // Launch intent
+                // Tap opens app to /timetable
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 if (launchIntent != null) {
                     launchIntent.putExtra("route", "/timetable")
