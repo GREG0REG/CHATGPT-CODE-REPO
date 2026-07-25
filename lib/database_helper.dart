@@ -31,7 +31,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 9, // BUMPED: was 8, now 9 for flashcard column fix
+      version: 10, // BUMPED: was 9, now 10 for attendance_logs table
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -58,7 +58,10 @@ class DatabaseHelper {
           await _migrateV7ToV8(db);
         }
         if (oldVersion < 9) {
-          await _migrateV8ToV9(db); // NEW: v8→v9 adds missing flashcard columns
+          await _migrateV8ToV9(db);
+        }
+        if (oldVersion < 10) {
+          await _migrateV9ToV10(db); // NEW: v9→v10 adds attendance_logs table
         }
       },
     );
@@ -232,6 +235,18 @@ class DatabaseHelper {
         updatedAtMillis INTEGER
       )
     """);
+
+    // ---- ATTENDANCE LOGS (v10) ---- NEW TABLE
+    await db.execute("""
+      CREATE TABLE attendance_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subjectName TEXT NOT NULL,
+        dateMillis INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'present',
+        note TEXT,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
   }
 
   // ============================================
@@ -327,7 +342,7 @@ class DatabaseHelper {
     await db.execute('ALTER TABLE study_sessions ADD COLUMN notes TEXT');
   }
 
-  // v7 -> v8 migration (flashcard review history + daily card goals + grade components + quick notes)
+  // v7 -> v8 migration
   Future<void> _migrateV7ToV8(Database db) async {
     await db.execute("""
       CREATE TABLE flashcard_review_history (
@@ -374,9 +389,8 @@ class DatabaseHelper {
     """);
   }
 
-  // NEW: v8 -> v9 migration — add missing flashcard columns that were in the model but not the table
+  // v8 -> v9 migration
   Future<void> _migrateV8ToV9(Database db) async {
-    // Add all missing columns to flashcards table
     await db.execute('ALTER TABLE flashcards ADD COLUMN imagePath TEXT');
     await db.execute('ALTER TABLE flashcards ADD COLUMN audioFrontPath TEXT');
     await db.execute('ALTER TABLE flashcards ADD COLUMN audioBackPath TEXT');
@@ -388,9 +402,22 @@ class DatabaseHelper {
     await db.execute('ALTER TABLE flashcards ADD COLUMN difficultyRating REAL DEFAULT 2.5');
     await db.execute('ALTER TABLE flashcards ADD COLUMN reviewHistoryJson TEXT');
     
-    // Set createdAtMillis for existing cards that don't have it
     final now = DateTime.now().millisecondsSinceEpoch;
     await db.execute('UPDATE flashcards SET createdAtMillis = ? WHERE createdAtMillis IS NULL', [now]);
+  }
+
+  // NEW: v9 -> v10 migration — add attendance_logs table
+  Future<void> _migrateV9ToV10(Database db) async {
+    await db.execute("""
+      CREATE TABLE attendance_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subjectName TEXT NOT NULL,
+        dateMillis INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'present',
+        note TEXT,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
   }
 
   // ============================================
@@ -1070,6 +1097,102 @@ class DatabaseHelper {
   }
 
   // ============================================
+  // ATTENDANCE LOGS CRUD (NEW - v10)
+  // ============================================
+  Future<int> insertAttendanceLog(Map<String, dynamic> log) async {
+    final db = await database;
+    final data = {
+      'subjectName': log['subjectName'],
+      'dateMillis': log['dateMillis'],
+      'status': log['status'] ?? 'present',
+      'note': log['note'],
+      'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
+    };
+    return db.insert('attendance_logs', data);
+  }
+
+  Future<int> updateAttendanceLog(int id, Map<String, dynamic> log) async {
+    final db = await database;
+    final data = {
+      'subjectName': log['subjectName'],
+      'dateMillis': log['dateMillis'],
+      'status': log['status'],
+      'note': log['note'],
+    };
+    return db.update('attendance_logs', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteAttendanceLog(int id) async {
+    final db = await database;
+    return db.delete('attendance_logs', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getAttendanceLogsForSubject(String subjectName) async {
+    final db = await database;
+    final rows = await db.query(
+      'attendance_logs',
+      where: 'subjectName = ?',
+      whereArgs: [subjectName],
+      orderBy: 'dateMillis DESC',
+    );
+    return rows;
+  }
+
+  Future<List<Map<String, dynamic>>> getAttendanceLogsForDate(int dateMillis) async {
+    final db = await database;
+    final endOfDay = dateMillis + const Duration(days: 1).inMilliseconds;
+    final rows = await db.query(
+      'attendance_logs',
+      where: 'dateMillis >= ? AND dateMillis < ?',
+      whereArgs: [dateMillis, endOfDay],
+      orderBy: 'dateMillis ASC',
+    );
+    return rows;
+  }
+
+  Future<List<Map<String, dynamic>>> getAllAttendanceLogs() async {
+    final db = await database;
+    final rows = await db.query('attendance_logs', orderBy: 'dateMillis DESC');
+    return rows;
+  }
+
+  Future<Map<String, dynamic>?> getAttendanceLogForSubjectAndDate(String subjectName, int dateMillis) async {
+    final db = await database;
+    final endOfDay = dateMillis + const Duration(days: 1).inMilliseconds;
+    final rows = await db.query(
+      'attendance_logs',
+      where: 'subjectName = ? AND dateMillis >= ? AND dateMillis < ?',
+      whereArgs: [subjectName, dateMillis, endOfDay],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  Future<Map<String, dynamic>> getAttendanceStatsForSubject(String subjectName) async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present,
+        SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent,
+        SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late,
+        SUM(CASE WHEN status = 'excused' THEN 1 ELSE 0 END) as excused
+      FROM attendance_logs
+      WHERE subjectName = ?
+    """, [subjectName]);
+    return result.first;
+  }
+
+  Future<List<String>> getAttendanceSubjects() async {
+    final db = await database;
+    final rows = await db.rawQuery("""
+      SELECT DISTINCT subjectName FROM attendance_logs ORDER BY subjectName ASC
+    """);
+    return rows.map((r) => r['subjectName'] as String).toList();
+  }
+
+  // ============================================
   // COMPREHENSIVE EXPORT/IMPORT (FIX for Issue 56)
   // ============================================
 
@@ -1093,6 +1216,7 @@ class DatabaseHelper {
       'daily_card_goals',
       'grade_components',
       'quick_notes',
+      'attendance_logs',
     ];
 
     for (final table in tables) {
