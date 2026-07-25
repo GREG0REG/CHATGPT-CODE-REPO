@@ -558,7 +558,7 @@ class WidgetService {
   }
 
   // ==================== HELPER METHODS ====================
-    static Future<void> _writeWidgetData(String filename, Map<String, dynamic> data) async {
+  static Future<void> _writeWidgetData(String filename, Map<String, dynamic> data) async {
     try {
       // FIXED: Use getApplicationSupportDirectory() which on Android maps to
       // Context.getFilesDir() — the SAME path the Kotlin widget reads via context.filesDir
