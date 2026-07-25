@@ -53,7 +53,6 @@ class WidgetService {
           countdownText = _formatDate(eventDate);
         }
 
-        // Calculate progress
         int progress = 0;
         if (nextEvent.startTimeMillis != null && nextEvent.deadlineMillis != null) {
           final start = DateTime.fromMillisecondsSinceEpoch(nextEvent.startTimeMillis!);
@@ -94,7 +93,7 @@ class WidgetService {
       }
 
       await _writeWidgetData('widget_data.json', data);
-      await _sendWidgetBroadcast('com.example.event_countdown.EVENT_WIDGET_TICK');
+      await _channel.invokeMethod('updateWidget');
     } catch (e) {
       debugPrint('Widget refresh error: $e');
     }
@@ -103,7 +102,7 @@ class WidgetService {
   // ==================== EXISTING: Pomodoro Widget ====================
   static Future<void> refreshPomodoroWidget() async {
     try {
-      await _sendWidgetBroadcast('com.example.event_countdown.POMODORO_WIDGET_TICK');
+      await _channel.invokeMethod('updatePomodoroWidget');
     } catch (e) {
       debugPrint('Pomodoro widget refresh error: $e');
     }
@@ -144,7 +143,7 @@ class WidgetService {
       };
 
       await _writeWidgetData('attendance_widget_data.json', data);
-      await _sendWidgetBroadcast('com.example.event_countdown.ATTENDANCE_WIDGET_REFRESH');
+      await _channel.invokeMethod('updateAttendanceWidget');
     } catch (e) {
       debugPrint('Attendance widget refresh error: $e');
     }
@@ -186,7 +185,7 @@ class WidgetService {
       };
 
       await _writeWidgetData('timetable_widget_data.json', data);
-      await _sendWidgetBroadcast('com.example.event_countdown.TIMETABLE_WIDGET_REFRESH');
+      await _channel.invokeMethod('updateTimetableWidget');
     } catch (e) {
       debugPrint('Timetable widget refresh error: $e');
     }
@@ -200,14 +199,6 @@ class WidgetService {
       await file.writeAsString(jsonEncode(data));
     } catch (e) {
       debugPrint('Widget data write error: $e');
-    }
-  }
-
-  static Future<void> _sendWidgetBroadcast(String action) async {
-    try {
-      await _channel.invokeMethod('sendBroadcast', {'action': action});
-    } catch (e) {
-      debugPrint('Widget broadcast error: $e');
     }
   }
 
