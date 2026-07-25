@@ -1,5 +1,5 @@
 // FILE: lib/screens/flashcard_screen.dart
-// COMPLETE REPLACEMENT — FIXED: tagsJson non-null, missing closing paren on line 1146
+// COMPLETE REPLACEMENT — Fixed double header, added drawer button
 
 import 'dart:io';
 import 'dart:math';
@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import '../database_helper.dart';
 import '../models/flashcard.dart';
 import '../services/streak_service.dart';
+import 'main_screen.dart';
 
 class FlashcardScreen extends StatefulWidget {
   const FlashcardScreen({super.key});
@@ -226,7 +227,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
     final nextReview = now + (baseIntervals[newBox] * intervalMultiplier).round();
 
-    // Update difficulty rating
     double newDifficulty = card.difficultyRating;
     final diffMap = {'again': 5.0, 'hard': 4.0, 'good': 2.5, 'easy': 1.0};
     newDifficulty = (newDifficulty + (diffMap[difficulty] ?? 3.0)) / 2;
@@ -405,7 +405,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                       maxLines: 3,
                     ),
                     const SizedBox(height: 12),
-                    // Tags input
                     TextFormField(
                       controller: tagsController,
                       decoration: InputDecoration(
@@ -416,7 +415,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // Image picker
                     InkWell(
                       onTap: () => _pickImage((path) => setDialogState(() => imagePath = path)),
                       borderRadius: BorderRadius.circular(12),
@@ -507,7 +505,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       final finalSubject = subject.trim().isEmpty ? 'General' : subject.trim();
       final nowMillis = DateTime.now().millisecondsSinceEpoch;
 
-      // Convert tags to JSON string
       final tagsText = tagsController.text.trim();
       final tagsJson = tagsText.isEmpty ? '[]' : _tagsToJson(tagsText);
 
@@ -550,13 +547,11 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     tagsController.dispose();
   }
 
-  // Helper: convert comma-separated tags to JSON string
   String _tagsToJson(String commaSeparated) {
     final tags = commaSeparated.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
     return jsonEncode(tags);
   }
 
-  // Helper: convert JSON string to comma-separated tags
   String _tagsFromJson(String jsonStr) {
     try {
       final List<dynamic> tags = jsonDecode(jsonStr);
@@ -566,7 +561,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     }
   }
 
-  // Helper: get tags list from card for display
   List<String> _getTagsList(Flashcard card) {
     if (card.tagsJson.isEmpty) return [];
     try {
@@ -705,6 +699,10 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => mainScaffoldKey.currentState?.openDrawer(),
+        ),
         title: const Text('Flashcards'),
         actions: [
           IconButton(
@@ -796,7 +794,8 @@ class _FlashcardScreenState extends State<FlashcardScreen>
           colors: [cs.primary.withOpacity(0.15), cs.secondary.withOpacity(0.1)],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0
+        ),
       ),
       child: Row(
         children: [
@@ -1051,7 +1050,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Favorite toggle
                   IconButton(
                     icon: Icon(
                       card.isFavorite ? Icons.star : Icons.star_border,
@@ -1159,7 +1157,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Difficulty display
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -1368,7 +1365,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Favorite indicator
                 if (card.isFavorite)
                   const Padding(
                     padding: EdgeInsets.only(right: 8),
@@ -1412,7 +1408,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // Image on front if present
                   if (isFront && card.imagePath != null) ...[
                     ClipRRect(
                       borderRadius: BorderRadius.circular(16),
@@ -1434,7 +1429,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  // Tags on back
                   if (!isFront && tags.isNotEmpty) ...[
                     const SizedBox(height: 20),
                     Wrap(
