@@ -6,7 +6,7 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="16dp"
-    android:background="#00BFA5">
+    android:background="@drawable/widget_background_dark">
 
     <TextView
         android:id="@+id/widget_title"
@@ -34,6 +34,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
+        android:gravity="center_vertical"
         android:layout_marginTop="8dp"
         android:visibility="gone">
 
@@ -42,23 +43,25 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="●"
+            android:textColor="#FFFFFF"
             android:textSize="12sp" />
 
         <TextView
             android:id="@+id/widget_urgency_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#FF9800"
+            android:textColor="#FFFFFF"
             android:textSize="12sp"
-            android:layout_marginStart="4dp" />
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="2dp"
+            android:layout_marginStart="6dp" />
     </LinearLayout>
 
-    <!-- Fixed ProgressBar using the same drawable as pomodoro for consistency -->
     <ProgressBar
         android:id="@+id/widget_progress_ring"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="4dp"
+        android:layout_height="6dp"
         android:layout_marginTop="12dp"
         android:max="100"
         android:progress="0"
