@@ -9,6 +9,7 @@
     android:background="#E6003830"
     android:gravity="center_vertical">
 
+    <!-- Circular progress + percentage -->
     <FrameLayout
         android:layout_width="56dp"
         android:layout_height="56dp">
@@ -35,6 +36,7 @@
             android:textStyle="bold" />
     </FrameLayout>
 
+    <!-- Subject info -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -57,19 +59,22 @@
             android:id="@+id/attendance_widget_ratio"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="0/0"
+            android:text="0 / 0"
             android:textColor="#CCFFFFFF"
             android:textSize="12sp"
             android:layout_marginTop="2dp" />
 
+        <!-- Risk text: "X left" or "Can miss Y more classes" -->
         <TextView
             android:id="@+id/attendance_widget_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Good standing"
-            android:textColor="#FF4CAF50"
+            android:text="Add subjects to track attendance"
+            android:textColor="#FF888888"
             android:textSize="11sp"
-            android:layout_marginTop="2dp" />
+            android:layout_marginTop="2dp"
+            android:maxLines="1"
+            android:ellipsize="end" />
     </LinearLayout>
 
 </LinearLayout>
