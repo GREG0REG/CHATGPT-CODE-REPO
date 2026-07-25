@@ -13,7 +13,15 @@ class WidgetService {
 
   static const MethodChannel _channel = MethodChannel('com.example.event_countdown/widget');
 
-  // ==================== EXISTING: Event Widget ====================
+  // ==================== REFRESH ALL WIDGETS ====================
+  static Future<void> refreshAllWidgets() async {
+    await refreshWidget();
+    await refreshPomodoroWidget();
+    await refreshAttendanceWidget();
+    await refreshTimetableWidget();
+  }
+
+  // ==================== EVENT COUNTDOWN WIDGET ====================
   static Future<void> refreshWidget() async {
     try {
       final events = await DatabaseHelper.instance.getAllEventsSorted();
@@ -99,7 +107,7 @@ class WidgetService {
     }
   }
 
-  // ==================== EXISTING: Pomodoro Widget ====================
+  // ==================== POMODORO WIDGET ====================
   static Future<void> refreshPomodoroWidget() async {
     try {
       await _channel.invokeMethod('updatePomodoroWidget');
@@ -108,38 +116,163 @@ class WidgetService {
     }
   }
 
-  // ==================== NEW: Attendance Widget ====================
+  // ==================== ATTENDANCE WIDGET ====================
   static Future<void> refreshAttendanceWidget() async {
     try {
-      final subjects = await DatabaseHelper.instance.getAttendanceSubjects();
-      String targetSubject = '';
-      int attended = 0;
-      int total = 0;
-      int percentage = 0;
+      final subjects = await DatabaseHelper.instance.getAllAttendanceSubjects();
+      
+      if (subjects.isEmpty) {
+        final data = <String, dynamic>{
+          'subjectName': 'No Subjects',
+          'percentage': 0,
+          'attended': 0,
+          'total': 0,
+          'statusColor': 'grey',
+          'canMissText': 'Add subjects to track attendance',
+          'threshold': 75,
+          'isAtRisk': false,
+        };
+        await _writeWidgetData('attendance_widget_data.json', data);
+        await _channel.invokeMethod('updateAttendanceWidget');
+        return;
+      }
 
-      if (subjects.isNotEmpty) {
-        targetSubject = subjects.first;
+      // Find the most at-risk subject (lowest percentage below threshold)
+      Map<String, dynamic>? mostAtRiskSubject;
+      double lowestPercentage = double.infinity;
+      double defaultThreshold = 75.0;
+
+      for (final subject in subjects) {
+        final subjectName = subject['name'] as String;
+        final requiredPercentage = (subject['requiredPercentage'] as num?)?.toDouble() ?? defaultThreshold;
         
-        final lastSubject = await SettingsService.instance.getLastViewedAttendanceSubject();
-        if (lastSubject != null && subjects.contains(lastSubject)) {
-          targetSubject = lastSubject;
-        }
-
-        final stats = await DatabaseHelper.instance.getAttendanceStatsForSubject(targetSubject);
-        attended = (stats['present'] as int?) ?? 0;
+        final stats = await DatabaseHelper.instance.getAttendanceStatsForSubject(subjectName);
+        final total = (stats['total'] as int?) ?? 0;
+        final present = (stats['present'] as int?) ?? 0;
         final excused = (stats['excused'] as int?) ?? 0;
-        total = (stats['total'] as int?) ?? 0;
         
-        if (total > 0) {
-          percentage = (((attended + excused) / total) * 100).round();
+        if (total == 0) continue;
+        
+        final percentage = ((present + excused) / total) * 100;
+        
+        // At-risk if below threshold, prioritize lowest percentage
+        if (percentage < requiredPercentage) {
+          if (percentage < lowestPercentage) {
+            lowestPercentage = percentage;
+            mostAtRiskSubject = {
+              'subject': subject,
+              'stats': stats,
+              'percentage': percentage,
+              'requiredPercentage': requiredPercentage,
+            };
+          }
         }
       }
 
+      // If no subject is below threshold, pick the one with lowest percentage overall
+      if (mostAtRiskSubject == null) {
+        lowestPercentage = double.infinity;
+        for (final subject in subjects) {
+          final subjectName = subject['name'] as String;
+          final requiredPercentage = (subject['requiredPercentage'] as num?)?.toDouble() ?? defaultThreshold;
+          
+          final stats = await DatabaseHelper.instance.getAttendanceStatsForSubject(subjectName);
+          final total = (stats['total'] as int?) ?? 0;
+          final present = (stats['present'] as int?) ?? 0;
+          final excused = (stats['excused'] as int?) ?? 0;
+          
+          if (total == 0) continue;
+          
+          final percentage = ((present + excused) / total) * 100;
+          
+          if (percentage < lowestPercentage) {
+            lowestPercentage = percentage;
+            mostAtRiskSubject = {
+              'subject': subject,
+              'stats': stats,
+              'percentage': percentage,
+              'requiredPercentage': requiredPercentage,
+            };
+          }
+        }
+      }
+
+      String subjectName;
+      int attended = 0;
+      int total = 0;
+      int percentage = 0;
+      String statusColor;
+      String canMissText;
+      double threshold;
+      bool isAtRisk;
+
+      if (mostAtRiskSubject != null) {
+        final subject = mostAtRiskSubject['subject'] as Map<String, dynamic>;
+        final stats = mostAtRiskSubject['stats'] as Map<String, dynamic>;
+        final pct = mostAtRiskSubject['percentage'] as double;
+        threshold = mostAtRiskSubject['requiredPercentage'] as double;
+        
+        subjectName = subject['name'] as String;
+        attended = ((stats['present'] as int?) ?? 0) + ((stats['excused'] as int?) ?? 0);
+        total = (stats['total'] as int?) ?? 0;
+        percentage = pct.round();
+        
+        // Determine status color
+        if (pct < threshold - 15) {
+          statusColor = 'red';
+        } else if (pct < threshold - 5) {
+          statusColor = 'orange';
+        } else if (pct < threshold) {
+          statusColor = 'yellow';
+        } else {
+          statusColor = 'green';
+        }
+        
+        isAtRisk = pct < threshold;
+        
+        // Calculate "can miss X more" text
+        if (isAtRisk) {
+          // How many more classes can they miss before dropping below threshold?
+          // (attended / (total + x)) * 100 = threshold
+          // attended / (total + x) = threshold / 100
+          // total + x = attended / (threshold / 100)
+          // x = (attended / (threshold / 100)) - total
+          final canMiss = ((attended / (threshold / 100)) - total).floor();
+          if (canMiss <= 0) {
+            canMissText = 'CRITICAL: Cannot miss any more classes!';
+          } else if (canMiss == 1) {
+            canMissText = 'Can miss 1 more class';
+          } else {
+            canMissText = 'Can miss $canMiss more classes';
+          }
+        } else {
+          // How many more classes can they miss while staying above threshold?
+          final canMiss = ((attended / (threshold / 100)) - total).floor();
+          if (canMiss <= 0) {
+            canMissText = 'At threshold - cannot miss any';
+          } else if (canMiss == 1) {
+            canMissText = 'Can safely miss 1 class';
+          } else {
+            canMissText = 'Can safely miss $canMiss classes';
+          }
+        }
+      } else {
+        subjectName = 'No Data';
+        statusColor = 'grey';
+        canMissText = 'No attendance data available';
+        threshold = defaultThreshold;
+        isAtRisk = false;
+      }
+
       final data = <String, dynamic>{
-        'subjectName': targetSubject.isEmpty ? 'No Subject' : targetSubject,
+        'subjectName': subjectName,
+        'percentage': percentage,
         'attended': attended,
         'total': total,
-        'percentage': percentage,
+        'statusColor': statusColor,
+        'canMissText': canMissText,
+        'threshold': threshold,
+        'isAtRisk': isAtRisk,
       };
 
       await _writeWidgetData('attendance_widget_data.json', data);
@@ -149,39 +282,100 @@ class WidgetService {
     }
   }
 
-  // ==================== NEW: Timetable Widget ====================
+  // ==================== TIMETABLE WIDGET ====================
   static Future<void> refreshTimetableWidget() async {
     try {
       final now = DateTime.now();
-      final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      final todayName = dayNames[now.weekday - 1];
+      final currentWeekday = now.weekday; // 1=Mon, 7=Sun
+      final currentTimeMinutes = now.hour * 60 + now.minute;
       
-      final notes = await DatabaseHelper.instance.getAllQuickNotes();
-      final dayPrefix = 'TT_$todayName';
+      final upcomingClasses = <Map<String, dynamic>>[];
       
-      final classesList = <Map<String, dynamic>>[];
-      
-      for (final note in notes) {
-        final subject = note['subject'] as String;
-        if (subject.startsWith(dayPrefix)) {
-          final parts = subject.split('_');
-          final subjectName = parts.length > 2 ? parts.sublist(2, parts.length > 3 ? parts.length - 1 : parts.length).join('_') : 'Unknown';
-          final colorHex = parts.length > 3 ? parts.last : '#2196F3';
+      // Search today + tomorrow (max 2 days)
+      for (int dayOffset = 0; dayOffset < 2; dayOffset++) {
+        if (upcomingClasses.length >= 3) break;
+        
+        final searchDate = now.add(Duration(days: dayOffset));
+        final searchWeekday = searchDate.weekday;
+        
+        // Get timetable classes for this day
+        final classes = await DatabaseHelper.instance.getTimetableClassesForDay(searchWeekday);
+        
+        for (final cls in classes) {
+          if (upcomingClasses.length >= 3) break;
           
-          classesList.add({
-            'subject': subjectName,
-            'timeSlot': note['title'],
-            'colorHex': colorHex,
+          final startTimeMinutes = (cls['startTimeMinutes'] as int?) ?? 0;
+          final endTimeMinutes = (cls['endTimeMinutes'] as int?) ?? 0;
+          
+          // For today, skip classes that have already ended
+          if (dayOffset == 0 && endTimeMinutes <= currentTimeMinutes) {
+            continue;
+          }
+          
+          // Calculate countdown minutes
+          int countdownMinutes;
+          if (dayOffset == 0) {
+            countdownMinutes = startTimeMinutes - currentTimeMinutes;
+          } else {
+            countdownMinutes = (dayOffset * 24 * 60) + startTimeMinutes - currentTimeMinutes;
+          }
+          
+          // Format time slot
+          final startHour = startTimeMinutes ~/ 60;
+          final startMin = startTimeMinutes % 60;
+          final endHour = endTimeMinutes ~/ 60;
+          final endMin = endTimeMinutes % 60;
+          final timeSlot = '${_pad(startHour)}:${_pad(startMin)} - ${_pad(endHour)}:${_pad(endMin)}';
+          
+          // Format countdown text
+          String countdownText;
+          if (countdownMinutes < 60) {
+            countdownText = '${countdownMinutes}m';
+          } else if (countdownMinutes < 24 * 60) {
+            final hours = countdownMinutes ~/ 60;
+            final mins = countdownMinutes % 60;
+            countdownText = '${hours}h ${mins}m';
+          } else {
+            final days = countdownMinutes ~/ (24 * 60);
+            final hours = (countdownMinutes % (24 * 60)) ~/ 60;
+            countdownText = '${days}d ${hours}h';
+          }
+          
+          upcomingClasses.add({
+            'subject': cls['subjectName'] ?? 'Unknown',
+            'timeSlot': timeSlot,
+            'room': cls['room'] ?? 'TBD',
+            'countdownMinutes': countdownMinutes,
+            'countdownText': countdownText,
+            'colorHex': cls['colorHex'] ?? '#2196F3',
+            'dayOffset': dayOffset,
+            'isToday': dayOffset == 0,
+            'startTimeMinutes': startTimeMinutes,
+            'endTimeMinutes': endTimeMinutes,
+            'professor': cls['professor'] ?? '',
+            'classType': cls['classType'] ?? 'lecture',
           });
         }
       }
-
-      classesList.sort((a, b) => (a['timeSlot'] as String).compareTo(b['timeSlot'] as String));
-
+      
+      // Sort by countdown (soonest first)
+      upcomingClasses.sort((a, b) => (a['countdownMinutes'] as int).compareTo(b['countdownMinutes'] as int));
+      
+      // Take only top 3
+      final top3Classes = upcomingClasses.take(3).toList();
+      
+      // Format day name
+      final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      final todayName = dayNames[now.weekday - 1];
+      final tomorrowName = dayNames[(now.weekday) % 7];
+      
       final data = <String, dynamic>{
         'dayName': todayName,
         'dateText': '${_monthName(now.month)} ${now.day}',
-        'classes': classesList,
+        'nextDayName': tomorrowName,
+        'classes': top3Classes,
+        'totalUpcoming': upcomingClasses.length,
+        'hasMore': upcomingClasses.length > 3,
       };
 
       await _writeWidgetData('timetable_widget_data.json', data);
