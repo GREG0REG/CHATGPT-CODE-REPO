@@ -1,9 +1,11 @@
+// FILE: lib/screens/quick_notes_screen.dart
+// COMPLETE REPLACEMENT — Fixed double header, added drawer button
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database_helper.dart';
+import 'main_screen.dart';
 
-/// Quick note screen for jotting down lecture notes fast
-/// NOW PERSISTED TO DATABASE - survives app restarts
 class QuickNotesScreen extends StatefulWidget {
   const QuickNotesScreen({super.key});
 
@@ -126,6 +128,10 @@ class _QuickNotesScreenState extends State<QuickNotesScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => mainScaffoldKey.currentState?.openDrawer(),
+        ),
         title: Text(_editingId != null ? 'Edit Note' : 'Quick Notes'),
         actions: [
           if (_isSaving)
@@ -148,7 +154,6 @@ class _QuickNotesScreenState extends State<QuickNotesScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Input form
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -207,7 +212,6 @@ class _QuickNotesScreenState extends State<QuickNotesScreen> {
 
                 const Divider(),
 
-                // Saved notes list
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
