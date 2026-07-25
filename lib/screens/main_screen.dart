@@ -1,5 +1,6 @@
 // FILE: lib/screens/main_screen.dart
-// COMPLETE REPLACEMENT — Fixed double headings
+// COMPLETE REPLACEMENT — Fixed double headings by removing AppBar here
+// Each child screen now has its own AppBar with drawer button
 
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
@@ -13,6 +14,9 @@ import 'quick_notes_screen.dart';
 import 'attendance_screen.dart';
 import 'timetable_screen.dart';
 import 'settings_screen.dart';
+
+// Global key to open drawer from any screen
+final GlobalKey<ScaffoldState> mainScaffoldKey = GlobalKey<ScaffoldState>();
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -94,24 +98,14 @@ class _MainScreenState extends State<MainScreen>
     Navigator.of(context).pop();
   }
 
-  String _getAppBarTitle() {
-    final allItems = [..._mainItems, ..._trackingItems];
-    final item = allItems.firstWhere(
-      (i) => i.index == _currentIndex,
-      orElse: () => _mainItems.first,
-    );
-    return item.label;
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_getAppBarTitle()),
-      ),
+      key: mainScaffoldKey,
+      // NO AppBar here — each child screen has its own
       drawer: Drawer(
         child: SafeArea(
           child: Column(
