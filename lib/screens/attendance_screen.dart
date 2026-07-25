@@ -1,5 +1,6 @@
 // FILE: lib/screens/attendance_screen.dart
 // COMPLETE REWRITE — v11 Attendance Tracker with subjects, schedules, heatmaps, analytics
+// INCLUDES: Navigation to AttendanceDetailScreen and AttendanceAnalyticsScreen
 
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -8,6 +9,8 @@ import 'package:intl/intl.dart';
 import '../database_helper.dart';
 import '../services/widget_service.dart';
 import 'main_screen.dart';
+import 'attendance_detail_screen.dart';
+import 'attendance_analytics_screen.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -25,20 +28,19 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   int _currentWeekStart = 0;
   Map<String, List<Map<String, dynamic>>> _weekHeatmap = {};
 
-  // Color palette for subject picker
   static const List<Color> _colorPalette = [
-    Color(0xFFE53935), // Red
-    Color(0xFFFF7043), // Deep Orange
-    Color(0xFFFFB300), // Amber
-    Color(0xFF66BB6A), // Green
-    Color(0xFF26A69A), // Teal
-    Color(0xFF42A5F5), // Blue
-    Color(0xFF5C6BC0), // Indigo
-    Color(0xFFAB47BC), // Purple
-    Color(0xFFEC407A), // Pink
-    Color(0xFF8D6E63), // Brown
-    Color(0xFF78909C), // Blue Grey
-    Color(0xFF26C6DA), // Cyan
+    Color(0xFFE53935),
+    Color(0xFFFF7043),
+    Color(0xFFFFB300),
+    Color(0xFF66BB6A),
+    Color(0xFF26A69A),
+    Color(0xFF42A5F5),
+    Color(0xFF5C6BC0),
+    Color(0xFFAB47BC),
+    Color(0xFFEC407A),
+    Color(0xFF8D6E63),
+    Color(0xFF78909C),
+    Color(0xFF26C6DA),
   ];
 
   @override
@@ -53,7 +55,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         .subtract(Duration(days: date.weekday - 1));
   }
 
-  /// Convert minutes-since-midnight to readable time string
   String _formatTimeMinutes(int minutes) {
     final h = minutes ~/ 60;
     final m = minutes % 60;
@@ -62,7 +63,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return '$displayH:${m.toString().padLeft(2, '0')} $period';
   }
 
-  /// Format day name from DateTime
   String _dayName(DateTime dt) {
     return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][dt.weekday - 1];
   }
@@ -70,7 +70,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Future<void> _loadData() async {
     setState(() => _loading = true);
 
-    // Load all v11 attendance_subjects
     final subjectRows = await DatabaseHelper.instance.getAllAttendanceSubjects();
     final subjectData = <Map<String, dynamic>>[];
 
@@ -81,7 +80,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       final colorHex = row['colorHex'] as String? ?? '#2196F3';
       final color = _hexToColor(colorHex);
 
-      // Get stats from attendance_logs
       final stats = await DatabaseHelper.instance.getAttendanceStatsForSubject(name);
       final present = (stats['present'] as int?) ?? 0;
       final absent = (stats['absent'] as int?) ?? 0;
@@ -94,7 +92,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           ? ((present + late * 0.5) / effectiveTotal * 100)
           : 0.0;
 
-      // Get schedules for this subject
       final schedules = await DatabaseHelper.instance.getAttendanceSchedulesForSubject(id);
 
       subjectData.add({
@@ -116,10 +113,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       });
     }
 
-    // Sort by percentage ascending (most at-risk first)
     subjectData.sort((a, b) => (a['percentage'] as double).compareTo(b['percentage'] as double));
 
-    // Build weekly heatmap for all subjects
     final heatmap = <String, List<Map<String, dynamic>>>{};
     final weekStart = DateTime.fromMillisecondsSinceEpoch(_currentWeekStart);
     for (int i = 0; i < 5; i++) {
@@ -212,7 +207,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 16),
-                  // Semester date range
                   Row(
                     children: [
                       Expanded(
@@ -337,7 +331,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     reqController.dispose();
 
     if (result != null) {
-      // Insert into attendance_subjects table
       await DatabaseHelper.instance.insertAttendanceSubject({
         'name': result['name'],
         'requiredPercentage': result['requiredPercentage'],
@@ -346,7 +339,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         'colorHex': result['colorHex'],
       });
 
-      // Auto-mark present for today
       await _markAttendance(result['name'] as String, 'present', DateTime.now());
       await _loadData();
     }
@@ -529,9 +521,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Future<void> _addSchedule(int subjectId) async {
-    int dayOfWeek = 1; // Monday
-    int startTimeMinutes = 540; // 9:00 AM
-    int endTimeMinutes = 600;   // 10:00 AM
+    int dayOfWeek = 1;
+    int startTimeMinutes = 540;
+    int endTimeMinutes = 600;
     final roomController = TextEditingController();
     final professorController = TextEditingController();
     String scheduleType = 'lecture';
@@ -824,18 +816,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
 
     if (confirm == true) {
-      // Delete all logs for this subject
       final logs = await DatabaseHelper.instance.getAttendanceLogsForSubject(subject['name'] as String);
       final db = await DatabaseHelper.instance.database;
       for (final log in logs) {
         await db.delete('attendance_logs', where: 'id = ?', whereArgs: [log['id']]);
       }
-      // Delete all schedules for this subject
       final schedules = await DatabaseHelper.instance.getAttendanceSchedulesForSubject(subject['id'] as int);
       for (final sched in schedules) {
         await db.delete('attendance_schedules', where: 'id = ?', whereArgs: [sched['id']]);
       }
-      // Delete the subject itself
       await DatabaseHelper.instance.deleteAttendanceSubject(subject['id'] as int);
 
       await _loadData();
@@ -863,7 +852,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return Colors.red;
   }
 
-  /// Get heatmap color intensity for a day based on attendance ratio
   Color _heatmapColor(String day) {
     final logs = _weekHeatmap[day] ?? [];
     if (logs.isEmpty) return Colors.grey.shade200;
@@ -878,7 +866,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return Colors.grey.shade200;
   }
 
-  /// Get count text for heatmap day
   String _heatmapCount(String day) {
     final logs = _weekHeatmap[day] ?? [];
     if (logs.isEmpty) return '-';
@@ -898,6 +885,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         ),
         title: const Text('Attendance'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.analytics_outlined),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AttendanceAnalyticsScreen(),
+                ),
+              ).then((_) => _loadData());
+            },
+            tooltip: 'Analytics',
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: _addSubject,
@@ -1148,7 +1147,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       children: [
-        // Horizontal scrollable subject cards
         SizedBox(
           height: 130,
           child: ListView.builder(
@@ -1163,7 +1161,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               final name = s['name'] as String;
 
               return GestureDetector(
-                onTap: () => _loadDetailForSubject(name),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AttendanceDetailScreen(
+                        subjectId: s['id'] as int,
+                        subjectName: name,
+                        subjectColor: color,
+                      ),
+                    ),
+                  ).then((_) => _loadData());
+                },
                 child: Container(
                   width: 160,
                   margin: const EdgeInsets.only(right: 10),
@@ -1223,7 +1232,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        // Detailed subject list
         ..._subjects.map((s) {
           final percentage = s['percentage'] as double;
           final required = s['requiredPercentage'] as double;
@@ -1238,7 +1246,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               side: BorderSide(color: cs.outlineVariant.withOpacity(0.3)),
             ),
             child: InkWell(
-              onTap: () => _loadDetailForSubject(name),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AttendanceDetailScreen(
+                      subjectId: s['id'] as int,
+                      subjectName: name,
+                      subjectColor: color,
+                    ),
+                  ),
+                ).then((_) => _loadData());
+              },
               borderRadius: BorderRadius.circular(14),
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -1408,7 +1427,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // Circular progress indicator
               Center(
                 child: SizedBox(
                   width: 160,
@@ -1464,7 +1482,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              // Status chips row
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
@@ -1475,8 +1492,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-
-              // Trend placeholder section
               _buildSectionTitle('Trend', cs),
               const SizedBox(height: 8),
               Container(
@@ -1501,8 +1516,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-
-              // Schedule list section
               _buildSectionTitle('Schedule', cs),
               const SizedBox(height: 8),
               if (_schedules.isEmpty)
@@ -1587,8 +1600,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 label: const Text('Add Schedule'),
               ),
               const SizedBox(height: 24),
-
-              // Quick mark buttons
               _buildSectionTitle('Quick Mark', cs),
               const SizedBox(height: 8),
               Row(
@@ -1663,8 +1674,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-
-              // Recent logs
               _buildSectionTitle('Recent Logs', cs),
               const SizedBox(height: 8),
               if (_logs.isEmpty)
