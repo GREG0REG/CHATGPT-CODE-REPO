@@ -408,13 +408,11 @@ class ExportImportService {
         'manifest.json',
         manifestBytes.length,
         manifestBytes,
-        compressionLevel: 6,
       ))
       ..addFile(ArchiveFile(
         'data.json',
         dataBytes.length,
         dataBytes,
-        compressionLevel: 6,
       ));
 
     final zipEncoder = ZipEncoder();
