@@ -14,7 +14,7 @@ import '../services/recurrence_service.dart';
 import '../services/settings_service.dart';
 import '../services/widget_service.dart';
 import '../theme/app_themes.dart';
-import '../widgets/event_card.dart';
+import '../event_card.dart';
 import 'add_edit_event_screen.dart';
 import 'settings_screen.dart';
 import 'main_screen.dart';
@@ -190,6 +190,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       if (choice == _DeleteChoice.series) {
         setState(() {
+          _events.removeWhere((e) =>
+              e.id == event.id ||
+              (e.id != null && e.id! < 0 && -e.id! == parentId));
+        });
+        await DatabaseHelper.instance.deleteEvent(() {
           _events.removeWhere((e) =>
               e.id == event.id ||
               (e.id != null && e.id! < 0 && -e.id! == parentId));
