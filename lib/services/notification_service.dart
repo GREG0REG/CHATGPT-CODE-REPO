@@ -7,7 +7,7 @@ import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:flutter/material.dart';
 import 'package:workmanager/workmanager.dart';
 import '../models/event.dart';
-import '../db/database_helper.dart';
+import '../database_helper.dart';
 
 // ============================================================================
 // WORKMANAGER TASK NAMES
