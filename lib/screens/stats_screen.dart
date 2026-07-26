@@ -1,6 +1,7 @@
 // FILE: lib/screens/stats_screen.dart
 // COMPLETE REPLACEMENT — copy and paste entire file
 
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../database_helper.dart';
@@ -9,7 +10,7 @@ import '../models/study_session.dart';
 import '../services/countdown_service.dart';
 import '../services/settings_service.dart';
 import '../theme/app_themes.dart';
-import '../WIDGET/gpa_calculator_widget.dart';
+import '../widgets/gpa_calculator_widget.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -35,8 +36,23 @@ class _StatsScreenState extends State<StatsScreen>
   final Map<String, int> _subjectMinutes = {};
   final List<int> _dailyMinutes = List.filled(7, 0);
 
+  // NEW: Enhanced stats
+  Map<int, int> _hourlyMinutes = {};
+  double _avgSessionLength = 0.0;
+  int _longestSession = 0;
+  int _todaySessionCount = 0;
+  int _thisWeekMinutes = 0;
+  int _lastWeekMinutes = 0;
+  int _thisMonthMinutes = 0;
+  int _lastMonthMinutes = 0;
+  int _efficiencyScore = 0;
+  Map<String, int> _sessionTypeBreakdown = {};
+  Map<String, int> _subjectGoals = {};
+
   late final AnimationController _counterController;
   late final Animation<double> _counterAnimation;
+  late final AnimationController _ringController;
+  late final Animation<double> _ringAnimation;
 
   @override
   void initState() {
@@ -47,6 +63,14 @@ class _StatsScreenState extends State<StatsScreen>
     );
     _counterAnimation = CurvedAnimation(
       parent: _counterController,
+      curve: Curves.easeOutCubic,
+    );
+    _ringController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _ringAnimation = CurvedAnimation(
+      parent: _ringController,
       curve: Curves.easeOutCubic,
     );
     _loadData();
@@ -65,7 +89,7 @@ class _StatsScreenState extends State<StatsScreen>
     final todayMin = await DatabaseHelper.instance.getTodayStudyMinutes();
     final streak = await DatabaseHelper.instance.getLatestStreak();
 
-    // Load real upcoming exams (events with subjectTag and future deadline)
+    // Load real upcoming exams
     final allEvents = await DatabaseHelper.instance.getAllEventsSorted();
     final exams = allEvents.where((e) {
       if (e.isCompleted) return false;
@@ -73,8 +97,36 @@ class _StatsScreenState extends State<StatsScreen>
       return e.finalMillis > now.millisecondsSinceEpoch;
     }).toList();
     exams.sort((a, b) => a.finalMillis.compareTo(b.finalMillis));
-    // Take top 5 upcoming exams
     final upcomingExams = exams.take(5).toList();
+
+    // NEW: Enhanced stats queries
+    final hourlyMinutes = await DatabaseHelper.instance.getSessionsByHour();
+    final avgDuration = await DatabaseHelper.instance.getAverageSessionDuration();
+    final longestSession = await DatabaseHelper.instance.getLongestSession();
+    final todaySessionCount = await DatabaseHelper.instance.getTodaySessionCount();
+    final sessionTypes = await DatabaseHelper.instance.getSessionTypeBreakdown();
+
+    // Weekly comparison
+    final thisWeekStart = now.subtract(Duration(days: now.weekday - 1));
+    final thisWeekStartMillis = DateTime(thisWeekStart.year, thisWeekStart.month, thisWeekStart.day).millisecondsSinceEpoch;
+    final lastWeekStartMillis = thisWeekStartMillis - const Duration(days: 7).inMilliseconds;
+    final thisWeekMin = await DatabaseHelper.instance.getWeeklyMinutes(thisWeekStartMillis);
+    final lastWeekMin = await DatabaseHelper.instance.getWeeklyMinutes(lastWeekStartMillis);
+
+    // Monthly comparison
+    final thisMonthMin = await DatabaseHelper.instance.getMonthlyMinutes(now.year, now.month);
+    final lastMonthMin = now.month == 1
+        ? await DatabaseHelper.instance.getMonthlyMinutes(now.year - 1, 12)
+        : await DatabaseHelper.instance.getMonthlyMinutes(now.year, now.month - 1);
+
+    // Efficiency score
+    final efficiency = await DatabaseHelper.instance.getStudyEfficiencyScore();
+
+    // Subject goals (default 120 min per subject per week)
+    final subjectGoals = <String, int>{};
+    for (final entry in _subjectMinutes.entries) {
+      subjectGoals[entry.key] = 120; // Default weekly goal
+    }
 
     final subjectMap = <String, int>{};
     final daily = List<int>.filled(7, 0);
@@ -112,10 +164,25 @@ class _StatsScreenState extends State<StatsScreen>
       _favoriteSubject = fav;
       _subjectMinutes.addAll(subjectMap);
       _dailyMinutes.setAll(0, daily);
+
+      // NEW: Enhanced stats
+      _hourlyMinutes = hourlyMinutes;
+      _avgSessionLength = avgDuration;
+      _longestSession = longestSession;
+      _todaySessionCount = todaySessionCount;
+      _thisWeekMinutes = thisWeekMin;
+      _lastWeekMinutes = lastWeekMin;
+      _thisMonthMinutes = thisMonthMin;
+      _lastMonthMinutes = lastMonthMin;
+      _efficiencyScore = efficiency;
+      _sessionTypeBreakdown = sessionTypes;
+      _subjectGoals = subjectGoals;
+
       _loading = false;
     });
 
     _counterController.forward(from: 0);
+    _ringController.forward(from: 0);
   }
 
   Future<void> _refresh() async {
@@ -133,6 +200,8 @@ class _StatsScreenState extends State<StatsScreen>
       Colors.pink,
       Colors.indigo,
       Colors.red,
+      Colors.cyan,
+      Colors.lime,
     ];
     return colors[index % colors.length];
   }
@@ -158,6 +227,38 @@ class _StatsScreenState extends State<StatsScreen>
     if (diff.inDays < 3) return Colors.deepOrange;
     if (diff.inDays < 7) return Colors.orange;
     return Colors.green;
+  }
+
+  // NEW: Get best time of day
+  int? get _bestHour {
+    if (_hourlyMinutes.isEmpty) return null;
+    int bestHour = 0;
+    int maxMinutes = 0;
+    _hourlyMinutes.forEach((hour, minutes) {
+      if (minutes > maxMinutes) {
+        maxMinutes = minutes;
+        bestHour = hour;
+      }
+    });
+    return maxMinutes > 0 ? bestHour : null;
+  }
+
+  String _formatHour(int hour) {
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    return '$displayHour $period';
+  }
+
+  // NEW: Weekly change percentage
+  double get _weekChangePercent {
+    if (_lastWeekMinutes == 0) return _thisWeekMinutes > 0 ? 100.0 : 0.0;
+    return ((_thisWeekMinutes - _lastWeekMinutes) / _lastWeekMinutes * 100);
+  }
+
+  // NEW: Monthly change percentage
+  double get _monthChangePercent {
+    if (_lastMonthMinutes == 0) return _thisMonthMinutes > 0 ? 100.0 : 0.0;
+    return ((_thisMonthMinutes - _lastMonthMinutes) / _lastMonthMinutes * 100);
   }
 
   @override
@@ -281,7 +382,6 @@ class _StatsScreenState extends State<StatsScreen>
                     ),
                     const SizedBox(height: 24),
                   ] else ...[
-                    // Empty exam state
                     Container(
                       margin: const EdgeInsets.only(bottom: 24),
                       padding: const EdgeInsets.all(20),
@@ -329,8 +429,20 @@ class _StatsScreenState extends State<StatsScreen>
                     ),
                   ],
 
+                  // NEW: Efficiency Score Card
+                  _buildEfficiencyCard(cs),
+                  const SizedBox(height: 24),
+
                   // Summary Stats Row
                   _buildSummaryRow(cs),
+                  const SizedBox(height: 24),
+
+                  // NEW: Best Time of Day & Average Session
+                  _buildInsightsRow(cs),
+                  const SizedBox(height: 24),
+
+                  // NEW: Weekly vs Monthly Comparison
+                  _buildComparisonSection(cs),
                   const SizedBox(height: 24),
 
                   // GPA Calculator Widget
@@ -343,11 +455,35 @@ class _StatsScreenState extends State<StatsScreen>
                   _buildTrendChart(cs),
                   const SizedBox(height: 24),
 
+                  // NEW: Session Type Breakdown
+                  if (_sessionTypeBreakdown.isNotEmpty) ...[
+                    _buildSectionTitle('Session Types'),
+                    const SizedBox(height: 12),
+                    _buildSessionTypeChart(cs),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // NEW: Subject Progress Rings
+                  if (_subjectMinutes.isNotEmpty) ...[
+                    _buildSectionTitle('Subject Progress'),
+                    const SizedBox(height: 12),
+                    _buildSubjectProgressRings(cs),
+                    const SizedBox(height: 24),
+                  ],
+
                   // Subject Breakdown
                   if (_subjectMinutes.isNotEmpty) ...[
                     _buildSectionTitle('Minutes by Subject'),
                     const SizedBox(height: 12),
                     _buildSubjectChart(cs),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // NEW: Best Time Heatmap
+                  if (_hourlyMinutes.isNotEmpty) ...[
+                    _buildSectionTitle('Productivity by Hour'),
+                    const SizedBox(height: 12),
+                    _buildHourlyHeatmap(cs),
                     const SizedBox(height: 24),
                   ],
 
@@ -367,6 +503,113 @@ class _StatsScreenState extends State<StatsScreen>
         fontSize: 18,
         fontWeight: FontWeight.bold,
         color: Theme.of(context).colorScheme.onSurface,
+      ),
+    );
+  }
+
+  // NEW: Efficiency Score Card
+  Widget _buildEfficiencyCard(ColorScheme cs) {
+    final score = _efficiencyScore;
+    final Color scoreColor = score >= 80
+        ? Colors.green
+        : score >= 60
+            ? Colors.orange
+            : Colors.red;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            cs.primary.withOpacity(0.12),
+            cs.primary.withOpacity(0.04),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.primary.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 80,
+            height: 80,
+            child: AnimatedBuilder(
+              animation: _ringAnimation,
+              builder: (context, child) {
+                return CustomPaint(
+                  painter: _RingPainter(
+                    progress: (score / 100) * _ringAnimation.value,
+                    color: scoreColor,
+                    backgroundColor: cs.surfaceContainerHighest,
+                    strokeWidth: 8,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${(score * _ringAnimation.value).round()}',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: scoreColor,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Study Efficiency',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  score >= 80
+                      ? 'Excellent! You\'re in the zone.'
+                      : score >= 60
+                          ? 'Good progress. Keep it consistent.'
+                          : 'Let\'s build a more regular study habit.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: cs.outline,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _EfficiencyBadge(
+                      label: 'Duration',
+                      active: _avgSessionLength >= 20 && _avgSessionLength <= 50,
+                      color: cs,
+                    ),
+                    const SizedBox(width: 8),
+                    _EfficiencyBadge(
+                      label: 'Consistency',
+                      active: _latestStreak >= 3,
+                      color: cs,
+                    ),
+                    const SizedBox(width: 8),
+                    _EfficiencyBadge(
+                      label: 'Volume',
+                      active: _totalSessions >= 10,
+                      color: cs,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -407,6 +650,253 @@ class _StatsScreenState extends State<StatsScreen>
           ),
         ),
       ],
+    );
+  }
+
+  // NEW: Insights Row - Best Time & Avg Session
+  Widget _buildInsightsRow(ColorScheme cs) {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.purple.withOpacity(0.12),
+                  Colors.purple.withOpacity(0.04),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.purple.withOpacity(0.15)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.schedule, color: Colors.purple, size: 20),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _bestHour != null ? _formatHour(_bestHour!) : '--',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface,
+                  ),
+                ),
+                Text(
+                  'Best Time',
+                  style: TextStyle(fontSize: 11, color: cs.outline, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _bestHour != null ? 'Peak productivity hour' : 'No data yet',
+                  style: TextStyle(fontSize: 10, color: cs.outline.withOpacity(0.7)),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.teal.withOpacity(0.12),
+                  Colors.teal.withOpacity(0.04),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.teal.withOpacity(0.15)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.timelapse, color: Colors.teal, size: 20),
+                ),
+                const SizedBox(height: 10),
+                AnimatedBuilder(
+                  animation: _counterAnimation,
+                  builder: (context, child) {
+                    final displayValue = (_avgSessionLength * _counterAnimation.value).round();
+                    return Text(
+                      '$displayValue',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: cs.onSurface,
+                      ),
+                    );
+                  },
+                ),
+                Text(
+                  'min avg',
+                  style: TextStyle(fontSize: 11, color: cs.outline, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Session length',
+                  style: TextStyle(fontSize: 10, color: cs.outline.withOpacity(0.7)),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.indigo.withOpacity(0.12),
+                  Colors.indigo.withOpacity(0.04),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.indigo.withOpacity(0.15)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.format_list_numbered, color: Colors.indigo, size: 20),
+                ),
+                const SizedBox(height: 10),
+                AnimatedBuilder(
+                  animation: _counterAnimation,
+                  builder: (context, child) {
+                    final displayValue = (_todaySessionCount * _counterAnimation.value).round();
+                    return Text(
+                      '$displayValue',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: cs.onSurface,
+                      ),
+                    );
+                  },
+                ),
+                Text(
+                  'sessions',
+                  style: TextStyle(fontSize: 11, color: cs.outline, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Today\'s count',
+                  style: TextStyle(fontSize: 10, color: cs.outline.withOpacity(0.7)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // NEW: Weekly & Monthly Comparison
+  Widget _buildComparisonSection(ColorScheme cs) {
+    final weekChange = _weekChangePercent;
+    final monthChange = _monthChangePercent;
+    final weekColor = weekChange >= 0 ? Colors.green : Colors.red;
+    final monthColor = monthChange >= 0 ? Colors.green : Colors.red;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.trending_up, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Performance Comparison',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _ComparisonItem(
+                  label: 'This Week',
+                  value: '${(_thisWeekMinutes / 60).toStringAsFixed(1)}h',
+                  change: weekChange,
+                  changeColor: weekColor,
+                  previousLabel: 'Last week: ${(_lastWeekMinutes / 60).toStringAsFixed(1)}h',
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 60,
+                color: cs.outlineVariant.withOpacity(0.3),
+              ),
+              Expanded(
+                child: _ComparisonItem(
+                  label: 'This Month',
+                  value: '${(_thisMonthMinutes / 60).toStringAsFixed(1)}h',
+                  change: monthChange,
+                  changeColor: monthColor,
+                  previousLabel: 'Last month: ${(_lastMonthMinutes / 60).toStringAsFixed(1)}h',
+                ),
+              ),
+            ],
+          ),
+          if (_longestSession > 0) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.emoji_events, size: 16, color: Colors.amber),
+                const SizedBox(width: 8),
+                Text(
+                  'Longest session: $_longestSession minutes',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: cs.outline,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -497,6 +987,281 @@ class _StatsScreenState extends State<StatsScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // NEW: Session Type Breakdown (Pie Chart)
+  Widget _buildSessionTypeChart(ColorScheme cs) {
+    final entries = _sessionTypeBreakdown.entries.toList();
+    final total = entries.fold(0, (sum, e) => sum + e.value);
+    if (total == 0) return const SizedBox.shrink();
+
+    final colors = [
+      Colors.blue,
+      Colors.green,
+      Colors.orange,
+      Colors.purple,
+      Colors.teal,
+    ];
+
+    return Container(
+      height: 200,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: PieChart(
+              PieChartData(
+                sectionsSpace: 2,
+                centerSpaceRadius: 30,
+                sections: List.generate(
+                  entries.length,
+                  (i) {
+                    final percentage = (entries[i].value / total * 100);
+                    return PieChartSectionData(
+                      color: colors[i % colors.length],
+                      value: entries[i].value.toDouble(),
+                      title: '${percentage.toStringAsFixed(0)}%',
+                      radius: 50,
+                      titleStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: entries.asMap().entries.map((entry) {
+                final i = entry.key;
+                final type = entry.value.key;
+                final count = entry.value.value;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: colors[i % colors.length],
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          type.replaceAll('_', ' ').toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: cs.onSurface,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        '$count',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.outline,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // NEW: Subject Progress Rings
+  Widget _buildSubjectProgressRings(ColorScheme cs) {
+    final entries = _subjectMinutes.entries.toList();
+    
+    return Container(
+      height: 160,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: entries.length,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        itemBuilder: (context, index) {
+          final subject = entries[index].key;
+          final minutes = entries[index].value;
+          final goal = _subjectGoals[subject] ?? 120;
+          final progress = (minutes / goal).clamp(0.0, 1.0);
+          final color = _subjectColor(index, cs.brightness);
+
+          return Container(
+            width: 130,
+            margin: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: AnimatedBuilder(
+                    animation: _ringAnimation,
+                    builder: (context, child) {
+                      return CustomPaint(
+                        painter: _RingPainter(
+                          progress: progress * _ringAnimation.value,
+                          color: color,
+                          backgroundColor: cs.surfaceContainerHighest,
+                          strokeWidth: 6,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${(progress * 100 * _ringAnimation.value).round()}%',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: color,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  subject.length > 8 ? '${subject.substring(0, 8)}..' : subject,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
+                  ),
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '$min / $goal min',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: cs.outline,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // NEW: Hourly Heatmap
+  Widget _buildHourlyHeatmap(ColorScheme cs) {
+    final maxMinutes = _hourlyMinutes.values.isEmpty 
+        ? 1 
+        : _hourlyMinutes.values.reduce((a, b) => a > b ? a : b);
+
+    return Container(
+      height: 120,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Morning',
+                style: TextStyle(fontSize: 10, color: cs.outline),
+              ),
+              Text(
+                'Afternoon',
+                style: TextStyle(fontSize: 10, color: cs.outline),
+              ),
+              Text(
+                'Evening',
+                style: TextStyle(fontSize: 10, color: cs.outline),
+              ),
+              Text(
+                'Night',
+                style: TextStyle(fontSize: 10, color: cs.outline),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: Row(
+              children: List.generate(24, (hour) {
+                final minutes = _hourlyMinutes[hour] ?? 0;
+                final intensity = maxMinutes > 0 ? minutes / maxMinutes : 0.0;
+                final isBest = _bestHour == hour;
+
+                return Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 1),
+                    decoration: BoxDecoration(
+                      color: minutes > 0
+                          ? cs.primary.withOpacity(0.1 + (intensity * 0.9))
+                          : cs.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(2),
+                      border: isBest
+                          ? Border.all(color: Colors.amber, width: 2)
+                          : null,
+                    ),
+                    child: Tooltip(
+                      message: '${_formatHour(hour)}: $minutes min',
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: Colors.amber,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Best hour',
+                style: TextStyle(fontSize: 10, color: cs.outline),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -660,7 +1425,173 @@ class _StatsScreenState extends State<StatsScreen>
   @override
   void dispose() {
     _counterController.dispose();
+    _ringController.dispose();
     super.dispose();
+  }
+}
+
+// NEW: Ring Painter for circular progress
+class _RingPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  final Color backgroundColor;
+  final double strokeWidth;
+
+  _RingPainter({
+    required this.progress,
+    required this.color,
+    required this.backgroundColor,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width - strokeWidth) / 2;
+
+    // Background ring
+    final bgPaint = Paint()
+      ..color = backgroundColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawCircle(center, radius, bgPaint);
+
+    // Progress ring
+    final progressPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      2 * math.pi * progress,
+      false,
+      progressPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _RingPainter oldDelegate) {
+    return oldDelegate.progress != progress;
+  }
+}
+
+// NEW: Efficiency Badge
+class _EfficiencyBadge extends StatelessWidget {
+  final String label;
+  final bool active;
+  final ColorScheme color;
+
+  const _EfficiencyBadge({
+    required this.label,
+    required this.active,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: active
+            ? Colors.green.withOpacity(0.15)
+            : color.surfaceContainerHighest.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: active
+              ? Colors.green.withOpacity(0.3)
+              : color.outlineVariant.withOpacity(0.3),
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: active ? Colors.green.shade700 : color.outline,
+        ),
+      ),
+    );
+  }
+}
+
+// NEW: Comparison Item
+class _ComparisonItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final double change;
+  final Color changeColor;
+  final String previousLabel;
+
+  const _ComparisonItem({
+    required this.label,
+    required this.value,
+    required this.change,
+    required this.changeColor,
+    required this.previousLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isPositive = change >= 0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: cs.outline,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: cs.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(
+                isPositive ? Icons.arrow_upward : Icons.arrow_downward,
+                size: 12,
+                color: changeColor,
+              ),
+              const SizedBox(width: 2),
+              Text(
+                '${change.abs().toStringAsFixed(1)}%',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: changeColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            previousLabel,
+            style: TextStyle(
+              fontSize: 10,
+              color: cs.outline.withOpacity(0.7),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
