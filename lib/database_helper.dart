@@ -1,6 +1,6 @@
 // FILE: lib/db/database_helper.dart
-// COMPLETE REPLACEMENT — Added reading_sessions table (v14), streak tracking, pages/day history
-// PRESERVED: All existing tables, migrations v1-v13, and every existing CRUD method
+// COMPLETE REPLACEMENT — Merged v13 + v14: All features unified
+// PRESERVED: All existing tables, migrations v1-v14, and every existing CRUD method
 
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -686,7 +686,6 @@ class DatabaseHelper {
         totalPages INTEGER NOT NULL,
         currentPage INTEGER DEFAULT 0,
         subjectName TEXT,
-        colorHex TEXT DEFAULT '#2196F3',
         startDateMillis INTEGER,
         targetEndDateMillis INTEGER,
         dailyPageGoal INTEGER DEFAULT 20,
@@ -724,7 +723,6 @@ class DatabaseHelper {
       )
     """);
   }
-
   // ============================================
   // EVENT CRUD (PRESERVED)
   // ============================================
@@ -1305,6 +1303,7 @@ class DatabaseHelper {
       WHERE id = ?
     """, [minutes, id]);
   }
+
 
   // ============================================
   // GRADE COMPONENT CRUD (PRESERVED)
@@ -1977,11 +1976,22 @@ class DatabaseHelper {
     return rows;
   }
 
-  Future<Map<String, dynamic>?> getClassScheduleById(int id) async {
+    Future<Map<String, dynamic>?> getClassScheduleById(int id) async {
     final db = await database;
     final rows = await db.query('class_schedule', where: 'id = ?', whereArgs: [id]);
     if (rows.isEmpty) return null;
     return rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> getClassSchedulesForDay(int dayOfWeek) async {
+    final db = await database;
+    final rows = await db.query(
+      'class_schedule',
+      where: 'dayOfWeek = ? AND isActive = 1',
+      whereArgs: [dayOfWeek],
+      orderBy: 'startTimeMinutes ASC',
+    );
+    return rows;
   }
 
   Future<List<Map<String, dynamic>>> getActiveClassSchedules() async {
@@ -2004,7 +2014,7 @@ class DatabaseHelper {
     );
   }
 
-    // ============================================
+  // ============================================
   // HABITS CRUD (PRESERVED)
   // ============================================
   Future<int> insertHabit(Map<String, dynamic> habit) async {
@@ -2224,6 +2234,7 @@ class DatabaseHelper {
           : 0,
     };
   }
+
 
   // ============================================
   // READING BOOKS CRUD (PRESERVED + ENHANCED)
