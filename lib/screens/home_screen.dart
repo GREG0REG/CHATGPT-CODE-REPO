@@ -194,11 +194,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               e.id == event.id ||
               (e.id != null && e.id! < 0 && -e.id! == parentId));
         });
-        await DatabaseHelper.instance.deleteEvent(() {
-          _events.removeWhere((e) =>
-              e.id == event.id ||
-              (e.id != null && e.id! < 0 && -e.id! == parentId));
-        });
         await DatabaseHelper.instance.deleteEvent(parentId);
         await NotificationService.instance.cancelForEvent(parentId);
       } else {
