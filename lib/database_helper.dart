@@ -1984,10 +1984,755 @@ class DatabaseHelper {
     return rows.first;
   }
 
-  Future<List<Map<String, dynamic>>> getClassSchedulesForDay(int dayOfWeek) async {
+  Future<List<Map<String, dynamic>>> getActiveClassSchedules() async {
     final db = await database;
     final rows = await db.query(
       'class_schedule',
-      where: 'dayOfWeek = ? AND isActive = 1',
-      whereArgs: [dayOfWeek],
-      orderBy: '
+      where: 'isActive = 1',
+      orderBy: 'dayOfWeek ASC, startTimeMinutes ASC',
+    );
+    return rows;
+  }
+
+  Future<void> toggleClassScheduleActive(int id, bool isActive) async {
+    final db = await database;
+    await db.update(
+      'class_schedule',
+      {'isActive': isActive ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+    // ============================================
+  // HABITS CRUD (PRESERVED)
+  // ============================================
+  Future<int> insertHabit(Map<String, dynamic> habit) async {
+    final db = await database;
+    final data = {
+      'name': habit['name'],
+      'subjectName': habit['subjectName'],
+      'colorHex': habit['colorHex'] ?? '#4CAF50',
+      'targetPerWeek': habit['targetPerWeek'] ?? 7,
+      'reminderTimeMinutes': habit['reminderTimeMinutes'],
+      'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
+      'isArchived': habit['isArchived'] ?? 0,
+      'habitType': habit['habitType'] ?? 0,
+      'metricGoal': habit['metricGoal'],
+      'unitLabel': habit['unitLabel'],
+    };
+    return db.insert('habits', data);
+  }
+
+  Future<int> updateHabit(int id, Map<String, dynamic> habit) async {
+    final db = await database;
+    final data = {
+      'name': habit['name'],
+      'subjectName': habit['subjectName'],
+      'colorHex': habit['colorHex'] ?? '#4CAF50',
+      'targetPerWeek': habit['targetPerWeek'] ?? 7,
+      'reminderTimeMinutes': habit['reminderTimeMinutes'],
+      'isArchived': habit['isArchived'] ?? 0,
+      'habitType': habit['habitType'] ?? 0,
+      'metricGoal': habit['metricGoal'],
+      'unitLabel': habit['unitLabel'],
+    };
+    return db.update('habits', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteHabit(int id) async {
+    final db = await database;
+    await db.delete('habit_logs', where: 'habitId = ?', whereArgs: [id]);
+    return db.delete('habits', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllHabits({bool includeArchived = false}) async {
+    final db = await database;
+    if (includeArchived) {
+      final rows = await db.query('habits', orderBy: 'createdAtMillis DESC');
+      return rows;
+    }
+    final rows = await db.query(
+      'habits',
+      where: 'isArchived = 0',
+      orderBy: 'createdAtMillis DESC',
+    );
+    return rows;
+  }
+
+  Future<Map<String, dynamic>?> getHabitById(int id) async {
+    final db = await database;
+    final rows = await db.query('habits', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> getHabitsBySubject(String subjectName) async {
+    final db = await database;
+    final rows = await db.query(
+      'habits',
+      where: 'subjectName = ? AND isArchived = 0',
+      whereArgs: [subjectName],
+      orderBy: 'createdAtMillis DESC',
+    );
+    return rows;
+  }
+
+  Future<void> archiveHabit(int id, bool archive) async {
+    final db = await database;
+    await db.update(
+      'habits',
+      {'isArchived': archive ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // ============================================
+  // HABIT LOGS CRUD (PRESERVED)
+  // ============================================
+  Future<int> insertHabitLog(Map<String, dynamic> log) async {
+    final db = await database;
+    final data = {
+      'habitId': log['habitId'],
+      'dateMillis': log['dateMillis'],
+      'completed': log['completed'] ?? 1,
+      'note': log['note'],
+      'metricValue': log['metricValue'],
+    };
+    return db.insert('habit_logs', data);
+  }
+
+  Future<int> updateHabitLog(int id, Map<String, dynamic> log) async {
+    final db = await database;
+    final data = {
+      'habitId': log['habitId'],
+      'dateMillis': log['dateMillis'],
+      'completed': log['completed'] ?? 1,
+      'note': log['note'],
+      'metricValue': log['metricValue'],
+    };
+    return db.update('habit_logs', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteHabitLog(int id) async {
+    final db = await database;
+    return db.delete('habit_logs', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getHabitLogsForHabit(int habitId) async {
+    final db = await database;
+    final rows = await db.query(
+      'habit_logs',
+      where: 'habitId = ?',
+      whereArgs: [habitId],
+      orderBy: 'dateMillis DESC',
+    );
+    return rows;
+  }
+
+  Future<Map<String, dynamic>?> getHabitLogForDate(int habitId, int dateMillis) async {
+    final db = await database;
+    final endOfDay = dateMillis + const Duration(days: 1).inMilliseconds;
+    final rows = await db.query(
+      'habit_logs',
+      where: 'habitId = ? AND dateMillis >= ? AND dateMillis < ?',
+      whereArgs: [habitId, dateMillis, endOfDay],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> getHabitLogsForDateRange(int habitId, int startMillis, int endMillis) async {
+    final db = await database;
+    final rows = await db.query(
+      'habit_logs',
+      where: 'habitId = ? AND dateMillis >= ? AND dateMillis < ?',
+      whereArgs: [habitId, startMillis, endMillis],
+      orderBy: 'dateMillis ASC',
+    );
+    return rows;
+  }
+
+  Future<int> getHabitCompletionCountForWeek(int habitId, int weekStartMillis) async {
+    final db = await database;
+    final weekEndMillis = weekStartMillis + const Duration(days: 7).inMilliseconds;
+    final result = await db.rawQuery("""
+      SELECT COUNT(*) as count FROM habit_logs
+      WHERE habitId = ? AND dateMillis >= ? AND dateMillis < ? AND completed = 1
+    """, [habitId, weekStartMillis, weekEndMillis]);
+    return (result.first['count'] as int?) ?? 0;
+  }
+
+  Future<int> getHabitStreak(int habitId) async {
+    final db = await database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    
+    final rows = await db.query(
+      'habit_logs',
+      where: 'habitId = ? AND completed = 1',
+      whereArgs: [habitId],
+      orderBy: 'dateMillis DESC',
+    );
+    
+    if (rows.isEmpty) return 0;
+    
+    int streak = 0;
+    int expectedDateMillis = todayStart;
+    
+    for (final row in rows) {
+      final dateMillis = row['dateMillis'] as int;
+      final date = DateTime.fromMillisecondsSinceEpoch(dateMillis);
+      final dayStart = DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
+      
+      if (dayStart == expectedDateMillis) {
+        streak++;
+        expectedDateMillis -= const Duration(days: 1).inMilliseconds;
+      } else if (dayStart < expectedDateMillis) {
+        break;
+      }
+    }
+    
+    return streak;
+  }
+
+  Future<Map<String, dynamic>> getHabitWeeklyStats(int habitId, int weekStartMillis) async {
+    final db = await database;
+    final weekEndMillis = weekStartMillis + const Duration(days: 7).inMilliseconds;
+    
+    final completedResult = await db.rawQuery("""
+      SELECT COUNT(*) as completed FROM habit_logs
+      WHERE habitId = ? AND dateMillis >= ? AND dateMillis < ? AND completed = 1
+    """, [habitId, weekStartMillis, weekEndMillis]);
+    
+    final totalResult = await db.rawQuery("""
+      SELECT COUNT(*) as total FROM habit_logs
+      WHERE habitId = ? AND dateMillis >= ? AND dateMillis < ?
+    """, [habitId, weekStartMillis, weekEndMillis]);
+    
+    final habit = await getHabitById(habitId);
+    final targetPerWeek = (habit?['targetPerWeek'] as int?) ?? 7;
+    
+    return {
+      'completed': (completedResult.first['completed'] as int?) ?? 0,
+      'total': (totalResult.first['total'] as int?) ?? 0,
+      'targetPerWeek': targetPerWeek,
+      'percentage': targetPerWeek > 0 
+          ? (((completedResult.first['completed'] as int?) ?? 0) / targetPerWeek * 100).round()
+          : 0,
+    };
+  }
+
+  // ============================================
+  // READING BOOKS CRUD (PRESERVED + ENHANCED)
+  // ============================================
+  Future<int> insertReadingBook(Map<String, dynamic> book) async {
+    final db = await database;
+    final data = {
+      'title': book['title'],
+      'author': book['author'],
+      'totalPages': book['totalPages'],
+      'currentPage': book['currentPage'] ?? 0,
+      'subjectName': book['subjectName'],
+      'colorHex': book['colorHex'] ?? '#2196F3',
+      'startDateMillis': book['startDateMillis'],
+      'targetEndDateMillis': book['targetEndDateMillis'],
+      'dailyPageGoal': book['dailyPageGoal'] ?? 20,
+      'minutesReadToday': book['minutesReadToday'] ?? 0,
+      'totalMinutesRead': book['totalMinutesRead'] ?? 0,
+      'isCompleted': book['isCompleted'] ?? 0,
+      'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
+    };
+    return db.insert('reading_books', data);
+  }
+
+  Future<int> updateReadingBook(int id, Map<String, dynamic> book) async {
+    final db = await database;
+    final data = {
+      'title': book['title'],
+      'author': book['author'],
+      'totalPages': book['totalPages'],
+      'currentPage': book['currentPage'] ?? 0,
+      'subjectName': book['subjectName'],
+      'colorHex': book['colorHex'] ?? '#2196F3',
+      'startDateMillis': book['startDateMillis'],
+      'targetEndDateMillis': book['targetEndDateMillis'],
+      'dailyPageGoal': book['dailyPageGoal'] ?? 20,
+      'minutesReadToday': book['minutesReadToday'] ?? 0,
+      'totalMinutesRead': book['totalMinutesRead'] ?? 0,
+      'isCompleted': book['isCompleted'] ?? 0,
+    };
+    return db.update('reading_books', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteReadingBook(int id) async {
+    final db = await database;
+    // Cascade delete reading sessions for this book
+    await db.delete('reading_sessions', where: 'bookId = ?', whereArgs: [id]);
+    return db.delete('reading_books', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllReadingBooks({bool includeCompleted = true}) async {
+    final db = await database;
+    if (includeCompleted) {
+      final rows = await db.query('reading_books', orderBy: 'createdAtMillis DESC');
+      return rows;
+    }
+    final rows = await db.query(
+      'reading_books',
+      where: 'isCompleted = 0',
+      orderBy: 'createdAtMillis DESC',
+    );
+    return rows;
+  }
+
+  Future<Map<String, dynamic>?> getReadingBookById(int id) async {
+    final db = await database;
+    final rows = await db.query('reading_books', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> getReadingBooksBySubject(String subjectName) async {
+    final db = await database;
+    final rows = await db.query(
+      'reading_books',
+      where: 'subjectName = ?',
+      whereArgs: [subjectName],
+      orderBy: 'createdAtMillis DESC',
+    );
+    return rows;
+  }
+
+  // ENHANCED: Now also logs a reading session record
+  Future<void> updateReadingProgress(int id, int currentPage, int minutesRead) async {
+    final db = await database;
+    final book = await getReadingBookById(id);
+    if (book == null) return;
+    
+    final oldPage = (book['currentPage'] as int?) ?? 0;
+    final totalPages = (book['totalPages'] as int?) ?? 1;
+    final pagesRead = currentPage - oldPage;
+    final isCompleted = currentPage >= totalPages;
+    
+    // Update book record
+    await db.update(
+      'reading_books',
+      {
+        'currentPage': currentPage,
+        'minutesReadToday': (book['minutesReadToday'] as int?) ?? 0 + minutesRead,
+        'totalMinutesRead': (book['totalMinutesRead'] as int?) ?? 0 + minutesRead,
+        'isCompleted': isCompleted ? 1 : 0,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    // Log reading session if actual progress was made
+    if (pagesRead > 0 && minutesRead > 0) {
+      final pagesPerMin = pagesRead / minutesRead;
+      await db.insert('reading_sessions', {
+        'bookId': id,
+        'startPage': oldPage,
+        'endPage': currentPage,
+        'pagesRead': pagesRead,
+        'minutesRead': minutesRead,
+        'pagesPerMinute': pagesPerMin,
+        'sessionDateMillis': DateTime.now().millisecondsSinceEpoch,
+        'note': null,
+        'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
+      });
+    }
+  }
+
+  Future<void> resetDailyReadingStats() async {
+    final db = await database;
+    await db.update(
+      'reading_books',
+      {'minutesReadToday': 0},
+    );
+  }
+
+  Future<Map<String, dynamic>> getReadingProgress(int bookId) async {
+    final db = await database;
+    final book = await getReadingBookById(bookId);
+    if (book == null) {
+      return {
+        'percentage': 0,
+        'pagesLeft': 0,
+        'daysLeft': 0,
+        'pagesPerDayNeeded': 0,
+        'onTrack': false,
+      };
+    }
+    
+    final totalPages = (book['totalPages'] as int?) ?? 1;
+    final currentPage = (book['currentPage'] as int?) ?? 0;
+    final dailyGoal = (book['dailyPageGoal'] as int?) ?? 20;
+    final targetEndMillis = book['targetEndDateMillis'] as int?;
+    
+    final percentage = totalPages > 0 ? (currentPage / totalPages * 100).round() : 0;
+    final pagesLeft = totalPages - currentPage;
+    
+    int daysLeft = 0;
+    double pagesPerDayNeeded = 0;
+    bool onTrack = true;
+    
+    if (targetEndMillis != null && pagesLeft > 0) {
+      final now = DateTime.now();
+      final targetDate = DateTime.fromMillisecondsSinceEpoch(targetEndMillis);
+      daysLeft = targetDate.difference(now).inDays;
+      if (daysLeft > 0) {
+        pagesPerDayNeeded = pagesLeft / daysLeft;
+        onTrack = pagesPerDayNeeded <= dailyGoal;
+      } else {
+        onTrack = false;
+      }
+    }
+    
+    return {
+      'percentage': percentage,
+      'pagesLeft': pagesLeft,
+      'daysLeft': daysLeft,
+      'pagesPerDayNeeded': pagesPerDayNeeded.ceil(),
+      'dailyPageGoal': dailyGoal,
+      'onTrack': onTrack,
+      'totalMinutesRead': book['totalMinutesRead'] ?? 0,
+      'minutesReadToday': book['minutesReadToday'] ?? 0,
+    };
+  }
+
+  Future<Map<String, dynamic>> getOverallReadingStats() async {
+    final db = await database;
+    final books = await getAllReadingBooks();
+    
+    int totalBooks = books.length;
+    int completedBooks = 0;
+    int totalPagesRead = 0;
+    int totalMinutesRead = 0;
+    
+    for (final book in books) {
+      if ((book['isCompleted'] as int?) == 1) completedBooks++;
+      totalPagesRead += (book['currentPage'] as int?) ?? 0;
+      totalMinutesRead += (book['totalMinutesRead'] as int?) ?? 0;
+    }
+    
+    return {
+      'totalBooks': totalBooks,
+      'completedBooks': completedBooks,
+      'inProgressBooks': totalBooks - completedBooks,
+      'totalPagesRead': totalPagesRead,
+      'totalMinutesRead': totalMinutesRead,
+      'completionRate': totalBooks > 0 ? (completedBooks / totalBooks * 100).round() : 0,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // NEW CRUD: READING SESSIONS (v14)
+  // ═══════════════════════════════════════════════════════════════
+
+  Future<int> insertReadingSession(Map<String, dynamic> session) async {
+    final db = await database;
+    final data = {
+      'bookId': session['bookId'],
+      'startPage': session['startPage'],
+      'endPage': session['endPage'],
+      'pagesRead': session['pagesRead'],
+      'minutesRead': session['minutesRead'],
+      'pagesPerMinute': session['pagesPerMinute'],
+      'sessionDateMillis': session['sessionDateMillis'],
+      'note': session['note'],
+      'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
+    };
+    return db.insert('reading_sessions', data);
+  }
+
+  Future<int> updateReadingSession(int id, Map<String, dynamic> session) async {
+    final db = await database;
+    final data = {
+      'bookId': session['bookId'],
+      'startPage': session['startPage'],
+      'endPage': session['endPage'],
+      'pagesRead': session['pagesRead'],
+      'minutesRead': session['minutesRead'],
+      'pagesPerMinute': session['pagesPerMinute'],
+      'sessionDateMillis': session['sessionDateMillis'],
+      'note': session['note'],
+    };
+    return db.update('reading_sessions', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteReadingSession(int id) async {
+    final db = await database;
+    return db.delete('reading_sessions', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getReadingSessionsForBook(int bookId, {int limit = 100}) async {
+    final db = await database;
+    final rows = await db.query(
+      'reading_sessions',
+      where: 'bookId = ?',
+      whereArgs: [bookId],
+      orderBy: 'sessionDateMillis DESC',
+      limit: limit,
+    );
+    return rows;
+  }
+
+  Future<Map<String, dynamic>?> getReadingSessionById(int id) async {
+    final db = await database;
+    final rows = await db.query('reading_sessions', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // PART 2: NEW READING STATS & ANALYTICS METHODS
+  // ═══════════════════════════════════════════════════════════════
+
+  /// Get reading streak: consecutive days with reading sessions up to today
+  Future<int> getReadingStreak(int bookId) async {
+    final db = await database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+
+    // Get all session dates for this book, normalized to day start, ordered desc
+    final rows = await db.rawQuery("""
+      SELECT DISTINCT 
+        CAST(sessionDateMillis / 86400000 as INTEGER) as dayBucket
+      FROM reading_sessions
+      WHERE bookId = ?
+      ORDER BY dayBucket DESC
+    """, [bookId]);
+
+    if (rows.isEmpty) return 0;
+
+    int streak = 0;
+    int expectedDayBucket = todayStart ~/ 86400000;
+
+    for (final row in rows) {
+      final dayBucket = (row['dayBucket'] as int?) ?? 0;
+      if (dayBucket == expectedDayBucket) {
+        streak++;
+        expectedDayBucket--;
+      } else if (dayBucket < expectedDayBucket) {
+        break;
+      }
+    }
+
+    return streak;
+  }
+
+  /// Get pages read per day for last N days (for consistency graph)
+  /// Returns List of {'date': 'M/D', 'pages': int}
+  Future<List<Map<String, dynamic>>> getPagesPerDayHistory(int bookId, int days) async {
+    final db = await database;
+    final now = DateTime.now();
+    final endMillis = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch + const Duration(days: 1).inMilliseconds;
+    final startMillis = endMillis - Duration(days: days).inMilliseconds;
+
+    // Get all sessions in range
+    final rows = await db.query(
+      'reading_sessions',
+      where: 'bookId = ? AND sessionDateMillis >= ? AND sessionDateMillis < ?',
+      whereArgs: [bookId, startMillis, endMillis],
+      orderBy: 'sessionDateMillis ASC',
+    );
+
+    // Bucket by day
+    final Map<String, int> dayMap = {};
+    for (int i = 0; i < days; i++) {
+      final date = now.subtract(Duration(days: days - 1 - i));
+      final key = '${date.month}/${date.day}';
+      dayMap[key] = 0;
+    }
+
+    for (final row in rows) {
+      final millis = row['sessionDateMillis'] as int;
+      final date = DateTime.fromMillisecondsSinceEpoch(millis);
+      final key = '${date.month}/${date.day}';
+      dayMap[key] = (dayMap[key] ?? 0) + ((row['pagesRead'] as int?) ?? 0);
+    }
+
+    return dayMap.entries.map((e) => {'date': e.key, 'pages': e.value}).toList();
+  }
+
+  /// Get average pages per minute from all sessions for a book
+  Future<double> getAveragePagesPerMinute(int bookId) async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT 
+        SUM(pagesRead) as totalPages,
+        SUM(minutesRead) as totalMinutes
+      FROM reading_sessions
+      WHERE bookId = ?
+    """, [bookId]);
+
+    final totalPages = (result.first['totalPages'] as int?) ?? 0;
+    final totalMinutes = (result.first['totalMinutes'] as int?) ?? 0;
+
+    if (totalMinutes <= 0) return 0.0;
+    return totalPages / totalMinutes;
+  }
+
+  /// Get total reading time and pages for a book from sessions
+  Future<Map<String, dynamic>> getReadingSessionTotals(int bookId) async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT 
+        COUNT(*) as sessionCount,
+        SUM(pagesRead) as totalPages,
+        SUM(minutesRead) as totalMinutes,
+        AVG(pagesPerMinute) as avgSpeed
+      FROM reading_sessions
+      WHERE bookId = ?
+    """, [bookId]);
+
+    return {
+      'sessionCount': (result.first['sessionCount'] as int?) ?? 0,
+      'totalPages': (result.first['totalPages'] as int?) ?? 0,
+      'totalMinutes': (result.first['totalMinutes'] as int?) ?? 0,
+      'avgSpeed': (result.first['avgSpeed'] as double?) ?? 0.0,
+    };
+  }
+
+  /// Get best reading day (most pages) for a book
+  Future<Map<String, dynamic>?> getBestReadingDay(int bookId) async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT 
+        CAST(sessionDateMillis / 86400000 as INTEGER) as dayBucket,
+        SUM(pagesRead) as dayPages
+      FROM reading_sessions
+      WHERE bookId = ?
+      GROUP BY dayBucket
+      ORDER BY dayPages DESC
+      LIMIT 1
+    """, [bookId]);
+
+    if (result.isEmpty) return null;
+
+    final dayBucket = (result.first['dayBucket'] as int?) ?? 0;
+    final dayMillis = dayBucket * 86400000;
+    final date = DateTime.fromMillisecondsSinceEpoch(dayMillis);
+
+    return {
+      'date': '${date.month}/${date.day}/${date.year}',
+      'pages': (result.first['dayPages'] as int?) ?? 0,
+    };
+  }
+
+  /// Get estimated completion date based on average reading speed
+  Future<DateTime?> getEstimatedCompletionDate(int bookId) async {
+    final book = await getReadingBookById(bookId);
+    if (book == null) return null;
+
+    final totalPages = (book['totalPages'] as int?) ?? 1;
+    final currentPage = (book['currentPage'] as int?) ?? 0;
+    final pagesLeft = totalPages - currentPage;
+    if (pagesLeft <= 0) return DateTime.now();
+
+    final avgSpeed = await getAveragePagesPerMinute(bookId);
+    if (avgSpeed <= 0) return null;
+
+    // Assume 30 min reading per day average
+    final pagesPerDay = avgSpeed * 30;
+    final daysNeeded = (pagesLeft / pagesPerDay).ceil();
+
+    return DateTime.now().add(Duration(days: daysNeeded));
+  }
+
+  /// Get reading consistency score (0-100) based on session regularity
+  Future<int> getReadingConsistencyScore(int bookId) async {
+    final db = await database;
+    final now = DateTime.now();
+    final thirtyDaysAgo = now.subtract(const Duration(days: 30)).millisecondsSinceEpoch;
+
+    final rows = await db.rawQuery("""
+      SELECT COUNT(DISTINCT CAST(sessionDateMillis / 86400000 as INTEGER)) as activeDays
+      FROM reading_sessions
+      WHERE bookId = ? AND sessionDateMillis >= ?
+    """, [bookId, thirtyDaysAgo]);
+
+    final activeDays = (rows.first['activeDays'] as int?) ?? 0;
+    return (activeDays / 30 * 100).round().clamp(0, 100);
+  }
+
+  // ============================================
+  // COMPREHENSIVE EXPORT/IMPORT (PRESERVED + v14)
+  // ============================================
+
+  Future<Map<String, List<Map<String, dynamic>>>> exportAllTables() async {
+    final db = await database;
+    final result = <String, List<Map<String, dynamic>>>{};
+
+    const tables = [
+      'events',
+      'custom_reminders',
+      'notification_history',
+      'study_sessions',
+      'subtasks',
+      'flashcards',
+      'study_schedules',
+      'daily_goals',
+      'study_subjects',
+      'flashcard_review_history',
+      'daily_card_goals',
+      'grade_components',
+      'quick_notes',
+      'attendance_logs',
+      'attendance_subjects',
+      'attendance_schedules',
+      'timetable_classes',
+      'timetable_tasks',
+      'academic_calendar',
+      'class_schedule',
+      'habits',
+      'habit_logs',
+      'reading_books',
+      'reading_sessions', // NEW v14
+    ];
+
+    for (final table in tables) {
+      try {
+        final rows = await db.query(table);
+        result[table] = rows;
+      } catch (e) {
+        result[table] = [];
+      }
+    }
+
+    return result;
+  }
+
+  Future<void> importAllTables(Map<String, List<Map<String, dynamic>>> data) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final entry in data.entries) {
+        final table = entry.key;
+        final rows = entry.value;
+
+        final tableCheck = await txn.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+          [table],
+        );
+        if (tableCheck.isEmpty) continue;
+
+        await txn.delete(table);
+        for (final row in rows) {
+          await txn.insert(table, row);
+        }
+      }
+    });
+  }
+
+  // ============================================
+  // UTILITY (PRESERVED)
+  // ============================================
+  Future<void> vacuum() async {
+    final db = await database;
+    await db.execute('VACUUM');
+  }
+}
