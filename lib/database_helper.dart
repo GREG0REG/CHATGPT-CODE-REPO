@@ -893,11 +893,12 @@ class DatabaseHelper {
     return db.delete('subtasks', where: 'id = ?', whereArgs: [id]);
   }
 
+  // FIXED: Changed 'eventTag' to 'eventId' to match actual table column
   Future<List<Subtask>> getSubtasksForEvent(int eventId) async {
     final db = await database;
     final rows = await db.query(
       'subtasks',
-      where: 'eventTag = ?',
+      where: 'eventId = ?',
       whereArgs: [eventId],
       orderBy: 'orderIndex ASC',
     );
@@ -2023,7 +2024,7 @@ class DatabaseHelper {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
   // NEW CRUD: HABITS (v12)
   // ═══════════════════════════════════════════════════════════════
 
@@ -2505,4 +2506,3 @@ class DatabaseHelper {
     await db.execute('VACUUM');
   }
 }
-
