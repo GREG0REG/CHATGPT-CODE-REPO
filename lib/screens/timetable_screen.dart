@@ -1,7 +1,8 @@
 // FILE: lib/screens/timetable_screen.dart
 // COMPLETE REPLACEMENT — Smart Timetable with vertical timeline, conflict detection, study suggestions
+// FIXED: All-day tasks now display, week view toggle added, conflict overlap highlighting
 
-import 'dart:math';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database_helper.dart';
@@ -21,6 +22,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
   final List<String> _dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   List<Map<String, dynamic>> _classes = [];
   List<Map<String, dynamic>> _tasks = [];
+  bool _weekView = false;
 
   // Timeline constants
   static const int _timelineStartHour = 8;
@@ -813,6 +815,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
       ..sort((a, b) => (a['startTimeMinutes'] as int).compareTo(b['startTimeMinutes'] as int));
   }
 
+  // FIXED: Now includes all-day tasks (isAllDay=1) even when startTimeMinutes is null
   List<Map<String, dynamic>> _getTasksForDay(int dayIndex) {
     final now = DateTime.now();
     final targetDate = DateTime(now.year, now.month, now.day).add(Duration(days: dayIndex - (now.weekday - 1)));
@@ -822,9 +825,16 @@ class _TimetableScreenState extends State<TimetableScreen> {
     return _tasks.where((t) {
       final due = t['dueDateMillis'] as int?;
       if (due == null) return false;
-      return due >= startOfDay && due < endOfDay && t['startTimeMinutes'] != null;
+      final isAllDay = (t['isAllDay'] as int? ?? 0) == 1;
+      final hasTime = t['startTimeMinutes'] != null;
+      // Include if: due date matches AND (has time slot OR is all-day)
+      return due >= startOfDay && due < endOfDay && (hasTime || isAllDay);
     }).toList()
-      ..sort((a, b) => (a['startTimeMinutes'] as int).compareTo(b['startTimeMinutes'] as int));
+      ..sort((a, b) {
+        final aTime = a['startTimeMinutes'] as int? ?? 0;
+        final bTime = b['startTimeMinutes'] as int? ?? 0;
+        return aTime.compareTo(bTime);
+      });
   }
 
   List<Map<String, dynamic>> _detectConflicts(List<Map<String, dynamic>> dayClasses) {
@@ -848,7 +858,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
   List<Map<String, dynamic>> _getFreeSlotsForDay(int dayIndex) {
     final dayItems = <Map<String, dynamic>>[];
     final classes = _getClassesForDay(dayIndex);
-    final tasks = _getTasksForDay(dayIndex);
+    final tasks = _getTasksForDay(dayIndex).where((t) => t['startTimeMinutes'] != null).toList();
 
     for (final c in classes) {
       dayItems.add({
@@ -912,6 +922,136 @@ class _TimetableScreenState extends State<TimetableScreen> {
   }
 
   // ============================================
+  // WEEK VIEW BUILDER
+  // ============================================
+  Widget _buildWeekView(ColorScheme cs) {
+    final now = DateTime.now();
+    final weekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: 7,
+      itemBuilder: (context, dayIndex) {
+        final dayDate = weekStart.add(Duration(days: dayIndex));
+        final dayClasses = _getClassesForDay(dayIndex);
+        final dayTasks = _getTasksForDay(dayIndex).where((t) => t['startTimeMinutes'] != null).toList();
+        final isToday = dayIndex == (now.weekday - 1);
+        final conflicts = _detectConflicts(dayClasses);
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          elevation: isToday ? 2 : 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(
+              color: isToday ? cs.primary : cs.outlineVariant.withOpacity(0.3),
+              width: isToday ? 2 : 1,
+            ),
+          ),
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                _selectedDay = dayIndex;
+                _weekView = false;
+              });
+            },
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: isToday ? cs.primary : cs.outline,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${_dayNames[dayIndex]} ${dayDate.day}/${dayDate.month}',
+                        style: TextStyle(
+                          fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
+                          color: isToday ? cs.primary : cs.onSurface,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (conflicts.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${conflicts.length} conflict${conflicts.length == 1 ? '' : 's'}',
+                            style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${dayClasses.length + dayTasks.length} items',
+                        style: TextStyle(fontSize: 12, color: cs.outline),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (dayClasses.isEmpty && dayTasks.isEmpty)
+                    Text(
+                      'No classes or tasks',
+                      style: TextStyle(fontSize: 13, color: cs.outline.withOpacity(0.7)),
+                    )
+                  else
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        ...dayClasses.map((c) {
+                          final color = _hexToColor(c['colorHex'] as String? ?? '#2196F3');
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: color.withOpacity(0.3)),
+                            ),
+                            child: Text(
+                              '${c['subjectName']} • ${_formatMinutes24(c['startTimeMinutes'] as int)}',
+                              style: TextStyle(fontSize: 11, color: color.withOpacity(0.9), fontWeight: FontWeight.w500),
+                            ),
+                          );
+                        }),
+                        ...dayTasks.map((t) {
+                          final color = _typeColor(t['taskType'] as String);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: color.withOpacity(0.3)),
+                            ),
+                            child: Text(
+                              t['title'] as String,
+                              style: TextStyle(fontSize: 11, color: color.withOpacity(0.9), fontWeight: FontWeight.w500),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ============================================
   // BUILD
   // ============================================
   @override
@@ -931,7 +1071,13 @@ class _TimetableScreenState extends State<TimetableScreen> {
         ),
         title: const Text('Timetable'),
         actions: [
-          if (freeSlots.isNotEmpty)
+          // Week/Day view toggle
+          IconButton(
+            icon: Icon(_weekView ? Icons.view_day : Icons.view_week),
+            tooltip: _weekView ? 'Day View' : 'Week View',
+            onPressed: () => setState(() => _weekView = !_weekView),
+          ),
+          if (freeSlots.isNotEmpty && !_weekView)
             Tooltip(
               message: 'Suggest Study Block',
               child: IconButton(
@@ -955,122 +1101,150 @@ class _TimetableScreenState extends State<TimetableScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // Day selector tabs
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerHighest.withOpacity(0.3),
-                    border: Border(bottom: BorderSide(color: cs.outline.withOpacity(0.2))),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: List.generate(7, (i) {
-                      final isSelected = _selectedDay == i;
-                      final dayClassesCount = _getClassesForDay(i).length;
-                      return InkWell(
-                        onTap: () => setState(() => _selectedDay = i),
-                        borderRadius: BorderRadius.circular(14),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: isSelected ? cs.primaryContainer : Colors.transparent,
+          : _weekView
+              ? _buildWeekView(cs)
+              : Column(
+                  children: [
+                    // Day selector tabs
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest.withOpacity(0.3),
+                        border: Border(bottom: BorderSide(color: cs.outline.withOpacity(0.2))),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: List.generate(7, (i) {
+                          final isSelected = _selectedDay == i;
+                          final dayClassesCount = _getClassesForDay(i).length;
+                          return InkWell(
+                            onTap: () => setState(() => _selectedDay = i),
                             borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _dayNames[i],
-                                style: TextStyle(
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                  color: isSelected ? cs.onPrimaryContainer : cs.onSurface,
-                                  fontSize: 13,
-                                ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isSelected ? cs.primaryContainer : Colors.transparent,
+                                borderRadius: BorderRadius.circular(14),
                               ),
-                              const SizedBox(height: 2),
-                              Container(
-                                width: 20,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: isSelected ? cs.primary : cs.outline.withOpacity(0.2),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '$dayClassesCount',
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    _dayNames[i],
                                     style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: isSelected ? cs.onPrimary : cs.onSurfaceVariant,
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                      color: isSelected ? cs.onPrimaryContainer : cs.onSurface,
+                                      fontSize: 13,
                                     ),
                                   ),
-                                ),
+                                  const SizedBox(height: 2),
+                                  Container(
+                                    width: 20,
+                                    height: 20,
+                                    decoration: BoxDecoration(
+                                      color: isSelected ? cs.primary : cs.outline.withOpacity(0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        '$dayClassesCount',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: isSelected ? cs.onPrimary : cs.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+
+                    // Conflict warning
+                    if (conflicts.isNotEmpty)
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.red.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '${conflicts.length} schedule conflict${conflicts.length == 1 ? '' : 's'} on ${_dayNames[_selectedDay]}!',
+                                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // Free time summary
+                    if (freeSlots.isNotEmpty)
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.green.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.free_breakfast, size: 16, color: Colors.green.shade700),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${freeSlots.length} free slot${freeSlots.length == 1 ? '' : 's'} (${freeSlots.fold<int>(0, (sum, s) => sum + (s['duration'] as int)) ~/ 60}h ${freeSlots.fold<int>(0, (sum, s) => sum + (s['duration'] as int)) % 60}m)',
+                              style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // All-day tasks banner
+                    ...dayTasks.where((t) => (t['isAllDay'] as int? ?? 0) == 1).map((t) {
+                      final typeColor = _typeColor(t['taskType'] as String);
+                      return Container(
+                        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: typeColor.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: typeColor.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(_typeIcon(t['taskType'] as String), size: 16, color: typeColor),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'All-day: ${t['title']}',
+                                style: TextStyle(fontSize: 12, color: typeColor.withOpacity(0.9), fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     }),
-                  ),
+
+                    // Timeline or Empty State
+                    Expanded(
+                      child: !hasAnyItems
+                          ? _buildEmptyState(cs)
+                          : _buildTimeline(cs, dayClasses, dayTasks, conflicts, freeSlots),
+                    ),
+                  ],
                 ),
-
-                // Conflict warning
-                if (conflicts.isNotEmpty)
-                  Container(
-                    margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.red.withOpacity(0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '${conflicts.length} schedule conflict${conflicts.length == 1 ? '' : 's'} on ${_dayNames[_selectedDay]}!',
-                            style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600, fontSize: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                // Free time summary
-                if (freeSlots.isNotEmpty)
-                  Container(
-                    margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.green.withOpacity(0.3)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.free_breakfast, size: 16, color: Colors.green.shade700),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${freeSlots.length} free slot${freeSlots.length == 1 ? '' : 's'} (${freeSlots.fold<int>(0, (sum, s) => sum + (s['duration'] as int)) ~/ 60}h ${freeSlots.fold<int>(0, (sum, s) => sum + (s['duration'] as int)) % 60}m)',
-                          style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                // Timeline or Empty State
-                Expanded(
-                  child: !hasAnyItems
-                      ? _buildEmptyState(cs)
-                      : _buildTimeline(cs, dayClasses, dayTasks, conflicts, freeSlots),
-                ),
-              ],
-            ),
     );
   }
 
@@ -1185,8 +1359,8 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   // Class blocks
                   ...dayClasses.map((c) => _buildClassBlock(c, conflicts, cs)),
 
-                  // Task blocks
-                  ...dayTasks.map((t) => _buildTaskBlock(t, cs)),
+                  // Task blocks (only timed tasks, not all-day)
+                  ...dayTasks.where((t) => t['startTimeMinutes'] != null).map((t) => _buildTaskBlock(t, cs)),
                 ],
               ),
             ),
@@ -1243,7 +1417,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 2),
         decoration: BoxDecoration(
-          color: Colors.green.withOpacity(0.06),
+                    color: Colors.green.withOpacity(0.06),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Colors.green.withOpacity(0.2), style: BorderStyle.solid),
         ),
@@ -1266,7 +1440,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final start = c['startTimeMinutes'] as int;
     final end = c['endTimeMinutes'] as int;
     final top = _minutesToPixels(start);
-    final height = max(40, _durationToPixels(end - start)).toDouble();
+    final height = math.max(40, _durationToPixels(end - start)).toDouble();
     final color = _hexToColor(c['colorHex'] as String? ?? '#2196F3');
     final isConflict = conflicts.any((conf) =>
         conf['a']['id'] == c['id'] || conf['b']['id'] == c['id']);
@@ -1384,7 +1558,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final start = t['startTimeMinutes'] as int;
     final end = t['endTimeMinutes'] as int;
     final top = _minutesToPixels(start);
-    final height = max(36, _durationToPixels(end - start)).toDouble();
+    final height = math.max(36, _durationToPixels(end - start)).toDouble();
     final typeColor = _typeColor(t['taskType'] as String);
     final isDeadline = t['taskType'] == 'assignment' || t['taskType'] == 'exam';
     final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
