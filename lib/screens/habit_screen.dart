@@ -9,7 +9,6 @@ import 'package:flutter/services.dart';
 import '../database_helper.dart';
 import '../WIDGET/simple_color_picker.dart';
 import '../WIDGET/subject_picker_sheet.dart';
-import 'main_screen.dart';
 
 enum HabitType { dailyCheck, durationMinutes, countMetric }
 
