@@ -122,10 +122,18 @@ class BackupService {
     final dataBytes = utf8.encode(jsonString);
 
     final archive = Archive()
-      ..addFile(ArchiveFile('manifest.json', manifestBytes.length, manifestBytes)
-        ..compressionLevel = 6)
-      ..addFile(ArchiveFile('data.json', dataBytes.length, dataBytes)
-        ..compressionLevel = 6);
+      ..addFile(ArchiveFile(
+        'manifest.json',
+        manifestBytes.length,
+        manifestBytes,
+        compressionLevel: 6,
+      ))
+      ..addFile(ArchiveFile(
+        'data.json',
+        dataBytes.length,
+        dataBytes,
+        compressionLevel: 6,
+      ));
 
     final zipEncoder = ZipEncoder();
     final encoded = zipEncoder.encode(archive);
