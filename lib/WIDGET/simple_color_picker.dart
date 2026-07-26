@@ -242,7 +242,7 @@ class _SimpleColorPickerDialogState extends State<SimpleColorPickerDialog>
                   SingleChildScrollView(child: _buildColorGrid(_primaryTones)),
                   SingleChildScrollView(child: _buildColorGrid(_secondaryTones)),
                   SingleChildScrollView(child: _buildColorGrid(_accentTones)),
-                  SingleChildScrollScrollView(child: _buildColorGrid(_classicPresets)),
+                  SingleChildScrollView(child: _buildColorGrid(_classicPresets)),
                 ],
               ),
             ),
