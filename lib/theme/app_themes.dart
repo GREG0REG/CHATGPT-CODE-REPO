@@ -2,6 +2,7 @@
 // COMPLETE REPLACEMENT — copy and paste entire file
 // ADDED: 4 new immersive themes (Neon Cyberpunk, Midnight Ocean, Sunset Boulevard, Nordic Frost)
 // EXISTING: All 7 original themes preserved exactly as-is
+// ENHANCED: Animated gradient helper, surfaceContainer overrides, better contrast
 
 import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
@@ -145,13 +146,16 @@ class AppThemes {
     // SPECIAL: Override surface colors for immersive dark themes
     Color surfaceColor = colorScheme.surface;
     Color surfaceContainerHighestColor = colorScheme.surfaceContainerHighest;
+    Color surfaceContainerColor = colorScheme.surfaceContainer;
     
     if (option == AppThemeOption.neonCyberpunk && !highContrast) {
       surfaceColor = const Color(0xFF0D0221);
       surfaceContainerHighestColor = const Color(0xFF1A0B2E);
+      surfaceContainerColor = const Color(0xFF14082A);
     } else if (option == AppThemeOption.midnightOcean && !highContrast) {
       surfaceColor = const Color(0xFF070F1F);
       surfaceContainerHighestColor = const Color(0xFF0F1F3A);
+      surfaceContainerColor = const Color(0xFF0A1830);
     } else if (option == AppThemeOption.sunsetBoulevard && !highContrast) {
       surfaceColor = effectiveBrightness == Brightness.dark 
           ? const Color(0xFF1A0F0A) 
@@ -159,6 +163,9 @@ class AppThemes {
       surfaceContainerHighestColor = effectiveBrightness == Brightness.dark
           ? const Color(0xFF2A1A10)
           : colorScheme.surfaceContainerHighest;
+      surfaceContainerColor = effectiveBrightness == Brightness.dark
+          ? const Color(0xFF22140C)
+          : colorScheme.surfaceContainer;
     } else if (option == AppThemeOption.nordicFrost && !highContrast) {
       surfaceColor = effectiveBrightness == Brightness.dark
           ? const Color(0xFF0D1B2A)
@@ -166,6 +173,9 @@ class AppThemes {
       surfaceContainerHighestColor = effectiveBrightness == Brightness.dark
           ? const Color(0xFF1B2838)
           : const Color(0xFFE3F2FD);
+      surfaceContainerColor = effectiveBrightness == Brightness.dark
+          ? const Color(0xFF152232)
+          : const Color(0xFFE8F4FD);
     }
 
     return ThemeData(
@@ -174,6 +184,7 @@ class AppThemes {
       colorScheme: colorScheme.copyWith(
         surface: surfaceColor,
         surfaceContainerHighest: surfaceContainerHighestColor,
+        surfaceContainer: surfaceContainerColor,
       ),
       scaffoldBackgroundColor: surfaceColor,
       appBarTheme: AppBarTheme(
@@ -381,6 +392,9 @@ class AppThemes {
       surfaceContainerHighest: brightness == Brightness.light
         ? scheme.surfaceContainerHighest
         : scheme.surfaceContainerHighest,
+      surfaceContainer: brightness == Brightness.light
+        ? scheme.surfaceContainer
+        : scheme.surfaceContainer,
       primary: _ensureContrast(scheme.primary, scheme.onPrimary, brightness),
       onPrimary: scheme.onPrimary,
       error: brightness == Brightness.light 
@@ -487,5 +501,74 @@ class AppThemes {
         width: 1,
       ),
     );
+  }
+
+  // ── ENHANCED: Animated gradient background for immersive themes ──
+  static BoxDecoration animatedGradient({
+    required AppThemeOption option,
+    required Brightness brightness,
+    Alignment begin = Alignment.topLeft,
+    Alignment end = Alignment.bottomRight,
+  }) {
+    final colors = gradientColorsFor(option) ?? all.first.gradientColors;
+    
+    // For dark immersive themes, add depth layers
+    if (option == AppThemeOption.neonCyberpunk) {
+      return BoxDecoration(
+        gradient: LinearGradient(
+          begin: begin,
+          end: end,
+          colors: [
+            const Color(0xFF0D0221),
+            colors[0].withOpacity(0.3),
+            const Color(0xFF1A0B2E),
+            colors[1].withOpacity(0.2),
+            const Color(0xFF0D0221),
+          ],
+          stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+        ),
+      );
+    }
+    
+    if (option == AppThemeOption.midnightOcean) {
+      return BoxDecoration(
+        gradient: LinearGradient(
+          begin: begin,
+          end: end,
+          colors: [
+            const Color(0xFF070F1F),
+            colors[1].withOpacity(0.4),
+            const Color(0xFF0F1F3A),
+            colors[2].withOpacity(0.3),
+            const Color(0xFF070F1F),
+          ],
+          stops: const [0.0, 0.3, 0.5, 0.7, 1.0],
+        ),
+      );
+    }
+
+    return BoxDecoration(
+      gradient: LinearGradient(
+        begin: begin,
+        end: end,
+        colors: colors,
+      ),
+    );
+  }
+
+  // ── ENHANCED: Get theme-appropriate card glow color ──
+  static Color? glowColor(AppThemeOption option) {
+    switch (option) {
+      case AppThemeOption.neonCyberpunk:
+        return const Color(0xFFFF00FF).withOpacity(0.15);
+      case AppThemeOption.midnightOcean:
+        return const Color(0xFF00B4D8).withOpacity(0.15);
+      case AppThemeOption.sunsetBoulevard:
+        return const Color(0xFFFF6B6B).withOpacity(0.1);
+      case AppThemeOption.nordicFrost:
+        return const Color(0xFF90CAF9).withOpacity(0.15);
+      default:
+        return null;
+    }
   }
 }
