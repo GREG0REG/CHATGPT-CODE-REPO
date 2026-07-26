@@ -10,7 +10,7 @@ import '../models/study_session.dart';
 import '../services/countdown_service.dart';
 import '../services/settings_service.dart';
 import '../theme/app_themes.dart';
-import '../widgets/gpa_calculator_widget.dart';
+import '../WIDGETS/gpa_calculator_widget.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
