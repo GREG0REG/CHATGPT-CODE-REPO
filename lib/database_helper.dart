@@ -31,7 +31,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 12, // BUMPED: was 11, now 12 for class_schedule, habits, habit_logs, reading_books
+      version: 13, // BUMPED: was 12, now 13 for habitType, metricGoal, unitLabel
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -67,7 +67,10 @@ class DatabaseHelper {
           await _migrateV10ToV11(db);
         }
         if (oldVersion < 12) {
-          await _migrateV11ToV12(db); // NEW: v11→v12 adds class_schedule, habits, habit_logs, reading_books
+          await _migrateV11ToV12(db);
+        }
+        if (oldVersion < 13) {
+          await _migrateV12ToV13(db); // NEW: v12→v13 adds habitType, metricGoal, unitLabel
         }
       },
     );
@@ -356,7 +359,8 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- HABITS (v12) ----
+    // ---- HABITS (v12, ENHANCED v13) ----
+    // v13 adds: habitType, metricGoal, unitLabel for flexible habit tracking
     await db.execute("""
       CREATE TABLE habits (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -366,7 +370,10 @@ class DatabaseHelper {
         targetPerWeek INTEGER DEFAULT 7,
         reminderTimeMinutes INTEGER,
         createdAtMillis INTEGER NOT NULL,
-        isArchived INTEGER DEFAULT 0
+        isArchived INTEGER DEFAULT 0,
+        habitType INTEGER DEFAULT 0,
+        metricGoal INTEGER,
+        unitLabel TEXT
       )
     """);
 
@@ -377,7 +384,8 @@ class DatabaseHelper {
         habitId INTEGER NOT NULL,
         dateMillis INTEGER NOT NULL,
         completed INTEGER DEFAULT 1,
-        note TEXT
+        note TEXT,
+        metricValue INTEGER
       )
     """);
 
@@ -660,7 +668,7 @@ class DatabaseHelper {
     """);
   }
 
-  // NEW: v11 -> v12 migration
+  // v11 -> v12 migration
   Future<void> _migrateV11ToV12(Database db) async {
     // Create class_schedule table
     await db.execute("""
@@ -719,6 +727,17 @@ class DatabaseHelper {
         createdAtMillis INTEGER NOT NULL
       )
     """);
+  }
+
+  // NEW: v12 -> v13 migration — Enhanced habits with flexible tracking
+  Future<void> _migrateV12ToV13(Database db) async {
+    // Add flexible habit tracking columns to habits table
+    await db.execute('ALTER TABLE habits ADD COLUMN habitType INTEGER DEFAULT 0');
+    await db.execute('ALTER TABLE habits ADD COLUMN metricGoal INTEGER');
+    await db.execute('ALTER TABLE habits ADD COLUMN unitLabel TEXT');
+    
+    // Add metricValue to habit_logs for tracking actual values (pages, minutes, etc.)
+    await db.execute('ALTER TABLE habit_logs ADD COLUMN metricValue INTEGER');
   }
 
   // ============================================
@@ -1990,18 +2009,7 @@ class DatabaseHelper {
       whereArgs: [dayOfWeek],
       orderBy: 'startTimeMinutes ASC',
     );
-    return rows;
-  }
-
-  Future<List<Map<String, dynamic>>> getClassSchedulesForSubject(String subjectName) async {
-    final db = await database;
-    final rows = await db.query(
-      'class_schedule',
-      where: 'subjectName = ? AND isActive = 1',
-      whereArgs: [subjectName],
-      orderBy: 'dayOfWeek ASC, startTimeMinutes ASC',
-    );
-    return rows;
+        return rows;
   }
 
   Future<List<Map<String, dynamic>>> getActiveClassSchedules() async {
@@ -2014,7 +2022,7 @@ class DatabaseHelper {
     return rows;
   }
 
-    Future<void> toggleClassScheduleActive(int id, bool isActive) async {
+  Future<void> toggleClassScheduleActive(int id, bool isActive) async {
     final db = await database;
     await db.update(
       'class_schedule',
@@ -2024,8 +2032,8 @@ class DatabaseHelper {
     );
   }
 
-    // ═══════════════════════════════════════════════════════════════
-  // NEW CRUD: HABITS (v12)
+  // ═══════════════════════════════════════════════════════════════
+  // NEW CRUD: HABITS (v13 — enhanced with habitType, metricGoal, unitLabel)
   // ═══════════════════════════════════════════════════════════════
 
   Future<int> insertHabit(Map<String, dynamic> habit) async {
@@ -2038,6 +2046,9 @@ class DatabaseHelper {
       'reminderTimeMinutes': habit['reminderTimeMinutes'],
       'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
       'isArchived': habit['isArchived'] ?? 0,
+      'habitType': habit['habitType'] ?? 0,
+      'metricGoal': habit['metricGoal'],
+      'unitLabel': habit['unitLabel'],
     };
     return db.insert('habits', data);
   }
@@ -2051,6 +2062,9 @@ class DatabaseHelper {
       'targetPerWeek': habit['targetPerWeek'] ?? 7,
       'reminderTimeMinutes': habit['reminderTimeMinutes'],
       'isArchived': habit['isArchived'] ?? 0,
+      'habitType': habit['habitType'] ?? 0,
+      'metricGoal': habit['metricGoal'],
+      'unitLabel': habit['unitLabel'],
     };
     return db.update('habits', data, where: 'id = ?', whereArgs: [id]);
   }
@@ -2105,7 +2119,7 @@ class DatabaseHelper {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // NEW CRUD: HABIT LOGS (v12)
+  // NEW CRUD: HABIT LOGS (v13 — enhanced with metricValue)
   // ═══════════════════════════════════════════════════════════════
 
   Future<int> insertHabitLog(Map<String, dynamic> log) async {
@@ -2115,6 +2129,7 @@ class DatabaseHelper {
       'dateMillis': log['dateMillis'],
       'completed': log['completed'] ?? 1,
       'note': log['note'],
+      'metricValue': log['metricValue'],
     };
     return db.insert('habit_logs', data);
   }
@@ -2126,6 +2141,7 @@ class DatabaseHelper {
       'dateMillis': log['dateMillis'],
       'completed': log['completed'] ?? 1,
       'note': log['note'],
+      'metricValue': log['metricValue'],
     };
     return db.update('habit_logs', data, where: 'id = ?', whereArgs: [id]);
   }
