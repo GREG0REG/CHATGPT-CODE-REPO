@@ -794,8 +794,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
           colors: [cs.primary.withOpacity(0.15), cs.secondary.withOpacity(0.1)],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0
-        ),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
       ),
       child: Row(
         children: [
