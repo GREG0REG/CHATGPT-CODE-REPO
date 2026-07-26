@@ -1266,7 +1266,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final start = c['startTimeMinutes'] as int;
     final end = c['endTimeMinutes'] as int;
     final top = _minutesToPixels(start);
-    final height = max(40, _durationToPixels(end - start));
+    final height = max(40, _durationToPixels(end - start)).toDouble();
     final color = _hexToColor(c['colorHex'] as String? ?? '#2196F3');
     final isConflict = conflicts.any((conf) =>
         conf['a']['id'] == c['id'] || conf['b']['id'] == c['id']);
@@ -1384,7 +1384,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final start = t['startTimeMinutes'] as int;
     final end = t['endTimeMinutes'] as int;
     final top = _minutesToPixels(start);
-    final height = max(36, _durationToPixels(end - start));
+    final height = max(36, _durationToPixels(end - start)).toDouble();
     final typeColor = _typeColor(t['taskType'] as String);
     final isDeadline = t['taskType'] == 'assignment' || t['taskType'] == 'exam';
     final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
