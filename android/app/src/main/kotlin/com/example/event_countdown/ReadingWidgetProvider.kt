@@ -119,8 +119,8 @@ class ReadingWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        android.util.Log.i("ReadingWidget", "onUpdate: ${widgetIds.size} widgets")
-        for (widgetId in widgetIds) {
+        android.util.Log.i("ReadingWidget", "onUpdate: ${appWidgetIds.size} widgets")
+        for (widgetId in appWidgetIds) {
             updateWidgetDirectly(context, appWidgetManager, widgetId)
         }
     }
