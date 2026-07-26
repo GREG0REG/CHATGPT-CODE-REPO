@@ -14,7 +14,7 @@ import '../services/focus_settings_service.dart';
 import '../services/pomodoro_service.dart';
 import '../services/widget_service.dart';
 import '../theme/app_themes.dart';
-import '../widgets/subject_picker_sheet.dart';
+import '../WIDGET/subject_picker_sheet.dart';
 import 'focus_settings_sheet.dart';
 import 'main_screen.dart';
 
