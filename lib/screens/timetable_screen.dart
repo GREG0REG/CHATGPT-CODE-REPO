@@ -948,7 +948,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
             },
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'class', child: ListTile(leading: Icon(Icons.school), title: Text('Add Class'), contentPadding: EdgeInsets.zero)),
-              const PopupMenuItem(value: 'task', child: ListTile(leading: Icon(Icons.assignment), title: Text('Add Task')), contentPadding: EdgeInsets.zero),
+              const PopupMenuItem(value: 'task', child: ListTile(leading: Icon(Icons.assignment), title: Text('Add Task'), contentPadding: EdgeInsets.zero)),
             ],
           ),
         ],
