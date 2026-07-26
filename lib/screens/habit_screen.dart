@@ -1,7 +1,8 @@
 // FILE: lib/screens/habit_screen.dart
 // COMPLETE REWRITE — Study Habit Builder with Streak Science
 // FEATURES: Chain visualization, weekly progress, tap-to-toggle, templates,
-//           flexible habit types, stats modal, long-press menu, weekly review
+//           flexible habit types, stats modal, long-press menu, weekly review,
+//           metric tracking (pages/minutes/count), "OR" logic display
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +20,7 @@ class HabitTemplate {
   final int defaultTarget;
   final String? defaultSubject;
   final String? unitLabel;
+  final int? metricGoal;
 
   const HabitTemplate({
     required this.name,
@@ -27,6 +29,7 @@ class HabitTemplate {
     this.defaultTarget = 7,
     this.defaultSubject,
     this.unitLabel,
+    this.metricGoal,
   });
 }
 
@@ -53,10 +56,10 @@ class _HabitScreenState extends State<HabitScreen> {
 
   static const List<HabitTemplate> _templates = [
     HabitTemplate(name: 'Morning Review', icon: '🌅', type: HabitType.dailyCheck, defaultTarget: 7),
-    HabitTemplate(name: 'Deep Work', icon: '🧠', type: HabitType.durationMinutes, defaultTarget: 5, unitLabel: 'min'),
-    HabitTemplate(name: 'Anki Review', icon: '🃏', type: HabitType.countMetric, defaultTarget: 5, defaultSubject: 'Anki', unitLabel: 'cards'),
-    HabitTemplate(name: 'Reading', icon: '📚', type: HabitType.countMetric, defaultTarget: 5, unitLabel: 'pages'),
-    HabitTemplate(name: 'Exercise', icon: '💪', type: HabitType.durationMinutes, defaultTarget: 4, unitLabel: 'min'),
+    HabitTemplate(name: 'Deep Work', icon: '🧠', type: HabitType.durationMinutes, defaultTarget: 5, unitLabel: 'min', metricGoal: 120),
+    HabitTemplate(name: 'Anki Review', icon: '🃏', type: HabitType.countMetric, defaultTarget: 5, defaultSubject: 'Anki', unitLabel: 'cards', metricGoal: 50),
+    HabitTemplate(name: 'Reading', icon: '📚', type: HabitType.countMetric, defaultTarget: 5, unitLabel: 'pages', metricGoal: 20),
+    HabitTemplate(name: 'Exercise', icon: '💪', type: HabitType.durationMinutes, defaultTarget: 4, unitLabel: 'min', metricGoal: 30),
     HabitTemplate(name: 'Custom', icon: '✨', type: HabitType.dailyCheck, defaultTarget: 7),
   ];
 
@@ -178,6 +181,27 @@ class _HabitScreenState extends State<HabitScreen> {
     }
   }
 
+  // ── Habit type helpers ──
+  HabitType _getHabitType(Map<String, dynamic> habit) {
+    final typeIndex = habit['habitType'] as int?;
+    if (typeIndex == null || typeIndex < 0 || typeIndex > 2) return HabitType.dailyCheck;
+    return HabitType.values[typeIndex];
+  }
+
+  String? _getUnitLabel(Map<String, dynamic> habit) {
+    return habit['unitLabel'] as String?;
+  }
+
+  int? _getMetricGoal(Map<String, dynamic> habit) {
+    return habit['metricGoal'] as int?;
+  }
+
+  String _formatMetric(int? value, String? unit) {
+    if (value == null) return '';
+    if (unit == null) return '$value';
+    return '$value $unit';
+  }
+
   // ── Week completion for a habit ──
   Future<List<bool>> _getWeekCompletion(int habitId) async {
     final now = DateTime.now();
@@ -213,8 +237,17 @@ class _HabitScreenState extends State<HabitScreen> {
     return result;
   }
 
+  // ── Get today's metric value for a habit ──
+  Future<int?> _getTodayMetricValue(int habitId) async {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final log = await DatabaseHelper.instance.getHabitLogForDate(habitId, todayStart);
+    if (log == null) return null;
+    return log['metricValue'] as int?;
+  }
+
   // ── Toggle any day ──
-  Future<void> _toggleDay(int habitId, DateTime day, bool currentState) async {
+  Future<void> _toggleDay(int habitId, DateTime day, bool currentState, HabitType habitType, int? metricGoal, String? unitLabel) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final dayStart = DateTime(day.year, day.month, day.day);
@@ -228,6 +261,13 @@ class _HabitScreenState extends State<HabitScreen> {
         );
       }
       return;
+    }
+
+    // For metric-based habits, show input dialog when marking as done
+    int? metricValue;
+    if (!currentState && habitType != HabitType.dailyCheck && dayStart.isAtSameMomentAs(today)) {
+      metricValue = await _showMetricInputDialog(habitType, metricGoal, unitLabel);
+      if (metricValue == null) return; // User cancelled
     }
 
     if (dayStart.isBefore(today) && !currentState) {
@@ -255,12 +295,14 @@ class _HabitScreenState extends State<HabitScreen> {
         'habitId': habitId,
         'dateMillis': dayMillis,
         'completed': newCompleted,
+        'metricValue': metricValue ?? log['metricValue'],
       });
     } else {
       await DatabaseHelper.instance.insertHabitLog({
         'habitId': habitId,
         'dateMillis': dayMillis,
         'completed': currentState ? 0 : 1,
+        'metricValue': metricValue,
       });
     }
 
@@ -268,23 +310,67 @@ class _HabitScreenState extends State<HabitScreen> {
     await _loadAllData();
   }
 
+  // ── Metric input dialog ──
+  Future<int?> _showMetricInputDialog(HabitType type, int? goal, String? unitLabel) async {
+    final controller = TextEditingController();
+    final unit = unitLabel ?? (type == HabitType.durationMinutes ? 'minutes' : 'count');
+    final goalText = goal != null ? ' (Goal: $goal $unit)' : '';
+
+    final result = await showDialog<int?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('How many $unit?$goalText'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: 'Enter $unit',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Skip')),
+          FilledButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text.trim());
+              Navigator.pop(ctx, value);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    return result;
+  }
+
   // ── Long press: mark yesterday ──
-  Future<void> _markYesterday(int habitId) async {
+  Future<void> _markYesterday(int habitId, HabitType habitType, int? metricGoal, String? unitLabel) async {
     final now = DateTime.now();
     final yesterday = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1));
     final yesterdayMillis = yesterday.millisecondsSinceEpoch;
+
+    int? metricValue;
+    if (habitType != HabitType.dailyCheck) {
+      metricValue = await _showMetricInputDialog(habitType, metricGoal, unitLabel);
+    }
+
     final log = await DatabaseHelper.instance.getHabitLogForDate(habitId, yesterdayMillis);
     if (log == null) {
       await DatabaseHelper.instance.insertHabitLog({
         'habitId': habitId,
         'dateMillis': yesterdayMillis,
         'completed': 1,
+        'metricValue': metricValue,
       });
     } else if ((log['completed'] as int? ?? 0) == 0) {
       await DatabaseHelper.instance.updateHabitLog(log['id'] as int, {
         'habitId': habitId,
         'dateMillis': yesterdayMillis,
         'completed': 1,
+        'metricValue': metricValue ?? log['metricValue'],
       });
     }
     HapticFeedback.mediumImpact();
@@ -342,6 +428,9 @@ class _HabitScreenState extends State<HabitScreen> {
     final habitId = habit['id'] as int;
     final name = habit['name'] as String;
     final color = _parseColor(habit['colorHex'] as String?);
+    final habitType = _getHabitType(habit);
+    final unitLabel = _getUnitLabel(habit);
+    final metricGoal = _getMetricGoal(habit);
     
     final streak = await DatabaseHelper.instance.getHabitStreak(habitId);
     final now = DateTime.now();
@@ -355,6 +444,21 @@ class _HabitScreenState extends State<HabitScreen> {
     final totalLogs = allLogs.length;
     final completedLogs = allLogs.where((l) => (l['completed'] as int? ?? 0) == 1).length;
     final completionRate = totalLogs > 0 ? (completedLogs / totalLogs * 100).round() : 0;
+
+    // Average metric
+    double avgMetric = 0;
+    int metricCount = 0;
+    int totalMetric = 0;
+    int maxMetric = 0;
+    for (final log in allLogs) {
+      final mv = log['metricValue'] as int?;
+      if (mv != null) {
+        totalMetric += mv;
+        metricCount++;
+        if (mv > maxMetric) maxMetric = mv;
+      }
+    }
+    if (metricCount > 0) avgMetric = totalMetric / metricCount;
 
     // Best day of week
     final dayCounts = List<int>.filled(7, 0);
@@ -417,6 +521,15 @@ class _HabitScreenState extends State<HabitScreen> {
               _statRow('Best Day', _dayNamesFull[bestDayIdx], color),
               _statRow('This Week', '${weeklyStats['completed']}/${weeklyStats['targetPerWeek']}', color),
               _statRow('Total Completions', '$completedLogs', color),
+              if (habitType != HabitType.dailyCheck && metricCount > 0) ...[
+                const Divider(height: 24),
+                Text('Metric Tracking', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                const SizedBox(height: 8),
+                _statRow('Average ${unitLabel ?? 'value'}', avgMetric.toStringAsFixed(1), color),
+                _statRow('Best ${unitLabel ?? 'value'}', '$maxMetric', color),
+                _statRow('Total ${unitLabel ?? 'value'}', '$totalMetric', color),
+                if (metricGoal != null) _statRow('Goal', '$metricGoal ${unitLabel ?? ''}/day', color),
+              ],
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -514,6 +627,7 @@ class _HabitScreenState extends State<HabitScreen> {
                                 habitType = t.type;
                                 targetPerWeek = t.defaultTarget;
                                 unitLabel = t.unitLabel;
+                                metricGoal = t.metricGoal;
                                 if (t.defaultSubject != null) selectedSubject = t.defaultSubject;
                               });
                             },
@@ -627,9 +741,10 @@ class _HabitScreenState extends State<HabitScreen> {
                         children: [
                           Expanded(
                             child: TextField(
+                              controller: TextEditingController(text: metricGoal?.toString() ?? ''),
                               keyboardType: TextInputType.number,
                               decoration: InputDecoration(
-                                labelText: 'Goal ${unitLabel != null ? '($unitLabel)' : ''}',
+                                labelText: 'Daily Goal ${unitLabel != null ? '($unitLabel)' : ''}',
                                 prefixIcon: const Icon(Icons.track_changes),
                                 filled: true,
                                 fillColor: cs.surfaceContainerHighest,
@@ -639,6 +754,19 @@ class _HabitScreenState extends State<HabitScreen> {
                             ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Unit label input
+                      TextField(
+                        controller: TextEditingController(text: unitLabel ?? ''),
+                        decoration: InputDecoration(
+                          labelText: 'Unit Label (e.g., pages, min, reps)',
+                          prefixIcon: const Icon(Icons.label),
+                          filled: true,
+                          fillColor: cs.surfaceContainerHighest,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onChanged: (v) => unitLabel = v.trim().isEmpty ? null : v.trim(),
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -756,6 +884,9 @@ class _HabitScreenState extends State<HabitScreen> {
     final nameController = TextEditingController(text: habit['name'] as String? ?? '');
     String? selectedSubject = habit['subjectName'] as String?;
     int targetPerWeek = (habit['targetPerWeek'] as int?) ?? 7;
+    HabitType habitType = _getHabitType(habit);
+    String? unitLabel = _getUnitLabel(habit);
+    int? metricGoal = _getMetricGoal(habit);
     final existingReminder = habit['reminderTimeMinutes'] as int?;
     TimeOfDay? reminderTime = existingReminder != null
         ? TimeOfDay(hour: existingReminder ~/ 60, minute: existingReminder % 60)
@@ -845,6 +976,56 @@ class _HabitScreenState extends State<HabitScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
+
+                    // Type selector (view only in edit)
+                    SegmentedButton<HabitType>(
+                      segments: const [
+                        ButtonSegment(value: HabitType.dailyCheck, label: Text('Check'), icon: Icon(Icons.check_circle_outline, size: 16)),
+                        ButtonSegment(value: HabitType.durationMinutes, label: Text('Duration'), icon: Icon(Icons.timer, size: 16)),
+                        ButtonSegment(value: HabitType.countMetric, label: Text('Count'), icon: Icon(Icons.format_list_numbered, size: 16)),
+                      ],
+                      selected: {habitType},
+                      onSelectionChanged: (sel) {
+                        if (sel.isNotEmpty) setDialogState(() => habitType = sel.first);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Metric goal (for duration/count)
+                    if (habitType != HabitType.dailyCheck) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: TextEditingController(text: metricGoal?.toString() ?? ''),
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: 'Daily Goal ${unitLabel != null ? '($unitLabel)' : ''}',
+                                prefixIcon: const Icon(Icons.track_changes),
+                                filled: true,
+                                fillColor: cs.surfaceContainerHighest,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onChanged: (v) => metricGoal = int.tryParse(v),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: TextEditingController(text: unitLabel ?? ''),
+                        decoration: InputDecoration(
+                          labelText: 'Unit Label',
+                          prefixIcon: const Icon(Icons.label),
+                          filled: true,
+                          fillColor: cs.surfaceContainerHighest,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onChanged: (v) => unitLabel = v.trim().isEmpty ? null : v.trim(),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -914,6 +1095,9 @@ class _HabitScreenState extends State<HabitScreen> {
                             'targetPerWeek': targetPerWeek,
                             'reminderTimeMinutes': reminderTime != null ? reminderTime!.hour * 60 + reminderTime!.minute : null,
                             'colorHex': '#${selectedColor.value.toRadixString(16).substring(2).toUpperCase()}',
+                            'habitType': habitType.index,
+                            'metricGoal': metricGoal,
+                            'unitLabel': unitLabel,
                           });
                         },
                         child: const Text('Save Changes'),
@@ -938,6 +1122,10 @@ class _HabitScreenState extends State<HabitScreen> {
   // ── Long press menu ──
   void _showHabitMenu(Map<String, dynamic> habit, Offset position) {
     final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final habitType = _getHabitType(habit);
+    final unitLabel = _getUnitLabel(habit);
+    final metricGoal = _getMetricGoal(habit);
+    
     showMenu(
       context: context,
       position: RelativeRect.fromRect(
@@ -956,7 +1144,7 @@ class _HabitScreenState extends State<HabitScreen> {
       switch (value) {
         case 'stats': _showStatsModal(habit); break;
         case 'edit': _showEditSheet(habit); break;
-        case 'yesterday': _markYesterday(habitId); break;
+        case 'yesterday': _markYesterday(habitId, habitType, metricGoal, unitLabel); break;
         case 'archive': _archiveHabit(habitId); break;
         case 'delete': _deleteHabit(habitId); break;
       }
@@ -1148,6 +1336,9 @@ class _HabitScreenState extends State<HabitScreen> {
     final color = _parseColor(habit['colorHex'] as String?);
     final target = (habit['targetPerWeek'] as int?) ?? 7;
     final subject = habit['subjectName'] as String?;
+    final habitType = _getHabitType(habit);
+    final unitLabel = _getUnitLabel(habit);
+    final metricGoal = _getMetricGoal(habit);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -1157,7 +1348,11 @@ class _HabitScreenState extends State<HabitScreen> {
         side: BorderSide(color: cs.outline.withOpacity(0.15)),
       ),
       child: InkWell(
-        onLongPress: () => _showHabitMenu(habit, Offset.zero),
+        onLongPress: () {
+          final RenderBox box = context.findRenderObject() as RenderBox;
+          final position = box.localToGlobal(Offset.zero);
+          _showHabitMenu(habit, position);
+        },
         borderRadius: BorderRadius.circular(20),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -1186,6 +1381,24 @@ class _HabitScreenState extends State<HabitScreen> {
                             subject,
                             style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                           ),
+                        // Show habit type badge
+                        if (habitType != HabitType.dailyCheck) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(
+                                habitType == HabitType.durationMinutes ? Icons.timer : Icons.format_list_numbered,
+                                size: 12,
+                                color: color.withOpacity(0.8),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${_formatMetric(metricGoal, unitLabel)}/day',
+                                style: TextStyle(fontSize: 11, color: color.withOpacity(0.8), fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -1255,7 +1468,7 @@ class _HabitScreenState extends State<HabitScreen> {
                         return Padding(
                           padding: const EdgeInsets.only(right: 6),
                           child: GestureDetector(
-                            onTap: () => _toggleDay(habitId, date, isCompleted),
+                            onTap: () => _toggleDay(habitId, date, isCompleted, habitType, metricGoal, unitLabel),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -1300,7 +1513,7 @@ class _HabitScreenState extends State<HabitScreen> {
 
               const SizedBox(height: 16),
 
-              // Week circles (Mon-Sun)
+              // Week circles (Mon-Sun) with metric display
               FutureBuilder<List<bool>>(
                 future: _getWeekCompletion(habitId),
                 builder: (context, snap) {
@@ -1316,7 +1529,7 @@ class _HabitScreenState extends State<HabitScreen> {
                           final weekStart = DateTime(now.year, now.month, now.day)
                               .subtract(Duration(days: now.weekday - 1));
                           final day = weekStart.add(Duration(days: i));
-                          _toggleDay(habitId, day, isDone);
+                          _toggleDay(habitId, day, isDone, habitType, metricGoal, unitLabel);
                         },
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -1357,6 +1570,58 @@ class _HabitScreenState extends State<HabitScreen> {
               ),
 
               const SizedBox(height: 12),
+
+              // Today's metric display (for metric-based habits)
+              if (habitType != HabitType.dailyCheck) ...[
+                FutureBuilder<int?>(
+                  future: _getTodayMetricValue(habitId),
+                  builder: (context, snap) {
+                    final todayValue = snap.data;
+                    final goalText = metricGoal != null ? ' / $metricGoal' : '';
+                    final unit = unitLabel ?? '';
+                    
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: todayValue != null && metricGoal != null && todayValue >= metricGoal
+                            ? color.withOpacity(0.15)
+                            : cs.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            habitType == HabitType.durationMinutes ? Icons.timer : Icons.format_list_numbered,
+                            size: 14,
+                            color: todayValue != null && metricGoal != null && todayValue >= metricGoal
+                                ? color
+                                : cs.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            todayValue != null
+                                ? '$todayValue$goalText $unit'
+                                : 'Not tracked today',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: todayValue != null && metricGoal != null && todayValue >= metricGoal
+                                  ? color
+                                  : cs.onSurfaceVariant,
+                            ),
+                          ),
+                          if (todayValue != null && metricGoal != null && todayValue >= metricGoal) ...[
+                            const SizedBox(width: 4),
+                            Icon(Icons.check_circle, size: 14, color: color),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
 
               // Target progress
               FutureBuilder<Map<String, dynamic>>(
