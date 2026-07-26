@@ -1,7 +1,8 @@
 // FILE: lib/screens/main_screen.dart
 // COMPLETE REPLACEMENT — Fixed double headings by removing AppBar here
 // Each child screen now has its own AppBar with drawer button
-// ENABLED: Timetable, Habits, Reading tracking items (were previously disabled)
+// ENABLED: Timetable, Habits (real implementation), Reading tracking items
+// FIXED: Removed placeholder HabitScreen, now imports real habit_screen.dart
 
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
@@ -15,6 +16,7 @@ import 'quick_notes_screen.dart';
 import 'attendance_screen.dart';
 import 'timetable_screen.dart';
 import 'settings_screen.dart';
+import 'habit_screen.dart';
 
 // NEW: Placeholder screens for enabled tracking items
 class TimetableScreen extends StatelessWidget {
@@ -42,40 +44,6 @@ class TimetableScreen extends StatelessWidget {
             SizedBox(height: 8),
             Text(
               'Coming soon — manage your class schedule here',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class HabitScreen extends StatelessWidget {
-  const HabitScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Habit Tracker'),
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () => mainScaffoldKey.currentState?.openDrawer(),
-        ),
-      ),
-      body: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle_outline, size: 64, color: Colors.grey),
-            SizedBox(height: 16),
-            Text(
-              'Habit Tracker',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Coming soon — track your daily habits here',
               style: TextStyle(color: Colors.grey),
             ),
           ],
@@ -145,7 +113,7 @@ class _MainScreenState extends State<MainScreen>
     const StatsScreen(),
     const QuickNotesScreen(),
     const ReadingScreen(),      // WAS: placeholder, NOW: active
-    const HabitScreen(),        // WAS: placeholder, NOW: active
+    const HabitScreen(),        // NOW: REAL implementation from habit_screen.dart
     const AttendanceScreen(),
     const TimetableScreen(),    // WAS: placeholder, NOW: active
   ];
