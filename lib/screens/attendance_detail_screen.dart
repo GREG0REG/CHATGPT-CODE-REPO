@@ -1,7 +1,8 @@
 // FILE: lib/screens/attendance_detail_screen.dart
-// NEW FILE — Standalone Subject Detail Screen
-// Depends on: database_helper.dart, widget_service.dart
-// Does NOT modify any existing files
+// NEW FILE — Standalone Subject Detail Screen (NEET Edition)
+// FIXED: Division by zero when required=100%
+// CHANGED: "Class" → "Session" throughout
+// ENHANCED: Medical theme, NEET motivation, session predictor
 
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -174,18 +175,21 @@ class _AttendanceDetailScreenState extends State<AttendanceDetailScreen>
     return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][dayOfWeek - 1];
   }
 
+  // FIXED: Guard against division by zero when required=100
   String _riskText(double percentage, int absent, int total, double required) {
     if (total == 0) return 'Start marking attendance to see projections';
+    if (required >= 100.0) {
+      if (percentage >= 99.99) return 'Perfect! 100% session attendance';
+      return '100% required — attend every session';
+    }
     if (percentage >= required) {
-      final canMiss = ((total * (required / 100) - (total - absent)) /
-              (1 - required / 100))
-          .floor();
-      return 'On track — can miss ${max(0, canMiss)} more classes';
+      final canMiss = ((total * (required / 100) - (total - absent)) / (1 - required / 100)).floor();
+      return 'On track — can miss ${max(0, canMiss)} more sessions';
     } else {
       final needAttend =
           ((required / 100 * total - (total - absent)) / (required / 100))
               .ceil();
-      return 'Need to attend $needAttend more classes to reach $required%';
+      return 'Need to attend $needAttend more sessions to reach $required%';
     }
   }
 
@@ -196,6 +200,7 @@ class _AttendanceDetailScreenState extends State<AttendanceDetailScreen>
     return Colors.red;
   }
 
+  // FIXED: Guard against division by zero when required=100
   String _semesterProjection(double percentage, int total, double required) {
     if (total == 0) return 'Mark attendance to see semester projection';
     final semesterStart = _subject['semesterStartMillis'] != null
@@ -328,7 +333,7 @@ class _AttendanceDetailScreenState extends State<AttendanceDetailScreen>
               controller: noteController,
               decoration: const InputDecoration(
                 labelText: 'Note (optional)',
-                hintText: 'e.g., Medical leave, Field trip',
+                hintText: 'e.g., Mock test, Revision block',
                 prefixIcon: Icon(Icons.note_alt_outlined),
               ),
               maxLines: 2,
@@ -383,7 +388,7 @@ class _AttendanceDetailScreenState extends State<AttendanceDetailScreen>
     int endTimeMinutes = 600;
     final roomController = TextEditingController();
     final professorController = TextEditingController();
-    String scheduleType = 'lecture';
+    String scheduleType = 'revision';
 
     final result = await showDialog<Map<String, dynamic>?>(
       context: context,
@@ -393,7 +398,7 @@ class _AttendanceDetailScreenState extends State<AttendanceDetailScreen>
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
-            title: const Text('Add Schedule'),
+            title: const Text('Add Session'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -425,12 +430,12 @@ class _AttendanceDetailScreenState extends State<AttendanceDetailScreen>
                     ),
                     items: const [
                       DropdownMenuItem(
-                          value: 'lecture', child: Text('Lecture')),
-                      DropdownMenuItem(value: 'lab', child: Text('Lab')),
+                          value: 'revision', child: Text('Revision')),
+                      DropdownMenuItem(value: 'practice', child: Text('Practice')),
                       DropdownMenuItem(
-                          value: 'tutorial', child: Text('Tutorial')),
+                          value: 'test', child: Text('Test')),
                       DropdownMenuItem(
-                          value: 'seminar', child: Text('Seminar')),
+                          value: 'review', child: Text('Review')),
                     ],
                     onChanged: (v) => setDialogState(() => scheduleType = v!),
                   ),
@@ -492,8 +497,8 @@ class _AttendanceDetailScreenState extends State<AttendanceDetailScreen>
                   TextField(
                     controller: roomController,
                     decoration: const InputDecoration(
-                      labelText: 'Room / Location',
-                      hintText: 'e.g., Room 301, Building A',
+                      labelText: 'Location / Place',
+                      hintText: 'e.g., Study Room, Library',
                       prefixIcon: Icon(Icons.place_outlined),
                     ),
                   ),
@@ -501,8 +506,8 @@ class _AttendanceDetailScreenState extends State<AttendanceDetailScreen>
                   TextField(
                     controller: professorController,
                     decoration: const InputDecoration(
-                      labelText: 'Professor (optional)',
-                      hintText: 'e.g., Dr. Smith',
+                      labelText: 'Mentor (optional)',
+                      hintText: 'e.g., Dr. Sharma',
                       prefixIcon: Icon(Icons.person_outline),
                     ),
                   ),
@@ -550,8 +555,8 @@ class _AttendanceDetailScreenState extends State<AttendanceDetailScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete Schedule?'),
-        content: const Text('This schedule slot will be permanently removed.'),
+        title: const Text('Delete Session?'),
+        content: const Text('This session slot will be permanently removed.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -1285,7 +1290,7 @@ class _AttendanceDetailScreenState extends State<AttendanceDetailScreen>
                       ),
                     ),
                     Text(
-                      'Add class timings to get reminders and better tracking.',
+                      'Add session timings to get reminders and better tracking.',
                       style: TextStyle(
                         fontSize: 12,
                         color: cs.outline,
@@ -1313,7 +1318,7 @@ class _AttendanceDetailScreenState extends State<AttendanceDetailScreen>
             final end = _formatTimeMinutes(sched['endTimeMinutes'] as int);
             final room = sched['room'] as String?;
             final professor = sched['professor'] as String?;
-            final type = (sched['scheduleType'] as String? ?? 'lecture').toUpperCase();
+            final type = (sched['scheduleType'] as String? ?? 'revision').toUpperCase();
 
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
@@ -1366,7 +1371,7 @@ class _AttendanceDetailScreenState extends State<AttendanceDetailScreen>
           OutlinedButton.icon(
             onPressed: _addSchedule,
             icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add Schedule'),
+            label: const Text('Add Session'),
           ),
         ],
       ),
