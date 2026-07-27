@@ -1,7 +1,6 @@
 // FILE: lib/services/settings_service.dart
-// COMPLETE REPLACEMENT — copy and paste entire file
-// FIXED: All getters/setters now use correct types (AppThemeOption, ThemeMode, Color?)
-// ADDED: Widget background type, image path, quiet hours settings
+// COMPLETE REPLACEMENT — Fixed: All getters/setters use correct types
+// ADDED: Widget background type, image path, quiet hours settings with correct keys
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -206,40 +205,40 @@ class SettingsService {
   }
 
   // ============================================
-  // QUIET HOURS SETTINGS (NEW)
+  // QUIET HOURS SETTINGS (FIXED KEYS)
   // ============================================
 
   /// Returns whether quiet hours are enabled. Defaults to `false`.
   Future<bool> getQuietHoursEnabled() async {
     final prefs = await _preferences;
-    return prefs.getBool('quietHoursEnabled') ?? false;
+    return prefs.getBool('quiet_hours_enabled') ?? false;
   }
 
   Future<void> setQuietHoursEnabled(bool value) async {
     final prefs = await _preferences;
-    await prefs.setBool('quietHoursEnabled', value);
+    await prefs.setBool('quiet_hours_enabled', value);
   }
 
   /// Returns quiet hours start time as minutes from midnight. Defaults to `22:00` (1320).
   Future<int> getQuietHoursStart() async {
     final prefs = await _preferences;
-    return prefs.getInt('quietHoursStart') ?? 1320;
+    return prefs.getInt('quiet_hours_start') ?? 1320;
   }
 
   Future<void> setQuietHoursStart(int minutes) async {
     final prefs = await _preferences;
-    await prefs.setInt('quietHoursStart', minutes);
+    await prefs.setInt('quiet_hours_start', minutes);
   }
 
   /// Returns quiet hours end time as minutes from midnight. Defaults to `07:00` (420).
   Future<int> getQuietHoursEnd() async {
     final prefs = await _preferences;
-    return prefs.getInt('quietHoursEnd') ?? 420;
+    return prefs.getInt('quiet_hours_end') ?? 420;
   }
 
   Future<void> setQuietHoursEnd(int minutes) async {
     final prefs = await _preferences;
-    await prefs.setInt('quietHoursEnd', minutes);
+    await prefs.setInt('quiet_hours_end', minutes);
   }
 
   // ============================================
@@ -316,7 +315,7 @@ class SettingsService {
   }
 
   // ============================================
-  // WIDGET SETTINGS
+  // WIDGET SETTINGS (FIXED KEYS)
   // ============================================
 
   Future<bool> getHomeWidgetEnabled() async {
@@ -353,27 +352,27 @@ class SettingsService {
   /// Typical values: 'themeColor' or 'customImage'. Defaults to 'themeColor'.
   Future<String> getWidgetBackgroundType() async {
     final prefs = await _preferences;
-    return prefs.getString('widgetBackgroundType') ?? 'themeColor';
+    return prefs.getString('widget_background_type') ?? 'themeColor';
   }
 
   Future<void> setWidgetBackgroundType(String type) async {
     final prefs = await _preferences;
-    await prefs.setString('widgetBackgroundType', type);
+    await prefs.setString('widget_background_type', type);
   }
 
   /// Returns the path to the custom widget background image, or `null` if none.
   Future<String?> getWidgetImagePath() async {
     final prefs = await _preferences;
-    return prefs.getString('widgetImagePath');
+    return prefs.getString('widget_image_path');
   }
 
   /// Sets the custom widget background image path, or clears it if `null`.
   Future<void> setWidgetImagePath(String? path) async {
     final prefs = await _preferences;
     if (path == null) {
-      await prefs.remove('widgetImagePath');
+      await prefs.remove('widget_image_path');
     } else {
-      await prefs.setString('widgetImagePath', path);
+      await prefs.setString('widget_image_path', path);
     }
   }
 
