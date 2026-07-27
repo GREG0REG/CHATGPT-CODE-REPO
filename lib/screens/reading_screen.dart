@@ -11,7 +11,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import '../database_helper.dart';
+import '../db/database_helper.dart';
 
 // ═══════════════════════════════════════════════════════════════
 // READING SCREEN — Main Book List
@@ -145,7 +145,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme cs;
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -1227,7 +1227,7 @@ class _CitationDialogState extends State<_CitationDialog> {
       case CitationFormat.apa:
         return '$author. (${now.year}). _${title}_. (pp. $pageRange). Retrieved $dateStr.';
       case CitationFormat.mla:
-        return '$author. _$title_. ${now.year}, pp. $pageRange.';
+        return '$author. _${title}_. ${now.year}, pp. $pageRange.';
       case CitationFormat.chicago:
         return '$author, _${title}_ (${now.year}), $pageRange.';
     }
@@ -1430,4 +1430,3 @@ class SubjectPickerSheet extends StatelessWidget {
     return colors[subject] ?? const Color(0xFF607D8B);
   }
 }
-
