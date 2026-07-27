@@ -1052,7 +1052,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         } else {
           break;
         }
-      } else if (normalizedDate.isBefore(expectedDate)) {
+      } else if (normalizedLog.isBefore(expectedDate)) {
         break;
       }
     }
