@@ -723,7 +723,10 @@ class DatabaseHelper {
       )
     """);
   }
-  // ============================================
+// --- END PART 1 ---
+
+
+    // ============================================
   // EVENT CRUD (PRESERVED)
   // ============================================
   Future<int> insertEvent(Event event) async {
@@ -876,6 +879,7 @@ class DatabaseHelper {
       whereArgs: [id],
     );
   }
+// --- END PART 2 ---
 
   // ============================================
   // SUBTASK CRUD (PRESERVED)
@@ -1125,8 +1129,9 @@ class DatabaseHelper {
     if (rows.isEmpty) return 0;
     return DailyCardGoal.fromMap(rows.first).streakCount;
   }
+// --- END PART 3 ---
 
-  // ============================================
+    // ============================================
   // STUDY SCHEDULE CRUD (PRESERVED)
   // ============================================
   Future<int> insertStudySchedule(StudySchedule schedule) async {
@@ -1399,8 +1404,10 @@ class DatabaseHelper {
     if (rows.isEmpty) return null;
     return rows.first;
   }
+// --- END PART 4 ---
 
-  // ============================================
+  
+    // ============================================
   // ATTENDANCE LOGS CRUD (PRESERVED)
   // ============================================
   Future<int> insertAttendanceLog(Map<String, dynamic> log) async {
@@ -1966,12 +1973,7 @@ class DatabaseHelper {
   }
 
   Future<int> deleteClassSchedule(int id) async {
-    final db = await database;
-    return db.delete('class_schedule', where: 'id = ?', whereArgs: [id]);
-  }
-
-  Future<List<Map<String, dynamic>>> getAllClassSchedules() async {
-    final db = await database;
+        final db = await database;
     final rows = await db.query('class_schedule', orderBy: 'dayOfWeek ASC, startTimeMinutes ASC');
     return rows;
   }
@@ -2439,8 +2441,9 @@ class DatabaseHelper {
       'completionRate': totalBooks > 0 ? (completedBooks / totalBooks * 100).round() : 0,
     };
   }
+// --- END PART 5 ---
 
-  // ═══════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
   // NEW CRUD: READING SESSIONS (v14)
   // ═══════════════════════════════════════════════════════════════
 
@@ -2747,3 +2750,5 @@ class DatabaseHelper {
     await db.execute('VACUUM');
   }
 }
+// --- END PART 6 ---
+// --- END OF FILE ---
