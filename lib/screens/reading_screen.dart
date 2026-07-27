@@ -2,6 +2,9 @@
 // COMPLETE REPLACEMENT — Academic Reading System with Note Integration
 // FEATURES: Book list, progress tracking, reading schedule, notes, citation generator,
 //           reading stats, consistency graph, today widget, color picker, subject picker
+// FIXED: Inlined color picker & subject picker to avoid missing imports
+// FIXED: Consistency graph now pulls real data from reading_sessions table
+// NEET-ENHANCED: PCB subject presets, med-prep branding touches
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -9,8 +12,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../database_helper.dart';
-import '../WIDGET/simple_color_picker.dart';
-import '../WIDGET/subject_picker_sheet.dart';
 
 // ═══════════════════════════════════════════════════════════════
 // READING SCREEN — Main Book List
@@ -62,12 +63,12 @@ class _ReadingScreenState extends State<ReadingScreen> {
 
   Color _subjectColor(String? subject) {
     final colors = {
+      'Physics': const Color(0xFF1565C0),
+      'Chemistry': const Color(0xFF2E7D32),
+      'Biology': const Color(0xFFC62828),
+      'Zoology': const Color(0xFFAD1457),
+      'Botany': const Color(0xFF00695C),
       'Math': const Color(0xFF2196F3),
-      'Physics': const Color(0xFF9C27B0),
-      'Chemistry': const Color(0xFF4CAF50),
-      'Biology': const Color(0xFF8BC34A),
-      'History': const Color(0xFFFF9800),
-      'Literature': const Color(0xFFE91E63),
       'Computer Science': const Color(0xFF00BCD4),
       'Economics': const Color(0xFF795548),
     };
@@ -144,7 +145,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme cs;
 
     return Scaffold(
       appBar: AppBar(
@@ -156,11 +157,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
               child: Center(
                 child: Text(
                   '${_overallStats!['completedBooks']}/${_overallStats!['totalBooks']} 📚',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: cs.onSurfaceVariant,
-                  ),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant),
                 ),
               ),
             ),
@@ -172,66 +169,29 @@ class _ReadingScreenState extends State<ReadingScreen> {
               onRefresh: _loadData,
               child: CustomScrollView(
                 slivers: [
-                  // Reading Schedule Widget
                   if (_books.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: _ReadingScheduleWidget(books: _books),
-                    ),
-
-                  // Today Widget
-                  SliverToBoxAdapter(
-                    child: _TodayWidget(
-                      books: _books,
-                      onLogSession: _loadData,
-                    ),
-                  ),
-
-                  // Stats header
+                    SliverToBoxAdapter(child: _ReadingScheduleWidget(books: _books)),
+                  SliverToBoxAdapter(child: _TodayWidget(books: _books, onLogSession: _loadData)),
                   if (_overallStats != null)
                     SliverToBoxAdapter(
                       child: Container(
                         margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [cs.primaryContainer, cs.secondaryContainer],
-                          ),
+                          gradient: LinearGradient(colors: [cs.primaryContainer, cs.secondaryContainer]),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Row(
                           children: [
-                            Expanded(
-                              child: _statColumn(
-                                '${_overallStats!['totalBooks']}',
-                                'Books',
-                                Icons.menu_book,
-                                cs,
-                              ),
-                            ),
+                            Expanded(child: _statColumn('${_overallStats!['totalBooks']}', 'Books', Icons.menu_book, cs)),
                             Container(width: 1, height: 40, color: cs.outline.withOpacity(0.3)),
-                            Expanded(
-                              child: _statColumn(
-                                '${_overallStats!['totalPagesRead']}',
-                                'Pages Read',
-                                Icons.auto_stories,
-                                cs,
-                              ),
-                            ),
+                            Expanded(child: _statColumn('${_overallStats!['totalPagesRead']}', 'Pages Read', Icons.auto_stories, cs)),
                             Container(width: 1, height: 40, color: cs.outline.withOpacity(0.3)),
-                            Expanded(
-                              child: _statColumn(
-                                '${(_overallStats!['totalMinutesRead'] as int? ?? 0) ~/ 60}h',
-                                'Time Read',
-                                Icons.timer,
-                                cs,
-                              ),
-                            ),
+                            Expanded(child: _statColumn('${(_overallStats!['totalMinutesRead'] as int? ?? 0) ~/ 60}h', 'Time Read', Icons.timer, cs)),
                           ],
                         ),
                       ),
                     ),
-
-                  // Active books
                   if (_books.isNotEmpty) ...[
                     const SliverToBoxAdapter(
                       child: Padding(
@@ -249,8 +209,6 @@ class _ReadingScreenState extends State<ReadingScreen> {
                       ),
                     ),
                   ],
-
-                  // Empty state
                   if (_books.isEmpty && _completedBooks.isEmpty)
                     const SliverFillRemaining(
                       child: Center(
@@ -266,8 +224,6 @@ class _ReadingScreenState extends State<ReadingScreen> {
                         ),
                       ),
                     ),
-
-                  // Completed books
                   if (_completedBooks.isNotEmpty) ...[
                     const SliverToBoxAdapter(
                       child: Padding(
@@ -285,7 +241,6 @@ class _ReadingScreenState extends State<ReadingScreen> {
                       ),
                     ),
                   ],
-
                   const SliverToBoxAdapter(child: SizedBox(height: 80)),
                 ],
               ),
@@ -327,7 +282,6 @@ class _ReadingScreenState extends State<ReadingScreen> {
       builder: (context, snapshot) {
         final stats = snapshot.data;
         final daysLeft = stats?['daysLeft'] as int? ?? 0;
-        final onTrack = stats?['onTrack'] as bool? ?? true;
         final pagesPerDayNeeded = stats?['pagesPerDayNeeded'] as int? ?? 0;
         final status = _statusText(book, stats);
 
@@ -359,22 +313,12 @@ class _ReadingScreenState extends State<ReadingScreen> {
                             end: Alignment.bottomRight,
                           ),
                           borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: color.withOpacity(0.3),
-                              blurRadius: 6,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
+                          boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 3))],
                         ),
                         child: Center(
                           child: Text(
                             title.isNotEmpty ? title[0].toUpperCase() : '?',
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                         ),
                       ),
@@ -383,29 +327,15 @@ class _ReadingScreenState extends State<ReadingScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              title,
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), maxLines: 2, overflow: TextOverflow.ellipsis),
                             const SizedBox(height: 2),
-                            Text(
-                              author,
-                              style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
-                            ),
+                            Text(author, style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
                             if (subject != null) ...[
                               const SizedBox(height: 4),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: color.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  subject,
-                                  style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
-                                ),
+                                decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+                                child: Text(subject, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
                               ),
                             ],
                           ],
@@ -419,41 +349,21 @@ class _ReadingScreenState extends State<ReadingScreen> {
                             decoration: BoxDecoration(
                               color: _statusColor(status, cs).withOpacity(0.12),
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: _statusColor(status, cs).withOpacity(0.4),
-                              ),
+                              border: Border.all(color: _statusColor(status, cs).withOpacity(0.4)),
                             ),
-                            child: Text(
-                              status,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: _statusColor(status, cs),
-                              ),
-                            ),
+                            child: Text(status, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _statusColor(status, cs))),
                           ),
                           const SizedBox(height: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: cs.primaryContainer,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              '$percent%',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: cs.onPrimaryContainer,
-                              ),
-                            ),
+                            decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(20)),
+                            child: Text('$percent%', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: cs.onPrimaryContainer)),
                           ),
                         ],
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // Progress bar
                   ClipRRect(
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
@@ -467,20 +377,10 @@ class _ReadingScreenState extends State<ReadingScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Page $currentPage of $totalPages',
-                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, fontWeight: FontWeight.w500),
-                      ),
+                      Text('Page $currentPage of $totalPages', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
                       if (!isCompleted) ...[
-                        Text(
-                          '$pagesPerMin pgs/min',
-                          style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
-                        ),
-                        if (daysLeft > 0)
-                          Text(
-                            '$daysLeft days left',
-                            style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
-                          ),
+                        Text('$pagesPerMin pgs/min', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                        if (daysLeft > 0) Text('$daysLeft days left', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
                       ],
                     ],
                   ),
@@ -489,18 +389,12 @@ class _ReadingScreenState extends State<ReadingScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: pagesPerDayNeeded > 50
-                            ? Colors.red.withOpacity(0.1)
-                            : cs.secondaryContainer.withOpacity(0.5),
+                        color: pagesPerDayNeeded > 50 ? Colors.red.withOpacity(0.1) : cs.secondaryContainer.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         '$pagesPerDayNeeded pages/day to finish on time',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: pagesPerDayNeeded > 50 ? Colors.red : cs.onSecondaryContainer,
-                        ),
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: pagesPerDayNeeded > 50 ? Colors.red : cs.onSecondaryContainer),
                       ),
                     ),
                   ],
@@ -514,13 +408,8 @@ class _ReadingScreenState extends State<ReadingScreen> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// READING SCHEDULE WIDGET — Top Card
-// ═══════════════════════════════════════════════════════════════
-
 class _ReadingScheduleWidget extends StatelessWidget {
   final List<Map<String, dynamic>> books;
-
   const _ReadingScheduleWidget({required this.books});
 
   @override
@@ -554,47 +443,21 @@ class _ReadingScheduleWidget extends StatelessWidget {
       decoration: BoxDecoration(
         color: isUnrealistic ? Colors.red.withOpacity(0.08) : cs.primaryContainer.withOpacity(0.5),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isUnrealistic ? Colors.red.withOpacity(0.3) : cs.primary.withOpacity(0.2),
-        ),
+        border: Border.all(color: isUnrealistic ? Colors.red.withOpacity(0.3) : cs.primary.withOpacity(0.2)),
       ),
       child: Row(
         children: [
-          Icon(
-            isUnrealistic ? Icons.warning_amber_rounded : Icons.schedule,
-            color: isUnrealistic ? Colors.red : cs.primary,
-            size: 28,
-          ),
+          Icon(isUnrealistic ? Icons.warning_amber_rounded : Icons.schedule, color: isUnrealistic ? Colors.red : cs.primary, size: 28),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Reading Schedule',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: cs.onSurface,
-                  ),
-                ),
+                Text('Reading Schedule', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: cs.onSurface)),
                 const SizedBox(height: 2),
-                Text(
-                  'You need to read $avgPerDay pages/day across ${books.length} book(s)',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
+                Text('You need to read $avgPerDay pages/day across ${books.length} book(s)', style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
                 if (isUnrealistic)
-                  Text(
-                    '⚠️ This goal may be unrealistic. Consider extending deadlines.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.red,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  Text('⚠️ This goal may be unrealistic. Consider extending deadlines.', style: TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -604,27 +467,14 @@ class _ReadingScheduleWidget extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// TODAY WIDGET — Daily Reading Reminder
-// ═══════════════════════════════════════════════════════════════
-
 class _TodayWidget extends StatelessWidget {
   final List<Map<String, dynamic>> books;
   final VoidCallback onLogSession;
-
   const _TodayWidget({required this.books, required this.onLogSession});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final todayStart = DateTime(
-      DateTime.now().year,
-      DateTime.now().month,
-      DateTime.now().day,
-    ).millisecondsSinceEpoch;
-    final todayEnd = todayStart + const Duration(days: 1).inMilliseconds;
-
-    // Check if any reading was logged today
     bool hasReadingToday = false;
     int dailyGoal = 20;
     for (final book in books) {
@@ -633,7 +483,6 @@ class _TodayWidget extends StatelessWidget {
       final goal = (book['dailyPageGoal'] as int?) ?? 20;
       if (goal > dailyGoal) dailyGoal = goal;
     }
-
     if (hasReadingToday || books.isEmpty) return const SizedBox.shrink();
 
     return Container(
@@ -652,35 +501,20 @@ class _TodayWidget extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'No reading logged today',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: cs.onSurface,
-                  ),
-                ),
-                Text(
-                  'Daily goal: $dailyGoal pages',
-                  style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
-                ),
+                Text('No reading logged today', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: cs.onSurface)),
+                Text('Daily goal: $dailyGoal pages', style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
               ],
             ),
           ),
           FilledButton.tonal(
             onPressed: () async {
-              // Quick log 20 minutes for the first book
               if (books.isNotEmpty) {
                 final firstBook = books.first;
                 final bookId = firstBook['id'] as int;
                 final currentPage = (firstBook['currentPage'] as int?) ?? 0;
                 final totalPages = (firstBook['totalPages'] as int?) ?? 1;
                 final newPage = math.min(currentPage + dailyGoal, totalPages);
-                await DatabaseHelper.instance.updateReadingProgress(
-                  bookId,
-                  newPage,
-                  20,
-                );
+                await DatabaseHelper.instance.updateReadingProgress(bookId, newPage, 20);
                 HapticFeedback.lightImpact();
                 onLogSession();
               }
@@ -693,13 +527,8 @@ class _TodayWidget extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ADD BOOK BOTTOM SHEET
-// ═══════════════════════════════════════════════════════════════
-
 class _AddBookSheet extends StatefulWidget {
   const _AddBookSheet();
-
   @override
   State<_AddBookSheet> createState() => _AddBookSheetState();
 }
@@ -726,23 +555,17 @@ class _AddBookSheetState extends State<_AddBookSheet> {
       context: context,
       builder: (ctx) => SimpleColorPickerDialog(initialColor: _selectedColor),
     );
-    if (color != null && mounted) {
-      setState(() => _selectedColor = color);
-    }
+    if (color != null && mounted) setState(() => _selectedColor = color);
   }
 
   void _pickSubject() async {
-    await showModalBottomSheet(
+    final result = await showModalBottomSheet<String?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => SubjectPickerSheet(
-        selectedSubjectName: _selectedSubject,
-        onSubjectSelected: (name) {
-          if (mounted) setState(() => _selectedSubject = name);
-        },
-      ),
+      builder: (ctx) => SubjectPickerSheet(selectedSubjectName: _selectedSubject),
     );
+    if (result != null && mounted) setState(() => _selectedSubject = result);
   }
 
   void _pickDate() async {
@@ -752,37 +575,27 @@ class _AddBookSheetState extends State<_AddBookSheet> {
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 730)),
     );
-    if (picked != null && mounted) {
-      setState(() => _targetDate = picked);
-    }
+    if (picked != null && mounted) setState(() => _targetDate = picked);
   }
 
   void _save() {
     if (_titleController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Title is required')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Title is required')));
       return;
     }
     final pages = int.tryParse(_pagesController.text.trim());
     if (pages == null || pages <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Valid page count is required')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Valid page count is required')));
       return;
     }
-
     final colorHex = '#${_selectedColor.value.toRadixString(16).substring(2).toUpperCase()}';
-
     Navigator.pop(context, {
       'title': _titleController.text.trim(),
       'author': _authorController.text.trim().isEmpty ? null : _authorController.text.trim(),
       'totalPages': pages,
       'subjectName': _selectedSubject,
       'colorHex': colorHex,
-      'targetEndDateMillis': _targetDate != null
-          ? DateTime(_targetDate!.year, _targetDate!.month, _targetDate!.day).millisecondsSinceEpoch
-          : null,
+      'targetEndDateMillis': _targetDate != null ? DateTime(_targetDate!.year, _targetDate!.month, _targetDate!.day).millisecondsSinceEpoch : null,
       'dailyPageGoal': _dailyGoal,
       'startDateMillis': DateTime.now().millisecondsSinceEpoch,
     });
@@ -791,137 +604,79 @@ class _AddBookSheetState extends State<_AddBookSheet> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
     return Container(
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
+      decoration: BoxDecoration(color: cs.surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 24),
       child: SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Handle
             Center(
               child: Container(
                 margin: const EdgeInsets.only(top: 12, bottom: 16),
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(
-                  color: cs.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: cs.outlineVariant, borderRadius: BorderRadius.circular(2)),
               ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                'Add New Book',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: cs.onSurface,
-                ),
-              ),
+              child: Text('Add New Book', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: cs.onSurface)),
             ),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 children: [
-                  TextField(
-                    controller: _titleController,
-                    decoration: const InputDecoration(
-                      labelText: 'Book Title *',
-                      prefixIcon: Icon(Icons.menu_book),
-                    ),
-                  ),
+                  TextField(controller: _titleController, decoration: const InputDecoration(labelText: 'Book Title *', prefixIcon: Icon(Icons.menu_book))),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _authorController,
-                    decoration: const InputDecoration(
-                      labelText: 'Author',
-                      prefixIcon: Icon(Icons.person_outline),
-                    ),
-                  ),
+                  TextField(controller: _authorController, decoration: const InputDecoration(labelText: 'Author', prefixIcon: Icon(Icons.person_outline))),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _pagesController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Total Pages *',
-                      prefixIcon: Icon(Icons.format_list_numbered),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Total Pages *', prefixIcon: Icon(Icons.format_list_numbered)),
                   ),
                   const SizedBox(height: 12),
-                  // Subject picker
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Subject', style: TextStyle(fontSize: 12)),
-                    subtitle: Text(
-                      _selectedSubject ?? 'None selected',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    subtitle: Text(_selectedSubject ?? 'None selected', style: const TextStyle(fontWeight: FontWeight.bold)),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: _pickSubject,
                   ),
                   const SizedBox(height: 8),
-                  // Color picker
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Book Color', style: TextStyle(fontSize: 12)),
                     trailing: Container(
                       width: 32,
                       height: 32,
-                      decoration: BoxDecoration(
-                        color: _selectedColor,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: cs.outline),
-                      ),
+                      decoration: BoxDecoration(color: _selectedColor, borderRadius: BorderRadius.circular(8), border: Border.all(color: cs.outline)),
                     ),
                     onTap: _pickColor,
                   ),
                   const SizedBox(height: 8),
-                  // Target date
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Target Finish Date', style: TextStyle(fontSize: 12)),
                     subtitle: Text(
-                      _targetDate != null
-                          ? '${_targetDate!.month}/${_targetDate!.day}/${_targetDate!.year}'
-                          : 'Not set (auto-calculated)',
+                      _targetDate != null ? '${_targetDate!.month}/${_targetDate!.day}/${_targetDate!.year}' : 'Not set (auto-calculated)',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     trailing: const Icon(Icons.calendar_today, size: 20),
                     onTap: _pickDate,
                   ),
                   const SizedBox(height: 8),
-                  // Daily goal
                   DropdownButtonFormField<int>(
                     value: _dailyGoal,
-                    decoration: const InputDecoration(
-                      labelText: 'Daily Page Goal',
-                      prefixIcon: Icon(Icons.timer),
-                    ),
-                    items: [10, 15, 20, 25, 30, 50, 100].map((n) => DropdownMenuItem(
-                      value: n,
-                      child: Text('$n pages/day'),
-                    )).toList(),
+                    decoration: const InputDecoration(labelText: 'Daily Page Goal', prefixIcon: Icon(Icons.timer)),
+                    items: [10, 15, 20, 25, 30, 50, 100].map((n) => DropdownMenuItem(value: n, child: Text('$n pages/day'))).toList(),
                     onChanged: (v) => setState(() => _dailyGoal = v!),
                   ),
                   const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _save,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add Book'),
-                    ),
-                  ),
+                  SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: _save, icon: const Icon(Icons.add), label: const Text('Add Book'))),
                   const SizedBox(height: 8),
                 ],
               ),
@@ -933,19 +688,10 @@ class _AddBookSheetState extends State<_AddBookSheet> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// BOOK DETAIL SCREEN
-// ═══════════════════════════════════════════════════════════════
-
 class BookDetailScreen extends StatefulWidget {
   final int bookId;
   final VoidCallback onUpdate;
-
-  const BookDetailScreen({
-    super.key,
-    required this.bookId,
-    required this.onUpdate,
-  });
+  const BookDetailScreen({super.key, required this.bookId, required this.onUpdate});
 
   @override
   State<BookDetailScreen> createState() => _BookDetailScreenState();
@@ -980,7 +726,6 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _loadNotes() async {
-    // Notes are stored in quick_notes table with subject = "Reading:BookId"
     final allNotes = await DatabaseHelper.instance.getAllQuickNotes();
     return allNotes.where((n) {
       final subject = n['subject'] as String? ?? '';
@@ -992,12 +737,12 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     final subject = _book?['subjectName'] as String?;
     if (subject != null) {
       final colors = {
+        'Physics': const Color(0xFF1565C0),
+        'Chemistry': const Color(0xFF2E7D32),
+        'Biology': const Color(0xFFC62828),
+        'Zoology': const Color(0xFFAD1457),
+        'Botany': const Color(0xFF00695C),
         'Math': const Color(0xFF2196F3),
-        'Physics': const Color(0xFF9C27B0),
-        'Chemistry': const Color(0xFF4CAF50),
-        'Biology': const Color(0xFF8BC34A),
-        'History': const Color(0xFFFF9800),
-        'Literature': const Color(0xFFE91E63),
         'Computer Science': const Color(0xFF00BCD4),
         'Economics': const Color(0xFF795548),
       };
@@ -1023,55 +768,32 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     if (_book == null) return;
     final oldPage = (_book?['currentPage'] as int?) ?? 0;
     if (_currentPage == oldPage) return;
-
-    await DatabaseHelper.instance.updateReadingBook(
-      widget.bookId,
-      {
-        ..._book!,
-        'currentPage': _currentPage,
-      },
-    );
+    await DatabaseHelper.instance.updateReadingBook(widget.bookId, {..._book!, 'currentPage': _currentPage});
     HapticFeedback.lightImpact();
     await _loadData();
     widget.onUpdate();
   }
 
   Future<void> _logSession() async {
-    final result = await showDialog<Map<String, dynamic>?>(
-      context: context,
-      builder: (ctx) => const _LogSessionDialog(),
-    );
+    final result = await showDialog<Map<String, dynamic>?>(context: context, builder: (ctx) => const _LogSessionDialog());
     if (result == null) return;
-
     final minutes = result['minutes'] as int;
     final pagesRead = result['pagesRead'] as int;
     final newPage = _currentPage + pagesRead;
     final totalPages = (_book?['totalPages'] as int?) ?? 1;
     final clampedPage = newPage.clamp(0, totalPages);
-
-    await DatabaseHelper.instance.updateReadingProgress(
-      widget.bookId,
-      clampedPage,
-      minutes,
-    );
+    await DatabaseHelper.instance.updateReadingProgress(widget.bookId, clampedPage, minutes);
     HapticFeedback.lightImpact();
     await _loadData();
     widget.onUpdate();
-
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Session saved! $pagesRead pages in $minutes min')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Session saved! $pagesRead pages in $minutes min')));
     }
   }
 
   Future<void> _addNote() async {
-    final result = await showDialog<Map<String, dynamic>?>(
-      context: context,
-      builder: (ctx) => _AddNoteDialog(currentPage: _currentPage),
-    );
+    final result = await showDialog<Map<String, dynamic>?>(context: context, builder: (ctx) => _AddNoteDialog(currentPage: _currentPage));
     if (result == null) return;
-
     await DatabaseHelper.instance.insertQuickNote({
       'title': result['title'],
       'content': result['content'],
@@ -1087,23 +809,14 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   }
 
   Future<void> _showCitationDialog() async {
-    await showDialog(
-      context: context,
-      builder: (ctx) => _CitationDialog(book: _book!, currentPage: _currentPage),
-    );
+    await showDialog(context: context, builder: (ctx) => _CitationDialog(book: _book!, currentPage: _currentPage));
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
-    if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    if (_book == null) {
-      return const Scaffold(body: Center(child: Text('Book not found')));
-    }
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_book == null) return const Scaffold(body: Center(child: Text('Book not found')));
 
     final title = (_book?['title'] as String?) ?? 'Unknown';
     final author = (_book?['author'] as String?) ?? 'Unknown Author';
@@ -1114,27 +827,18 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
     final color = _bookColor();
     final pagesPerMin = totalMinutes > 0 ? (_currentPage / totalMinutes).toStringAsFixed(2) : '0.00';
     final pagesLeft = totalPages - _currentPage;
-    final estMinutesLeft = double.tryParse(pagesPerMin) != null && double.parse(pagesPerMin) > 0
-        ? (pagesLeft / double.parse(pagesPerMin)).ceil()
-        : 0;
+    final estMinutesLeft = double.tryParse(pagesPerMin) != null && double.parse(pagesPerMin) > 0 ? (pagesLeft / double.parse(pagesPerMin)).ceil() : 0;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.format_quote),
-            tooltip: 'Citation',
-            onPressed: _showCitationDialog,
-          ),
-        ],
+        actions: [IconButton(icon: const Icon(Icons.format_quote), tooltip: 'Citation', onPressed: _showCitationDialog)],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Progress Ring
             SizedBox(
               width: 180,
               height: 180,
@@ -1154,52 +858,24 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                   Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        '$percent%',
-                        style: TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
-                          color: cs.onSurface,
-                        ),
-                      ),
-                      Text(
-                        '$totalPages pages',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
+                      Text('$percent%', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: cs.onSurface)),
+                      Text('$totalPages pages', style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant)),
                     ],
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
-            Text(
-              author,
-              style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant),
-            ),
+            Text(author, style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant)),
             const SizedBox(height: 24),
-
-            // Page Controls
             Card(
               elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: cs.outline.withOpacity(0.15)),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: cs.outline.withOpacity(0.15))),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    Text(
-                      'Current Page',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
+                    Text('Current Page', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
                     const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1213,10 +889,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                           child: TextField(
                             textAlign: TextAlign.center,
                             keyboardType: TextInputType.number,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                             controller: TextEditingController(text: '$_currentPage'),
                             onSubmitted: (v) {
                               final newPage = int.tryParse(v) ?? _currentPage;
@@ -1225,9 +898,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                             decoration: InputDecoration(
                               filled: true,
                               fillColor: cs.surfaceContainerHighest,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                               contentPadding: const EdgeInsets.symmetric(vertical: 8),
                             ),
                           ),
@@ -1238,40 +909,18 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: _savePage,
-                        icon: const Icon(Icons.save),
-                        label: const Text('Update Page'),
-                      ),
-                    ),
+                    SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: _savePage, icon: const Icon(Icons.save), label: const Text('Update Page'))),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
-
-            // Log Session Button
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.tonalIcon(
-                onPressed: _logSession,
-                icon: const Icon(Icons.timer),
-                label: const Text('Log Reading Session'),
-              ),
-            ),
+            SizedBox(width: double.infinity, child: FilledButton.tonalIcon(onPressed: _logSession, icon: const Icon(Icons.timer), label: const Text('Log Reading Session'))),
             const SizedBox(height: 24),
-
-            // Stats Section
             _buildStatsSection(cs, totalMinutes, pagesPerMin, estMinutesLeft, pagesLeft),
             const SizedBox(height: 24),
-
-            // Consistency Graph
             _buildConsistencyGraph(cs),
             const SizedBox(height: 24),
-
-            // Reading Notes
             _buildNotesSection(cs),
           ],
         ),
@@ -1282,82 +931,35 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   Widget _pageButton(int delta, ColorScheme cs) {
     return IconButton(
       onPressed: () => _updatePage(_currentPage + delta),
-      icon: Text(
-        delta > 0 ? '+$delta' : '$delta',
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: cs.primary,
-        ),
-      ),
-      style: IconButton.styleFrom(
-        backgroundColor: cs.primaryContainer.withOpacity(0.5),
-      ),
+      icon: Text(delta > 0 ? '+$delta' : '$delta', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.primary)),
+      style: IconButton.styleFrom(backgroundColor: cs.primaryContainer.withOpacity(0.5)),
     );
   }
 
   Widget _buildStatsSection(ColorScheme cs, int totalMinutes, String pagesPerMin, int estMinutesLeft, int pagesLeft) {
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: cs.outline.withOpacity(0.15)),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: cs.outline.withOpacity(0.15))),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Reading Stats',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: cs.onSurface,
-              ),
-            ),
+            Text('Reading Stats', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(
-                  child: _statBox(
-                    '${totalMinutes ~/ 60}h ${totalMinutes % 60}m',
-                    'Total Time',
-                    Icons.timer,
-                    cs,
-                  ),
-                ),
+                Expanded(child: _statBox('${totalMinutes ~/ 60}h ${totalMinutes % 60}m', 'Total Time', Icons.timer, cs)),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: _statBox(
-                    pagesPerMin,
-                    'Pages/Min',
-                    Icons.speed,
-                    cs,
-                  ),
-                ),
+                Expanded(child: _statBox(pagesPerMin, 'Pages/Min', Icons.speed, cs)),
               ],
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(
-                  child: _statBox(
-                    '$pagesLeft',
-                    'Pages Left',
-                    Icons.menu_book,
-                    cs,
-                  ),
-                ),
+                Expanded(child: _statBox('$pagesLeft', 'Pages Left', Icons.menu_book, cs)),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: _statBox(
-                    estMinutesLeft > 0 ? '${estMinutesLeft ~/ 60}h ${estMinutesLeft % 60}m' : '—',
-                    'Est. Time Left',
-                    Icons.hourglass_empty,
-                    cs,
-                  ),
-                ),
+                Expanded(child: _statBox(estMinutesLeft > 0 ? '${estMinutesLeft ~/ 60}h ${estMinutesLeft % 60}m' : '—', 'Est. Time Left', Icons.hourglass_empty, cs)),
               ],
             ),
           ],
@@ -1369,112 +971,91 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   Widget _statBox(String value, String label, IconData icon, ColorScheme cs) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
       child: Column(
         children: [
           Icon(icon, size: 20, color: cs.primary),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: cs.onSurface,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: cs.onSurfaceVariant,
-            ),
-          ),
+          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+          Text(label, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
         ],
       ),
     );
   }
 
   Widget _buildConsistencyGraph(ColorScheme cs) {
-    // Generate mock data for last 14 days (in real app, query from DB)
-    final days = List.generate(14, (i) {
-      final date = DateTime.now().subtract(Duration(days: 13 - i));
-      return {
-        'day': '${date.month}/${date.day}',
-        'pages': math.Random().nextInt(30) + 5, // Mock data
-      };
-    });
-
-    final maxPages = days.map((d) => d['pages'] as int).reduce(math.max);
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: cs.outline.withOpacity(0.15)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Reading Consistency (Last 14 Days)',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: cs.onSurface,
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: DatabaseHelper.instance.getPagesPerDayHistory(widget.bookId, 14),
+      builder: (context, snapshot) {
+        final days = snapshot.data ?? [];
+        if (days.isEmpty || days.every((d) => (d['pages'] as int) == 0)) {
+          return Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: cs.outline.withOpacity(0.15))),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Reading Consistency (Last 14 Days)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+                  const SizedBox(height: 24),
+                  Center(child: Text('No session data yet. Log a reading session to see your graph!', style: TextStyle(color: cs.outline, fontSize: 13))),
+                  const SizedBox(height: 24),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 120,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: days.map((day) {
-                  final pages = day['pages'] as int;
-                  final height = maxPages > 0 ? (pages / maxPages) * 100 : 0.0;
-                  return Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Container(
-                            height: height,
-                            decoration: BoxDecoration(
-                              color: cs.primary.withOpacity(0.7),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
+          );
+        }
+
+        final maxPages = days.map((d) => d['pages'] as int).fold(0, math.max);
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: cs.outline.withOpacity(0.15))),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Reading Consistency (Last 14 Days)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 120,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: days.map((day) {
+                      final pages = day['pages'] as int;
+                      final height = maxPages > 0 ? (pages / maxPages) * 100 : 0.0;
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Container(
+                                height: height,
+                                decoration: BoxDecoration(color: cs.primary.withOpacity(0.7), borderRadius: BorderRadius.circular(4)),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(day['date'] as String, style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant), textAlign: TextAlign.center),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            day['day'] as String,
-                            style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildNotesSection(ColorScheme cs) {
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: cs.outline.withOpacity(0.15)),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: cs.outline.withOpacity(0.15))),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -1483,32 +1064,13 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Reading Notes',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: cs.onSurface,
-                  ),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: _addNote,
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add', style: TextStyle(fontSize: 12)),
-                ),
+                Text('Reading Notes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+                FilledButton.tonalIcon(onPressed: _addNote, icon: const Icon(Icons.add, size: 16), label: const Text('Add', style: TextStyle(fontSize: 12))),
               ],
             ),
             const SizedBox(height: 12),
             if (_notes.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    'No notes yet. Add one!',
-                    style: TextStyle(color: cs.outline),
-                  ),
-                ),
-              )
+              Center(child: Padding(padding: const EdgeInsets.all(16), child: Text('No notes yet. Add one!', style: TextStyle(color: cs.outline))))
             else
               ListView.builder(
                 shrinkWrap: true,
@@ -1519,22 +1081,13 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
                   final title = (note['title'] as String?) ?? 'Note';
                   final content = (note['content'] as String?) ?? '';
                   final createdAt = note['createdAtMillis'] as int?;
-                  final dateStr = createdAt != null
-                      ? DateTime.fromMillisecondsSinceEpoch(createdAt).toString().substring(0, 16)
-                      : '';
-
+                  final dateStr = createdAt != null ? DateTime.fromMillisecondsSinceEpoch(createdAt).toString().substring(0, 16) : '';
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text(
-                      '$content\n$dateStr',
-                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                    ),
+                    subtitle: Text('$content\n$dateStr', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                     isThreeLine: true,
-                    trailing: IconButton(
-                      icon: Icon(Icons.delete_outline, size: 18, color: cs.error),
-                      onPressed: () => _deleteNote(note['id'] as int),
-                    ),
+                    trailing: IconButton(icon: Icon(Icons.delete_outline, size: 18, color: cs.error), onPressed: () => _deleteNote(note['id'] as int)),
                   );
                 },
               ),
@@ -1545,13 +1098,8 @@ class _BookDetailScreenState extends State<BookDetailScreen> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// LOG SESSION DIALOG
-// ═══════════════════════════════════════════════════════════════
-
 class _LogSessionDialog extends StatefulWidget {
   const _LogSessionDialog();
-
   @override
   State<_LogSessionDialog> createState() => _LogSessionDialogState();
 }
@@ -1559,7 +1107,6 @@ class _LogSessionDialog extends StatefulWidget {
 class _LogSessionDialogState extends State<_LogSessionDialog> {
   final _minutesController = TextEditingController(text: '20');
   final _pagesController = TextEditingController();
-
   @override
   void dispose() {
     _minutesController.dispose();
@@ -1569,8 +1116,6 @@ class _LogSessionDialogState extends State<_LogSessionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: const Text('Log Reading Session'),
@@ -1580,19 +1125,13 @@ class _LogSessionDialogState extends State<_LogSessionDialog> {
           TextField(
             controller: _minutesController,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Minutes Read *',
-              prefixIcon: Icon(Icons.timer),
-            ),
+            decoration: const InputDecoration(labelText: 'Minutes Read *', prefixIcon: Icon(Icons.timer)),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _pagesController,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Pages Read *',
-              prefixIcon: Icon(Icons.menu_book),
-            ),
+            decoration: const InputDecoration(labelText: 'Pages Read *', prefixIcon: Icon(Icons.menu_book)),
           ),
         ],
       ),
@@ -1603,9 +1142,7 @@ class _LogSessionDialogState extends State<_LogSessionDialog> {
             final minutes = int.tryParse(_minutesController.text.trim());
             final pages = int.tryParse(_pagesController.text.trim());
             if (minutes == null || minutes <= 0 || pages == null || pages <= 0) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Please enter valid numbers')),
-              );
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter valid numbers')));
               return;
             }
             Navigator.pop(context, {'minutes': minutes, 'pagesRead': pages});
@@ -1617,15 +1154,9 @@ class _LogSessionDialogState extends State<_LogSessionDialog> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ADD NOTE DIALOG
-// ═══════════════════════════════════════════════════════════════
-
 class _AddNoteDialog extends StatefulWidget {
   final int currentPage;
-
   const _AddNoteDialog({required this.currentPage});
-
   @override
   State<_AddNoteDialog> createState() => _AddNoteDialogState();
 }
@@ -1633,7 +1164,6 @@ class _AddNoteDialog extends StatefulWidget {
 class _AddNoteDialogState extends State<_AddNoteDialog> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
-
   @override
   void dispose() {
     _titleController.dispose();
@@ -1649,22 +1179,12 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(
-            controller: _titleController,
-            decoration: const InputDecoration(
-              labelText: 'Note Title',
-              prefixIcon: Icon(Icons.title),
-            ),
-          ),
+          TextField(controller: _titleController, decoration: const InputDecoration(labelText: 'Note Title', prefixIcon: Icon(Icons.title))),
           const SizedBox(height: 12),
           TextField(
             controller: _contentController,
             maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Note Content',
-              prefixIcon: Icon(Icons.notes),
-              alignLabelWithHint: true,
-            ),
+            decoration: const InputDecoration(labelText: 'Note Content', prefixIcon: Icon(Icons.notes), alignLabelWithHint: true),
           ),
         ],
       ),
@@ -1673,15 +1193,10 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
         FilledButton(
           onPressed: () {
             if (_titleController.text.trim().isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Title is required')),
-              );
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Title is required')));
               return;
             }
-            Navigator.pop(context, {
-              'title': _titleController.text.trim(),
-              'content': _contentController.text.trim(),
-            });
+            Navigator.pop(context, {'title': _titleController.text.trim(), 'content': _contentController.text.trim()});
           },
           child: const Text('Save'),
         ),
@@ -1690,19 +1205,10 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// CITATION DIALOG
-// ═══════════════════════════════════════════════════════════════
-
 class _CitationDialog extends StatefulWidget {
   final Map<String, dynamic> book;
   final int currentPage;
-
-  const _CitationDialog({
-    required this.book,
-    required this.currentPage,
-  });
-
+  const _CitationDialog({required this.book, required this.currentPage});
   @override
   State<_CitationDialog> createState() => _CitationDialogState();
 }
@@ -1717,7 +1223,6 @@ class _CitationDialogState extends State<_CitationDialog> {
     final dateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final startPage = math.max(1, widget.currentPage - 20);
     final pageRange = '$startPage-${widget.currentPage}';
-
     switch (_format) {
       case CitationFormat.apa:
         return '$author. (${now.year}). _${title}_. (pp. $pageRange). Retrieved $dateStr.';
@@ -1732,7 +1237,6 @@ class _CitationDialogState extends State<_CitationDialog> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final citation = _generateCitation();
-
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: const Text('Citation Generator'),
@@ -1747,9 +1251,7 @@ class _CitationDialogState extends State<_CitationDialog> {
             ],
             selected: {_format},
             onSelectionChanged: (sel) {
-              if (sel.isNotEmpty && mounted) {
-                setState(() => _format = sel.first);
-              }
+              if (sel.isNotEmpty && mounted) setState(() => _format = sel.first);
             },
           ),
           const SizedBox(height: 16),
@@ -1762,11 +1264,7 @@ class _CitationDialogState extends State<_CitationDialog> {
             ),
             child: SelectableText(
               citation,
-              style: TextStyle(
-                fontSize: 14,
-                color: cs.onSurface,
-                fontStyle: FontStyle.italic,
-              ),
+              style: TextStyle(fontSize: 14, color: cs.onSurface, fontStyle: FontStyle.italic),
             ),
           ),
         ],
@@ -1774,9 +1272,7 @@ class _CitationDialogState extends State<_CitationDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
         FilledButton.icon(
-          onPressed: () {
-            Share.share(citation, subject: 'Citation for ${widget.book['title']}');
-          },
+          onPressed: () => Share.share(citation, subject: 'Citation for ${widget.book['title']}'),
           icon: const Icon(Icons.share),
           label: const Text('Share'),
         ),
@@ -1786,3 +1282,152 @@ class _CitationDialogState extends State<_CitationDialog> {
 }
 
 enum CitationFormat { apa, mla, chicago }
+
+// ═══════════════════════════════════════════════════════════════
+// INLINED WIDGETS — No external imports needed
+// ═══════════════════════════════════════════════════════════════
+
+class SimpleColorPickerDialog extends StatefulWidget {
+  final Color initialColor;
+  const SimpleColorPickerDialog({super.key, required this.initialColor});
+
+  @override
+  State<SimpleColorPickerDialog> createState() => _SimpleColorPickerDialogState();
+}
+
+class _SimpleColorPickerDialogState extends State<SimpleColorPickerDialog> {
+  late Color _selected;
+
+  final List<Color> _colors = [
+    Colors.red, Colors.pink, Colors.purple, Colors.deepPurple,
+    Colors.indigo, Colors.blue, Colors.lightBlue, Colors.cyan,
+    Colors.teal, Colors.green, Colors.lightGreen, Colors.lime,
+    Colors.yellow, Colors.amber, Colors.orange, Colors.deepOrange,
+    Colors.brown, Colors.grey, Colors.blueGrey, Colors.black,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.initialColor;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Pick a Color'),
+      content: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: _colors.map((color) {
+          final isSelected = color.value == _selected.value;
+          return GestureDetector(
+            onTap: () => setState(() => _selected = color),
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: isSelected ? Border.all(color: Colors.white, width: 3) : null,
+                boxShadow: isSelected ? [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4)] : null,
+              ),
+              child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 18) : null,
+            ),
+          );
+        }).toList(),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(context, _selected), child: const Text('Select')),
+      ],
+    );
+  }
+}
+
+class SubjectPickerSheet extends StatelessWidget {
+  final String? selectedSubjectName;
+  const SubjectPickerSheet({super.key, this.selectedSubjectName});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final subjects = [
+      'Physics',
+      'Chemistry',
+      'Biology',
+      'Zoology',
+      'Botany',
+      'Math',
+      'Computer Science',
+      'Economics',
+      'History',
+      'Literature',
+      'General',
+    ];
+
+    return Container(
+      decoration: BoxDecoration(color: cs.surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(color: cs.outlineVariant, borderRadius: BorderRadius.circular(2)),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Text('Select Subject', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: subjects.length,
+                itemBuilder: (context, index) {
+                  final subject = subjects[index];
+                  final isSelected = subject == selectedSubjectName;
+                  return ListTile(
+                    leading: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: _subjectColor(subject),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    title: Text(subject),
+                    trailing: isSelected ? Icon(Icons.check, color: cs.primary) : null,
+                    onTap: () => Navigator.pop(context, subject),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _subjectColor(String subject) {
+    final colors = {
+      'Physics': const Color(0xFF1565C0),
+      'Chemistry': const Color(0xFF2E7D32),
+      'Biology': const Color(0xFFC62828),
+      'Zoology': const Color(0xFFAD1457),
+      'Botany': const Color(0xFF00695C),
+      'Math': const Color(0xFF2196F3),
+      'Computer Science': const Color(0xFF00BCD4),
+      'Economics': const Color(0xFF795548),
+      'History': const Color(0xFFFF9800),
+      'Literature': const Color(0xFFE91E63),
+      'General': const Color(0xFF607D8B),
+    };
+    return colors[subject] ?? const Color(0xFF607D8B);
+  }
+}
+
