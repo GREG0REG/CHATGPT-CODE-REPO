@@ -1,13 +1,13 @@
 // FILE: lib/services/widget_service.dart
 // COMPLETE REPLACEMENT — All 6 widgets unified, all syntax errors fixed
-// FIXES: Correct imports, removed illegal statics, fixed braces, fixed duplicate vars,
-//        renamed methods to match callers, fixed try-catch blocks
+// FIXES: Package-style import, no HomeWidget dependency (writes JSON directly),
+//        correct static methods in class, balanced braces, proper try-catch blocks
 
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import '../db/database_helper.dart';
+import 'package:event_countdown/db/database_helper.dart';
 
 class WidgetService {
   static const String _eventDataFile = 'widget_data.json';
