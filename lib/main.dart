@@ -188,11 +188,54 @@ class EventCountdownAppState extends State<EventCountdownApp>
     }
   }
 
+  // ── Safe parsing helpers (defensive against bad stored values) ──
+  static AppThemeOption _safeParseTheme(String? raw) {
+    if (raw == null || raw == 'default') return AppThemeOption.auroraBorealis;
+    try {
+      return AppThemeOption.values.byName(raw);
+    } catch (_) {
+      return AppThemeOption.auroraBorealis;
+    }
+  }
+
+  static ThemeMode _safeParseMode(String? raw) {
+    switch (raw) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      case 'system':
+      default:
+        return ThemeMode.system;
+    }
+  }
+
+  static Color? _safeParseColor(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is Color) return raw;
+    if (raw is int) {
+      if (raw == 0) return null;
+      return Color(raw);
+    }
+    return null;
+  }
+
   Future<void> _loadAllSettings() async {
-    final theme = await SettingsService.instance.getSelectedTheme();
-    final mode = await SettingsService.instance.getThemeMode();
-    final custom = await SettingsService.instance.getCustomColor();
+    final themeRaw = await SettingsService.instance.getSelectedTheme();
+    final modeRaw = await SettingsService.instance.getThemeMode();
+    final customRaw = await SettingsService.instance.getCustomColor();
     final hc = await SettingsService.instance.getHighContrast();
+
+    // Defensive: handle both old String storage and new typed storage
+    final AppThemeOption theme = themeRaw is AppThemeOption
+        ? themeRaw
+        : _safeParseTheme(themeRaw?.toString());
+    final ThemeMode mode = modeRaw is ThemeMode
+        ? modeRaw
+        : _safeParseMode(modeRaw?.toString());
+    final Color? custom = customRaw is Color?
+        ? customRaw
+        : _safeParseColor(customRaw);
 
     if (mounted) {
       setState(() {
