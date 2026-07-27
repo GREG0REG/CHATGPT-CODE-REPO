@@ -319,7 +319,7 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
         debugPrint('Notification error: $e');
       }
 
-      await WidgetService.refreshWidget();
+      await WidgetService.refreshAllWidget();
       HapticFeedback.lightImpact();
 
       if (mounted) {
