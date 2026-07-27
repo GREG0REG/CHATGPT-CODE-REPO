@@ -1161,7 +1161,7 @@ class _StatsScreenState extends State<StatsScreen>
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  '$min / $goal min',
+                  '$minutes / $goal min',
                   style: TextStyle(
                     fontSize: 10,
                     color: cs.outline,
