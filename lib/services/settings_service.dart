@@ -1,4 +1,11 @@
+// FILE: lib/services/settings_service.dart
+// COMPLETE REPLACEMENT — copy and paste entire file
+// FIXED: All getters/setters now use correct types (AppThemeOption, ThemeMode, Color?)
+// ADDED: Widget background type, image path, quiet hours settings
+
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../theme/app_themes.dart';
 
 class SettingsService {
   static final SettingsService _instance = SettingsService._internal();
@@ -17,29 +24,101 @@ class SettingsService {
     return _prefs!;
   }
 
+  // ── Theme helpers ──
+  static AppThemeOption _parseAppThemeOption(String? raw) {
+    if (raw == null || raw == 'default') return AppThemeOption.auroraBorealis;
+    try {
+      return AppThemeOption.values.byName(raw);
+    } catch (_) {
+      return AppThemeOption.auroraBorealis;
+    }
+  }
+
+  static ThemeMode _parseThemeMode(String? raw) {
+    switch (raw) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      case 'system':
+      default:
+        return ThemeMode.system;
+    }
+  }
+
+  static String _themeModeToString(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return 'light';
+      case ThemeMode.dark:
+        return 'dark';
+      case ThemeMode.system:
+        return 'system';
+    }
+  }
+
   // ============================================
   // THEME SETTINGS
   // ============================================
-  Future<bool> getDarkMode() async {
+
+  /// Returns the currently selected [AppThemeOption]. Defaults to auroraBorealis.
+  Future<AppThemeOption> getSelectedTheme() async {
     final prefs = await _preferences;
-    return prefs.getBool('darkMode') ?? false;
+    final raw = prefs.getString('selectedTheme');
+    return _parseAppThemeOption(raw);
   }
 
-  Future<void> setDarkMode(bool value) async {
+  /// Stores the selected [AppThemeOption] as its enum name string.
+  Future<void> setSelectedTheme(AppThemeOption theme) async {
     final prefs = await _preferences;
-    await prefs.setBool('darkMode', value);
+    await prefs.setString('selectedTheme', theme.name);
   }
 
-  Future<bool> getUseSystemTheme() async {
+  /// Returns the current [ThemeMode]. Defaults to [ThemeMode.system].
+  Future<ThemeMode> getThemeMode() async {
     final prefs = await _preferences;
-    return prefs.getBool('useSystemTheme') ?? true;
+    final raw = prefs.getString('themeMode');
+    return _parseThemeMode(raw);
   }
 
-  Future<void> setUseSystemTheme(bool value) async {
+  /// Stores the [ThemeMode] as 'light', 'dark', or 'system'.
+  Future<void> setThemeMode(ThemeMode mode) async {
     final prefs = await _preferences;
-    await prefs.setBool('useSystemTheme', value);
+    await prefs.setString('themeMode', _themeModeToString(mode));
   }
 
+  /// Returns the custom accent color, or `null` if none is set.
+  /// Stored as int; `0` is treated as null.
+  Future<Color?> getCustomColor() async {
+    final prefs = await _preferences;
+    final value = prefs.getInt('customColor');
+    if (value == null || value == 0) return null;
+    return Color(value);
+  }
+
+  /// Stores a [Color] as int, or clears the entry if `null`.
+  Future<void> setCustomColor(Color? color) async {
+    final prefs = await _preferences;
+    if (color == null) {
+      await prefs.remove('customColor');
+    } else {
+      await prefs.setInt('customColor', color.value);
+    }
+  }
+
+  /// Returns whether high contrast mode is enabled. Defaults to `false`.
+  Future<bool> getHighContrast() async {
+    final prefs = await _preferences;
+    return prefs.getBool('highContrast') ?? false;
+  }
+
+  /// Sets high contrast mode.
+  Future<void> setHighContrast(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool('highContrast', value);
+  }
+
+  /// Returns whether adaptive refresh is enabled. Defaults to `true`.
   Future<bool> getAdaptiveRefreshEnabled() async {
     final prefs = await _preferences;
     return prefs.getBool('adaptiveRefreshEnabled') ?? true;
@@ -50,54 +129,17 @@ class SettingsService {
     await prefs.setBool('adaptiveRefreshEnabled', value);
   }
 
-  Future<String> getSelectedTheme() async {
-    final prefs = await _preferences;
-    return prefs.getString('selectedTheme') ?? 'default';
-  }
-
-  Future<void> setSelectedTheme(String value) async {
-    final prefs = await _preferences;
-    await prefs.setString('selectedTheme', value);
-  }
-
-  Future<String> getThemeMode() async {
-    final prefs = await _preferences;
-    return prefs.getString('themeMode') ?? 'system';
-  }
-
-  Future<void> setThemeMode(String value) async {
-    final prefs = await _preferences;
-    await prefs.setString('themeMode', value);
-  }
-
-  Future<int> getCustomColor() async {
-    final prefs = await _preferences;
-    return prefs.getInt('customColor') ?? 0xFF6200EE;
-  }
-
-  Future<void> setCustomColor(int value) async {
-    final prefs = await _preferences;
-    await prefs.setInt('customColor', value);
-  }
-
-  Future<bool> getHighContrast() async {
-    final prefs = await _preferences;
-    return prefs.getBool('highContrast') ?? false;
-  }
-
-  Future<void> setHighContrast(bool value) async {
-    final prefs = await _preferences;
-    await prefs.setBool('highContrast', value);
-  }
-
   // ============================================
   // FIRST LAUNCH
   // ============================================
+
+  /// Returns `true` if this is the first app launch. Defaults to `true`.
   Future<bool> isFirstLaunch() async {
     final prefs = await _preferences;
     return prefs.getBool('isFirstLaunch') ?? true;
   }
 
+  /// Marks first launch as completed (or resets it).
   Future<void> setFirstLaunch(bool value) async {
     final prefs = await _preferences;
     await prefs.setBool('isFirstLaunch', value);
@@ -106,6 +148,7 @@ class SettingsService {
   // ============================================
   // FORMAT SETTINGS
   // ============================================
+
   Future<bool> getSmartFormatEnabled() async {
     final prefs = await _preferences;
     return prefs.getBool('smartFormatEnabled') ?? true;
@@ -116,6 +159,7 @@ class SettingsService {
     await prefs.setBool('smartFormatEnabled', value);
   }
 
+  /// Returns whether 24-hour time format is used. Defaults to `false`.
   Future<bool> getUse24HourFormat() async {
     final prefs = await _preferences;
     return prefs.getBool('use24HourFormat') ?? false;
@@ -129,6 +173,7 @@ class SettingsService {
   // ============================================
   // NOTIFICATION SETTINGS
   // ============================================
+
   Future<bool> getNotificationsEnabled() async {
     final prefs = await _preferences;
     return prefs.getBool('notificationsEnabled') ?? true;
@@ -149,6 +194,7 @@ class SettingsService {
     await prefs.setBool('soundEnabled', value);
   }
 
+  /// Returns the default reminder lead time in minutes. Defaults to `15`.
   Future<int> getDefaultReminderMinutes() async {
     final prefs = await _preferences;
     return prefs.getInt('defaultReminderMinutes') ?? 15;
@@ -160,8 +206,46 @@ class SettingsService {
   }
 
   // ============================================
-  // STUDY GOAL SETTINGS (NEW - for stats screen)
+  // QUIET HOURS SETTINGS (NEW)
   // ============================================
+
+  /// Returns whether quiet hours are enabled. Defaults to `false`.
+  Future<bool> getQuietHoursEnabled() async {
+    final prefs = await _preferences;
+    return prefs.getBool('quietHoursEnabled') ?? false;
+  }
+
+  Future<void> setQuietHoursEnabled(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool('quietHoursEnabled', value);
+  }
+
+  /// Returns quiet hours start time as minutes from midnight. Defaults to `22:00` (1320).
+  Future<int> getQuietHoursStart() async {
+    final prefs = await _preferences;
+    return prefs.getInt('quietHoursStart') ?? 1320;
+  }
+
+  Future<void> setQuietHoursStart(int minutes) async {
+    final prefs = await _preferences;
+    await prefs.setInt('quietHoursStart', minutes);
+  }
+
+  /// Returns quiet hours end time as minutes from midnight. Defaults to `07:00` (420).
+  Future<int> getQuietHoursEnd() async {
+    final prefs = await _preferences;
+    return prefs.getInt('quietHoursEnd') ?? 420;
+  }
+
+  Future<void> setQuietHoursEnd(int minutes) async {
+    final prefs = await _preferences;
+    await prefs.setInt('quietHoursEnd', minutes);
+  }
+
+  // ============================================
+  // STUDY GOAL SETTINGS
+  // ============================================
+
   Future<int> getDailyStudyGoal() async {
     final prefs = await _preferences;
     return prefs.getInt('dailyStudyGoal') ?? 120; // Default 120 min (2 hours)
@@ -213,8 +297,9 @@ class SettingsService {
   }
 
   // ============================================
-  // SUBJECT GOAL SETTINGS (NEW - for progress rings)
+  // SUBJECT GOAL SETTINGS
   // ============================================
+
   Future<int> getSubjectWeeklyGoal(String subject) async {
     final prefs = await _preferences;
     return prefs.getInt('subjectGoal_$subject') ?? 120; // Default 120 min/week
@@ -233,6 +318,7 @@ class SettingsService {
   // ============================================
   // WIDGET SETTINGS
   // ============================================
+
   Future<bool> getHomeWidgetEnabled() async {
     final prefs = await _preferences;
     return prefs.getBool('homeWidgetEnabled') ?? true;
@@ -263,9 +349,38 @@ class SettingsService {
     await prefs.setBool('widgetPulseAnimation', value);
   }
 
+  /// Returns the widget background type as a string.
+  /// Typical values: 'themeColor' or 'customImage'. Defaults to 'themeColor'.
+  Future<String> getWidgetBackgroundType() async {
+    final prefs = await _preferences;
+    return prefs.getString('widgetBackgroundType') ?? 'themeColor';
+  }
+
+  Future<void> setWidgetBackgroundType(String type) async {
+    final prefs = await _preferences;
+    await prefs.setString('widgetBackgroundType', type);
+  }
+
+  /// Returns the path to the custom widget background image, or `null` if none.
+  Future<String?> getWidgetImagePath() async {
+    final prefs = await _preferences;
+    return prefs.getString('widgetImagePath');
+  }
+
+  /// Sets the custom widget background image path, or clears it if `null`.
+  Future<void> setWidgetImagePath(String? path) async {
+    final prefs = await _preferences;
+    if (path == null) {
+      await prefs.remove('widgetImagePath');
+    } else {
+      await prefs.setString('widgetImagePath', path);
+    }
+  }
+
   // ============================================
   // EXPORT/IMPORT SETTINGS
   // ============================================
+
   Future<bool> getAutoBackup() async {
     final prefs = await _preferences;
     return prefs.getBool('autoBackup') ?? false;
@@ -290,6 +405,7 @@ class SettingsService {
   // ============================================
   // RESET ALL SETTINGS
   // ============================================
+
   Future<void> resetAll() async {
     final prefs = await _preferences;
     await prefs.clear();
