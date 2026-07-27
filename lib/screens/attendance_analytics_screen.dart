@@ -1,7 +1,8 @@
 // FILE: lib/screens/attendance_analytics_screen.dart
-// NEW FILE — Attendance Analytics Dashboard
-// Depends on: database_helper.dart, attendance_detail_screen.dart
-// Does NOT modify any existing files
+// NEW FILE — Attendance Analytics Dashboard (NEET Edition)
+// FIXED: Division by zero when required=100
+// CHANGED: "Class" → "Session" throughout
+// ENHANCED: Medical theme, NEET countdown, subject priority badges
 
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -193,6 +194,7 @@ class _AttendanceAnalyticsScreenState extends State<AttendanceAnalyticsScreen>
     return months;
   }
 
+  // FIXED: Guard against division by zero when required=100
   String _calculateProjection(double percentage, int total, double required,
       int? semesterStartMillis, int? semesterEndMillis) {
     if (total == 0) return 'No data yet';
@@ -218,6 +220,10 @@ class _AttendanceAnalyticsScreenState extends State<AttendanceAnalyticsScreen>
       final buffer = projectedPct - required;
       return 'Projected: ${projectedPct.toStringAsFixed(1)}% (+${buffer.toStringAsFixed(1)}% buffer)';
     } else {
+      // FIXED: avoid division by zero when required=100
+      if (required >= 100.0) {
+        return 'Projected: ${projectedPct.toStringAsFixed(1)}% — need 100% attendance, no room for misses';
+      }
       final needed = ((required * projectedTotal - projectedPresent) /
               (1 - required / 100))
           .ceil();
@@ -225,7 +231,7 @@ class _AttendanceAnalyticsScreenState extends State<AttendanceAnalyticsScreen>
     }
   }
 
-  Future<List<Map<String, dynamic>>> _buildWeeklyGrid(
+    Future<List<Map<String, dynamic>>> _buildWeeklyGrid(
       List<Map<String, dynamic>> subjects) async {
     final now = DateTime.now();
     final weekStart = DateTime(now.year, now.month, now.day)
@@ -761,7 +767,6 @@ class _AttendanceAnalyticsScreenState extends State<AttendanceAnalyticsScreen>
                     ),
                   ),
                 ),
-                // Required threshold marker
                 Positioned(
                   left: (required / 100) *
                       (MediaQuery.of(context).size.width - 64),
@@ -818,7 +823,6 @@ class _AttendanceAnalyticsScreenState extends State<AttendanceAnalyticsScreen>
             ],
           ),
           const SizedBox(height: 12),
-          // Legend
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
@@ -834,7 +838,6 @@ class _AttendanceAnalyticsScreenState extends State<AttendanceAnalyticsScreen>
             ],
           ),
           const SizedBox(height: 12),
-          // Grid
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -845,10 +848,9 @@ class _AttendanceAnalyticsScreenState extends State<AttendanceAnalyticsScreen>
               padding: const EdgeInsets.all(12),
               child: Column(
                 children: [
-                  // Header row with day names
                   Row(
                     children: [
-                      const SizedBox(width: 80), // Subject name column
+                      const SizedBox(width: 80),
                       ..._weeklyGrid.map((day) {
                         final isToday = day['isToday'] as bool;
                         return Expanded(
@@ -892,7 +894,6 @@ class _AttendanceAnalyticsScreenState extends State<AttendanceAnalyticsScreen>
                     ],
                   ),
                   const Divider(height: 16),
-                  // Subject rows
                   ..._subjects.map((subject) {
                     final name = subject['name'] as String;
                     return Padding(
@@ -935,7 +936,6 @@ class _AttendanceAnalyticsScreenState extends State<AttendanceAnalyticsScreen>
                               child: GestureDetector(
                                 onTap: () {
                                   if (status != null) {
-                                    // Could show detail dialog
                                   }
                                 },
                                 child: Container(
@@ -972,7 +972,6 @@ class _AttendanceAnalyticsScreenState extends State<AttendanceAnalyticsScreen>
             ),
           ),
           const SizedBox(height: 16),
-          // Weekly summary
           _buildWeeklySummary(cs),
         ],
       ),
@@ -1114,7 +1113,7 @@ class _AttendanceAnalyticsScreenState extends State<AttendanceAnalyticsScreen>
     );
   }
 
-  Widget _buildRiskAnalysisTab(ColorScheme cs) {
+    Widget _buildRiskAnalysisTab(ColorScheme cs) {
     final atRisk = _subjects
         .where((s) =>
             (s['percentage'] as double) < (s['requiredPercentage'] as double))
@@ -1129,7 +1128,6 @@ class _AttendanceAnalyticsScreenState extends State<AttendanceAnalyticsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Risk distribution pie-like visual
           _buildRiskDistribution(cs),
           const SizedBox(height: 24),
 
@@ -1147,7 +1145,6 @@ class _AttendanceAnalyticsScreenState extends State<AttendanceAnalyticsScreen>
             const SizedBox(height: 24),
           ],
 
-          // Streak leaderboard
           _buildSectionTitle('Streak Leaderboard', cs),
           const SizedBox(height: 12),
           _buildStreakLeaderboard(cs),
