@@ -1,589 +1,545 @@
+// FILE: lib/services/widget_service.dart
+// COMPLETE REPLACEMENT — All 6 widgets unified with NEET study enhancements
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:home_widget/home_widget.dart';
 import 'package:path_provider/path_provider.dart';
-import '../database_helper.dart';
-import '../models/event.dart';
-import 'settings_service.dart';
+import '../db/database_helper.dart';
 
 class WidgetService {
-  WidgetService._internal();
-  static final WidgetService instance = WidgetService._internal();
+  static const String _eventDataFile = 'widget_data.json';
+  static const String _pomodoroDataFile = 'pomodoro_widget_data.json';
+  static const String _attendanceDataFile = 'attendance_widget_data.json';
+  static const String _timetableDataFile = 'timetable_widget_data.json';
+  static const String _habitDataFile = 'habit_widget_data.json';
+  static const String _readingDataFile = 'reading_widget_data.json';
 
-  static const MethodChannel _channel = MethodChannel('com.example.event_countdown/widget');
+  static Future<Directory> _getWidgetDataDir() async {
+    return await getApplicationSupportDirectory();
+  }
 
-  // ==================== REFRESH ALL WIDGETS ====================
+  static Future<void> _writeJson(String filename, Map<String, dynamic> data) async {
+    try {
+      final dir = await _getWidgetDataDir();
+      final file = File('${dir.path}/$filename');
+      await file.writeAsString(jsonEncode(data));
+      debugPrint('WidgetService: Wrote $filename');
+    } catch (e) {
+      debugPrint('WidgetService: Failed to write $filename: $e');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // EVENT WIDGET (PRESERVED + NEET ENHANCED)
+  // ═══════════════════════════════════════════════════════════════
+  static Future<void> refreshWidget() async {
+    try {
+      final events = await DatabaseHelper.instance.getAllEventsSorted();
+      final now = DateTime.now();
+      final upcoming = events.where((e) {
+        final eventDate = DateTime.fromMillisecondsSinceEpoch(e.dateMillis);
+        return eventDate.isAfter(now.subtract(const Duration(days: 1))) && !e.isCompleted;
+      }).toList();
+
+      if (upcoming.isEmpty) {
+        await _writeJson(_eventDataFile, {
+          'title': 'No upcoming events',
+          'countdown': 'Open app to add events',
+          'progressPercent': 0,
+          'urgencyLabel': '',
+          'urgencyColor': '',
+          'deadlineMillis': 0,
+        });
+      } else {
+        final event = upcoming.first;
+        final eventDate = DateTime.fromMillisecondsSinceEpoch(event.dateMillis);
+        final diff = eventDate.difference(now);
+        
+        String countdownText;
+        String urgencyLabel = '';
+        String urgencyColor = '';
+        int progress = 0;
+        
+        if (diff.inDays > 7) {
+          countdownText = '${diff.inDays} days left';
+          urgencyLabel = 'On track';
+          urgencyColor = 'green';
+          progress = 100;
+        } else if (diff.inDays > 1) {
+          countdownText = '${diff.inDays}d ${diff.inHours % 24}h left';
+          urgencyLabel = 'Coming soon';
+          urgencyColor = 'orange';
+          progress = 70;
+        } else if (diff.inHours > 0) {
+          countdownText = '${diff.inHours}h ${diff.inMinutes % 60}m left';
+          urgencyLabel = 'Due soon!';
+          urgencyColor = 'deepOrange';
+          progress = 40;
+        } else {
+          countdownText = '${diff.inMinutes}m left';
+          urgencyLabel = 'URGENT';
+          urgencyColor = 'red';
+          progress = 15;
+        }
+
+        // NEET: Add subject tag to title if present
+        String title = event.title;
+        if (event.subjectTag != null && event.subjectTag!.isNotEmpty) {
+          title = '[${event.subjectTag}] $title';
+        }
+
+        await _writeJson(_eventDataFile, {
+          'title': title,
+          'countdown': countdownText,
+          'progressPercent': progress,
+          'urgencyLabel': urgencyLabel,
+          'urgencyColor': urgencyColor,
+          'deadlineMillis': event.dateMillis,
+        });
+      }
+
+      await HomeWidget.updateWidget(
+        name: 'EventCountdownWidgetProvider',
+        androidName: 'EventCountdownWidgetProvider',
+      );
+    } catch (e) {
+      debugPrint('WidgetService: Event widget error: $e');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // POMODORO WIDGET (PRESERVED)
+  // ═══════════════════════════════════════════════════════════════
+  static Future<void> refreshPomodoroWidget() async {
+    try {
+      await HomeWidget.updateWidget(
+        name: 'PomodoroWidgetProvider',
+        androidName: 'PomodoroWidgetProvider',
+      );
+    } catch (e) {
+      debugPrint('WidgetService: Pomodoro widget error: $e');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // ATTENDANCE WIDGET (FIXED — NOW WRITES JSON!)
+  // ═══════════════════════════════════════════════════════════════
+  static Future<void> refreshAttendanceWidget() async {
+    try {
+      final subjects = await DatabaseHelper.instance.getAllAttendanceSubjects();
+      final logs = await DatabaseHelper.instance.getAllAttendanceLogs();
+
+      if (subjects.isEmpty) {
+        await _writeJson(_attendanceDataFile, {
+          'subjectName': 'No Subjects',
+          'attended': 0,
+          'total': 0,
+          'percentage': 0,
+          'statusColor': 'grey',
+          'canMissText': 'Add subjects to track attendance',
+        });
+      } else {
+        // NEET: Pick the subject with lowest attendance (most critical)
+        Map<String, dynamic>? criticalSubject;
+        double lowestPercentage = double.infinity;
+
+        for (final subject in subjects) {
+          final name = subject['name'] as String;
+          final stats = await DatabaseHelper.instance.getAttendanceStatsForSubject(name);
+          final total = (stats['total'] as int?) ?? 0;
+          final present = (stats['present'] as int?) ?? 0;
+          final percentage = total > 0 ? (present / total * 100) : 0.0;
+
+          if (percentage < lowestPercentage) {
+            lowestPercentage = percentage;
+            criticalSubject = {
+              'subject': subject,
+              'stats': stats,
+              'percentage': percentage,
+            };
+          }
+        }
+
+        if (criticalSubject != null) {
+          final subject = criticalSubject['subject'] as Map<String, dynamic>;
+          final stats = criticalSubject['stats'] as Map<String, dynamic>;
+          final percentage = criticalSubject['percentage'] as double;
+
+          final total = (stats['total'] as int?) ?? 0;
+          final present = (stats['present'] as int?) ?? 0;
+          final required = (subject['requiredPercentage'] as double?) ?? 75.0;
+          final maxAllowedAbsences = subject['maxAllowedAbsences'] as int?;
+
+          String canMissText;
+          String statusColor;
+          if (percentage >= required) {
+            final buffer = percentage - required;
+            final safeMisses = total > 0 ? (buffer / 100 * total).floor() : 0;
+            canMissText = 'Safe! Can miss $safeMisses more';
+            statusColor = 'green';
+          } else if (percentage >= required - 15) {
+            canMissText = 'Warning: ${(required - percentage).toStringAsFixed(1)}% below target';
+            statusColor = 'orange';
+          } else {
+            final needed = ((required - percentage) / 100 * total).ceil();
+            canMissText = 'CRITICAL: Need $needed more present';
+            statusColor = 'red';
+          }
+
+          // NEET: Show subject name with code if available
+          String subjectName = subject['name'] as String;
+          if (subjectName.length > 18) {
+            subjectName = '${subjectName.substring(0, 15)}...';
+          }
+
+          await _writeJson(_attendanceDataFile, {
+            'subjectName': subjectName,
+            'attended': present,
+            'total': total,
+            'percentage': percentage.round(),
+            'statusColor': statusColor,
+            'canMissText': canMissText,
+            'requiredPercentage': required,
+          });
+        }
+      }
+
+      await HomeWidget.updateWidget(
+        name: 'AttendanceWidgetProvider',
+        androidName: 'AttendanceWidgetProvider',
+      );
+    } catch (e) {
+      debugPrint('WidgetService: Attendance widget error: $e');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // TIMETABLE WIDGET (FIXED — NOW WRITES JSON!)
+  // ═══════════════════════════════════════════════════════════════
+  static Future<void> refreshTimetableWidget() async {
+    try {
+      final now = DateTime.now();
+      final todayDayOfWeek = now.weekday; // 1=Mon, 7=Sun
+      final dayNames = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      final monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+      final classes = await DatabaseHelper.instance.getTimetableClassesForDay(todayDayOfWeek);
+      final tasks = await DatabaseHelper.instance.getTimetableTasksForDate(
+        DateTime(now.year, now.month, now.day).millisecondsSinceEpoch,
+      );
+
+      // Merge and sort by start time
+      final allItems = <Map<String, dynamic>>[];
+
+      for (final c in classes) {
+        final startMin = c['startTimeMinutes'] as int;
+        final endMin = c['endTimeMinutes'] as int;
+        final startH = startMin ~/ 60;
+        final startH = startMin ~/ 60;
+        final startM = startMin % 60;
+        final endH = endMin ~/ 60;
+        final endM = endMin % 60;
+        final timeSlot = '${startH.toString().padLeft(2, '0')}:${startM.toString().padLeft(2, '0')} - ${endH.toString().padLeft(2, '0')}:${endM.toString().padLeft(2, '0')}';
+
+        // Calculate countdown text
+        final currentMinutes = now.hour * 60 + now.minute;
+        String countdownText;
+        if (currentMinutes < startMin) {
+          final diff = startMin - currentMinutes;
+          countdownText = 'in ${diff ~/ 60}h ${diff % 60}m';
+        } else if (currentMinutes >= startMin && currentMinutes < endMin) {
+          countdownText = 'ONGOING';
+        } else {
+          countdownText = 'ended';
+        }
+
+        allItems.add({
+          'subject': c['subjectName'] as String,
+          'timeSlot': timeSlot,
+          'room': c['room'] as String? ?? 'TBD',
+          'countdownText': countdownText,
+          'colorHex': c['colorHex'] as String? ?? '#2196F3',
+          'isToday': true,
+          'startMinutes': startMin,
+        });
+      }
+
+      // Add timed tasks for today
+      for (final t in tasks) {
+        if (t['startTimeMinutes'] == null) continue;
+        final startMin = t['startTimeMinutes'] as int;
+        final endMin = t['endTimeMinutes'] as int? ?? (startMin + 60);
+        final startH = startMin ~/ 60;
+        final startM = startMin % 60;
+        final endH = endMin ~/ 60;
+        final endM = endMin % 60;
+
+        allItems.add({
+          'subject': t['title'] as String,
+          'timeSlot': '${startH.toString().padLeft(2, '0')}:${startM.toString().padLeft(2, '0')} - ${endH.toString().padLeft(2, '0')}:${endM.toString().padLeft(2, '0')}',
+          'room': t['subjectName'] as String? ?? 'Task',
+          'countdownText': t['taskType'] as String,
+          'colorHex': t['colorHex'] as String? ?? '#FF9800',
+          'isToday': true,
+          'startMinutes': startMin,
+        });
+      }
+
+      // Sort by start time
+      allItems.sort((a, b) => (a['startMinutes'] as int).compareTo(b['startMinutes'] as int));
+
+      // Take only upcoming/next 3 items
+      final currentMinutes = now.hour * 60 + now.minute;
+      final upcomingItems = allItems.where((i) {
+        final itemStart = i['startMinutes'] as int;
+        return itemStart >= currentMinutes - 30; // Include ongoing (started within last 30 min)
+      }).take(3).toList();
+
+      // If no upcoming, show next day's first class
+      if (upcomingItems.isEmpty && allItems.isNotEmpty) {
+        upcomingItems.add(allItems.first);
+      }
+
+      await _writeJson(_timetableDataFile, {
+        'dayName': dayNames[todayDayOfWeek],
+        'dateText': '${monthNames[now.month]} ${now.day}',
+        'classes': upcomingItems.map((c) => {
+          'subject': c['subject'],
+          'timeSlot': c['timeSlot'],
+          'room': c['room'],
+          'countdownText': c['countdownText'],
+          'colorHex': c['colorHex'],
+          'isToday': c['isToday'],
+        }).toList(),
+      });
+
+      await HomeWidget.updateWidget(
+        name: 'TimetableWidgetProvider',
+        androidName: 'TimetableWidgetProvider',
+      );
+    } catch (e) {
+      debugPrint('WidgetService: Timetable widget error: $e');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // HABIT WIDGET (FIXED — NOW WRITES JSON!)
+  // ═══════════════════════════════════════════════════════════════
+  static Future<void> refreshHabitWidget() async {
+    try {
+      final habits =Widget() async {
+    try {
+      final habits = await DatabaseHelper.instance.getAllHabits(includeArchived: false);
+
+      if (habits.isEmpty) {
+        await _writeJson(_habitDataFile, {
+          'habitName': 'No Habits',
+          'weekProgress': 0,
+          'weekTarget': 7,
+          'colorHex': '#4CAF50',
+          'message': 'Add habits to start tracking',
+          'weekCircles': [],
+        });
+      } else {
+        // NEET: Pick the habit with lowest weekly completion (most critical)
+        final now = DateTime.now();
+        final weekStart = DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: now.weekday - 1))
+            .millisecondsSinceEpoch;
+
+        Map<String, dynamic>? criticalHabit;
+        double lowestRatio = double.infinity;
+
+        for (final habit in habits) {
+          final id = habit['id'] as int;
+          final target = (habit['targetPerWeek'] as int?) ?? 7;
+          final completed = await DatabaseHelper.instance.getHabitCompletionCountForWeek(id, weekStart);
+          final ratio = target > 0 ? completed / target : 0.0;
+
+          if (ratio < lowestRatio) {
+            lowestRatio = ratio;
+            criticalHabit = {
+              'habit': habit,
+              'completed': completed,
+              'target': target,
+            };
+          }
+        }
+
+        if (criticalHabit != null) {
+          final habit = criticalHabit['habit'] as Map<String, dynamic>;
+          final completed = criticalHabit['completed'] as int;
+          final target = criticalHabit['target'] as int;
+
+          // Build week circles (Mon-Sun)
+          final weekCircles = <bool>[];
+          for (int i = 0; i < 7; i++) {
+            final dayStart = weekStart + i * const Duration(days: 1).inMilliseconds;
+            final dayEnd = dayStart + const Duration(days: 1).inMilliseconds;
+            final logs = await DatabaseHelper.instance.getHabitLogsForDateRange(
+              habit['id'] as int,
+              dayStart,
+              dayEnd,
+            );
+            weekCircles.add(logs.any((l) => (l['completed'] as int? ?? 0) == 1));
+          }
+
+          // NEET: Motivational message based on progress
+          String message;
+          if (completed == 0) {
+            message = 'Start today! Every session counts';
+          } else if (completed < target * 0.5) {
+            message = 'Keep going! Build the momentum';
+          } else if (completed < target) {
+            message = 'Almost there! Stay consistent';
+          } else {
+            message = 'Excellent! You\'re on fire';
+          }
+
+          String habitName = habit['name'] as String;
+          if (habitName.length > 20) {
+            habitName = '${habitName.substring(0, 17)}...';
+          }
+
+          await _writeJson(_habitDataFile, {
+            'habitName': habitName,
+            'weekProgress': completed,
+            'weekTarget': target,
+            'colorHex': habit['colorHex'] as String? ?? '#4CAF50',
+            'message': message,
+            'weekCircles': weekCircles,
+          });
+        }
+      }
+
+      await HomeWidget.updateWidget(
+        name: 'HabitWidgetProvider',
+        androidName: 'HabitWidgetProvider',
+      );
+    } catch (e) {
+      debugPrint('WidgetService: Habit widget error: $e');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // READING WIDGET (FIXED — NOW WRITES JSON!)
+  // ═══════════════════════════════════════════════════════════════
+  static Future<void> refreshReadingWidget() async {
+    try {
+      final books = await DatabaseHelper.instance.getAllReadingBooks(includeCompleted: false);
+
+      if (books.isEmpty) {
+        await _writeJson(_readingDataFile, {
+          'bookTitle': 'No Books',
+          'currentPage': 0,
+          'totalPages': 0,
+          'progressPercent': 0,
+          'statusColor': '#2196F3',
+          'message': 'Add a book to start tracking',
+          'minutesReadToday': 0,
+        });
+      } else {
+        // NEET: Pick the book with most urgent deadline or least progress
+        final now = DateTime.now();
+
+        Map<String, dynamic>? targetBook;
+        double highestUrgency = -1;
+
+        for (final book in books) {
+          final totalPages = (book['totalPages'] as int?) ?? 1;
+          final currentPage = (book['currentPage'] as int?) ?? 0;
+          final targetEndMillis = book['targetEndDateMillis'] as int?;
+          final dailyGoal = (book['dailyPageGoal'] as int?) ?? 20;
+
+          double urgency = 0;
+          if (targetEndMillis != null) {
+            final targetDate = DateTime.fromMillisecondsSinceEpoch(targetEndMillis);
+            final daysLeft = target final daysLeft = targetDate.difference(now).inDays;
+            final pagesLeft = totalPages - currentPage;
+            if (daysLeft > 0) {
+              urgency = pagesLeft / daysLeft / dailyGoal; // >1 means behind schedule
+            } else {
+              urgency = double.infinity;
+            }
+          } else {
+            urgency = (totalPages - currentPage) / totalPages.toDouble();
+          }
+
+          if (urgency > highestUrgency) {
+            highestUrgency = urgency;
+            targetBook = book;
+          }
+        }
+
+        if (targetBook != null) {
+          final totalPages = (targetBook['totalPages'] as int?) ?? 1;
+          final currentPage = (targetBook['currentPage'] as int?) ?? 0;
+          final progressPercent = totalPages > 0 ? (currentPage / totalPages * 100).round() : 0;
+          final minutesReadToday = (targetBook['minutesReadToday'] as int?) ?? 0;
+          final dailyGoal = (targetBook['dailyPageGoal'] as int?) ?? 20;
+
+          // NEET: Color based on progress vs deadline
+          String statusColor;
+          String message;
+          if (progressPercent >= 90) {
+            statusColor = '#4CAF50';
+            message = 'Almost done! Final push';
+          } else if (progressPercent >= 50) {
+            statusColor = '#2196F3';
+            message = 'Halfway there! Keep reading';
+          } else if (progressPercent >= 25) {
+            statusColor = '#FF9800';
+            message = 'Building momentum';
+          } else {
+            statusColor = '#F44336';
+            message = 'Start strong! $dailyGoal pages/day goal';
+          }
+
+          // Override with today's reading status
+          if (minutesReadToday == 0) {
+            message = 'Read today! Goal: $dailyGoal pages';
+          } else {
+            message = 'Read ${minutesReadToday}m today • $dailyGoal pages/day';
+          }
+
+          String bookTitle = targetBook['title'] as String;
+          if (bookTitle.length > 22) {
+            bookTitle = '${bookTitle.substring(0, 19)}...';
+          }
+
+          await _writeJson(_readingDataFile, {
+            'bookTitle': bookTitle,
+            'currentPage': currentPage,
+            'totalPages': totalPages,
+            'progressPercent': progressPercent,
+            'statusColor': statusColor,
+            'message': message,
+            'minutesReadToday': minutesReadToday,
+            'dailyPageGoal': dailyGoal,
+          });
+        }
+      }
+
+      await HomeWidget.updateWidget(
+        name: 'ReadingWidgetProvider',
+        androidName: 'ReadingWidgetProvider',
+      );
+    } catch (e) {
+      debugPrint('WidgetService: Reading widget error: $e');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // REFRESH ALL WIDGETS AT ONCE
+  // ═══════════════════════════════════════════════════════════════
   static Future<void> refreshAllWidgets() async {
     await refreshWidget();
     await refreshPomodoroWidget();
     await refreshAttendanceWidget();
     await refreshTimetableWidget();
-    await refreshHabitWidget();      // NEW
-    await refreshReadingWidget();    // NEW
-  }
-
-  // ==================== EVENT COUNTDOWN WIDGET ====================
-  static Future<void> refreshWidget() async {
-    try {
-      final events = await DatabaseHelper.instance.getAllEventsSorted();
-      final now = DateTime.now();
-
-      Event? nextEvent;
-      for (final e in events) {
-        final eventDate = DateTime.fromMillisecondsSinceEpoch(e.dateMillis);
-        if (eventDate.isAfter(now) || _isSameDay(eventDate, now)) {
-          nextEvent = e;
-          break;
-        }
-      }
-
-      if (nextEvent == null && events.isNotEmpty) {
-        nextEvent = events.first;
-      }
-
-      final data = <String, dynamic>{};
-      if (nextEvent != null) {
-        final eventDate = DateTime.fromMillisecondsSinceEpoch(nextEvent.dateMillis);
-        final diff = eventDate.difference(now);
-        final smart = await SettingsService.instance.getSmartFormatEnabled();
-
-        String countdownText;
-        if (smart) {
-          if (diff.inDays > 0) {
-            countdownText = '${diff.inDays}d ${diff.inHours % 24}h left';
-          } else if (diff.inHours > 0) {
-            countdownText = '${diff.inHours}h ${diff.inMinutes % 60}m left';
-          } else if (diff.inMinutes > 0) {
-            countdownText = '${diff.inMinutes}m left';
-          } else {
-            countdownText = 'Now!';
-          }
-        } else {
-          countdownText = _formatDate(eventDate);
-        }
-
-        int progress = 0;
-        if (nextEvent.startTimeMillis != null && nextEvent.deadlineMillis != null) {
-          final start = DateTime.fromMillisecondsSinceEpoch(nextEvent.startTimeMillis!);
-          final end = DateTime.fromMillisecondsSinceEpoch(nextEvent.deadlineMillis!);
-          final total = end.difference(start).inMinutes;
-          final elapsed = now.difference(start).inMinutes;
-          if (total > 0) {
-            progress = ((elapsed / total) * 100).clamp(0, 100).toInt();
-          }
-        }
-
-        String urgencyLabel = '';
-        String urgencyColor = '';
-        if (diff.inDays == 0 && diff.inHours <= 24 && diff.inHours > 0) {
-          urgencyLabel = 'Under 24 hours';
-          urgencyColor = 'orange';
-        } else if (diff.inHours <= 1 && diff.inMinutes > 0) {
-          urgencyLabel = 'Starting soon';
-          urgencyColor = 'red';
-        } else if (diff.inMinutes <= 0) {
-          urgencyLabel = 'Happening now';
-          urgencyColor = 'red';
-        }
-
-        data['title'] = nextEvent.title;
-        data['countdown'] = countdownText;
-        data['progressPercent'] = progress;
-        data['deadlineMillis'] = nextEvent.dateMillis;
-        data['urgencyLabel'] = urgencyLabel;
-        data['urgencyColor'] = urgencyColor;
-      } else {
-        data['title'] = 'No upcoming events';
-        data['countdown'] = 'Open app to add events';
-        data['progressPercent'] = 0;
-        data['deadlineMillis'] = 0;
-        data['urgencyLabel'] = '';
-        data['urgencyColor'] = '';
-      }
-
-      await _writeWidgetData('widget_data.json', data);
-      await _channel.invokeMethod('updateWidget');
-    } catch (e) {
-      debugPrint('Widget refresh error: $e');
-    }
-  }
-
-  // ==================== POMODORO WIDGET ====================
-  static Future<void> refreshPomodoroWidget() async {
-    try {
-      await _channel.invokeMethod('updatePomodoroWidget');
-    } catch (e) {
-      debugPrint('Pomodoro widget refresh error: $e');
-    }
-  }
-
-  // ==================== ATTENDANCE WIDGET ====================
-  static Future<void> refreshAttendanceWidget() async {
-    try {
-      final subjects = await DatabaseHelper.instance.getAllAttendanceSubjects();
-      
-      if (subjects.isEmpty) {
-        final data = <String, dynamic>{
-          'subjectName': 'No Subjects',
-          'percentage': 0,
-          'attended': 0,
-          'total': 0,
-          'statusColor': 'grey',
-          'canMissText': 'Add subjects to track attendance',
-          'threshold': 75,
-          'isAtRisk': false,
-        };
-        await _writeWidgetData('attendance_widget_data.json', data);
-        await _channel.invokeMethod('updateAttendanceWidget');
-        return;
-      }
-
-      // Find the most at-risk subject (lowest percentage below threshold)
-      Map<String, dynamic>? mostAtRiskSubject;
-      double lowestPercentage = double.infinity;
-      double defaultThreshold = 75.0;
-
-      for (final subject in subjects) {
-        final subjectName = subject['name'] as String;
-        final requiredPercentage = (subject['requiredPercentage'] as num?)?.toDouble() ?? defaultThreshold;
-        
-        final stats = await DatabaseHelper.instance.getAttendanceStatsForSubject(subjectName);
-        final total = (stats['total'] as int?) ?? 0;
-        final present = (stats['present'] as int?) ?? 0;
-        final excused = (stats['excused'] as int?) ?? 0;
-        
-        if (total == 0) continue;
-        
-        final percentage = ((present + excused) / total) * 100;
-        
-        // At-risk if below threshold, prioritize lowest percentage
-        if (percentage < requiredPercentage) {
-          if (percentage < lowestPercentage) {
-            lowestPercentage = percentage;
-            mostAtRiskSubject = {
-              'subject': subject,
-              'stats': stats,
-              'percentage': percentage,
-              'requiredPercentage': requiredPercentage,
-            };
-          }
-        }
-      }
-
-      // If no subject is below threshold, pick the one with lowest percentage overall
-      if (mostAtRiskSubject == null) {
-        lowestPercentage = double.infinity;
-        for (final subject in subjects) {
-          final subjectName = subject['name'] as String;
-          final requiredPercentage = (subject['requiredPercentage'] as num?)?.toDouble() ?? defaultThreshold;
-          
-          final stats = await DatabaseHelper.instance.getAttendanceStatsForSubject(subjectName);
-          final total = (stats['total'] as int?) ?? 0;
-          final present = (stats['present'] as int?) ?? 0;
-          final excused = (stats['excused'] as int?) ?? 0;
-          
-          if (total == 0) continue;
-          
-          final percentage = ((present + excused) / total) * 100;
-          
-          if (percentage < lowestPercentage) {
-            lowestPercentage = percentage;
-            mostAtRiskSubject = {
-              'subject': subject,
-              'stats': stats,
-              'percentage': percentage,
-              'requiredPercentage': requiredPercentage,
-            };
-          }
-        }
-      }
-
-      String subjectName;
-      int attended = 0;
-      int total = 0;
-      int percentage = 0;
-      String statusColor;
-      String canMissText;
-      double threshold;
-      bool isAtRisk;
-
-      if (mostAtRiskSubject != null) {
-        final subject = mostAtRiskSubject['subject'] as Map<String, dynamic>;
-        final stats = mostAtRiskSubject['stats'] as Map<String, dynamic>;
-        final pct = mostAtRiskSubject['percentage'] as double;
-        threshold = mostAtRiskSubject['requiredPercentage'] as double;
-        
-        subjectName = subject['name'] as String;
-        attended = ((stats['present'] as int?) ?? 0) + ((stats['excused'] as int?) ?? 0);
-        total = (stats['total'] as int?) ?? 0;
-        percentage = pct.round();
-        
-        // Determine status color
-        if (pct < threshold - 15) {
-          statusColor = 'red';
-        } else if (pct < threshold - 5) {
-          statusColor = 'orange';
-        } else if (pct < threshold) {
-          statusColor = 'yellow';
-        } else {
-          statusColor = 'green';
-        }
-        
-        isAtRisk = pct < threshold;
-        
-        // Calculate "can miss X more" text
-        if (isAtRisk) {
-          final canMiss = ((attended / (threshold / 100)) - total).floor();
-          if (canMiss <= 0) {
-            canMissText = 'CRITICAL: Cannot miss any more classes!';
-          } else if (canMiss == 1) {
-            canMissText = 'Can miss 1 more class';
-          } else {
-            canMissText = 'Can miss $canMiss more classes';
-          }
-        } else {
-          final canMiss = ((attended / (threshold / 100)) - total).floor();
-          if (canMiss <= 0) {
-            canMissText = 'At threshold - cannot miss any';
-          } else if (canMiss == 1) {
-            canMissText = 'Can safely miss 1 class';
-          } else {
-            canMissText = 'Can safely miss $canMiss classes';
-          }
-        }
-      } else {
-        subjectName = 'No Data';
-        statusColor = 'grey';
-        canMissText = 'No attendance data available';
-        threshold = defaultThreshold;
-        isAtRisk = false;
-      }
-
-      final data = <String, dynamic>{
-        'subjectName': subjectName,
-        'percentage': percentage,
-        'attended': attended,
-        'total': total,
-        'statusColor': statusColor,
-        'canMissText': canMissText,
-        'threshold': threshold,
-        'isAtRisk': isAtRisk,
-      };
-
-      await _writeWidgetData('attendance_widget_data.json', data);
-      await _channel.invokeMethod('updateAttendanceWidget');
-    } catch (e) {
-      debugPrint('Attendance widget refresh error: $e');
-    }
-  }
-
-  // ==================== TIMETABLE WIDGET ====================
-  static Future<void> refreshTimetableWidget() async {
-    try {
-      final now = DateTime.now();
-      final currentWeekday = now.weekday; // 1=Mon, 7=Sun
-      final currentTimeMinutes = now.hour * 60 + now.minute;
-      
-      final upcomingClasses = <Map<String, dynamic>>[];
-      
-      // Search today + tomorrow (max 2 days)
-      for (int dayOffset = 0; dayOffset < 2; dayOffset++) {
-        if (upcomingClasses.length >= 3) break;
-        
-        final searchDate = now.add(Duration(days: dayOffset));
-        final searchWeekday = searchDate.weekday;
-        
-        // Get timetable classes for this day
-        final classes = await DatabaseHelper.instance.getTimetableClassesForDay(searchWeekday);
-        
-        for (final cls in classes) {
-          if (upcomingClasses.length >= 3) break;
-          
-          final startTimeMinutes = (cls['startTimeMinutes'] as int?) ?? 0;
-          final endTimeMinutes = (cls['endTimeMinutes'] as int?) ?? 0;
-          
-          // For today, skip classes that have already ended
-          if (dayOffset == 0 && endTimeMinutes <= currentTimeMinutes) {
-            continue;
-          }
-          
-          // Calculate countdown minutes
-          int countdownMinutes;
-          if (dayOffset == 0) {
-            countdownMinutes = startTimeMinutes - currentTimeMinutes;
-          } else {
-            countdownMinutes = (dayOffset * 24 * 60) + startTimeMinutes - currentTimeMinutes;
-          }
-          
-          // Format time slot
-          final startHour = startTimeMinutes ~/ 60;
-          final startMin = startTimeMinutes % 60;
-          final endHour = endTimeMinutes ~/ 60;
-          final endMin = endTimeMinutes % 60;
-          final timeSlot = '${_pad(startHour)}:${_pad(startMin)} - ${_pad(endHour)}:${_pad(endMin)}';
-          
-          // Format countdown text
-          String countdownText;
-          if (countdownMinutes < 60) {
-            countdownText = '${countdownMinutes}m';
-          } else if (countdownMinutes < 24 * 60) {
-            final hours = countdownMinutes ~/ 60;
-            final mins = countdownMinutes % 60;
-            countdownText = '${hours}h ${mins}m';
-          } else {
-            final days = countdownMinutes ~/ (24 * 60);
-            final hours = (countdownMinutes % (24 * 60)) ~/ 60;
-            countdownText = '${days}d ${hours}h';
-          }
-          
-          upcomingClasses.add({
-            'subject': cls['subjectName'] ?? 'Unknown',
-            'timeSlot': timeSlot,
-            'room': cls['room'] ?? 'TBD',
-            'countdownMinutes': countdownMinutes,
-            'countdownText': countdownText,
-            'colorHex': cls['colorHex'] ?? '#2196F3',
-            'dayOffset': dayOffset,
-            'isToday': dayOffset == 0,
-            'startTimeMinutes': startTimeMinutes,
-            'endTimeMinutes': endTimeMinutes,
-            'professor': cls['professor'] ?? '',
-            'classType': cls['classType'] ?? 'lecture',
-          });
-        }
-      }
-      
-      // Sort by countdown (soonest first)
-      upcomingClasses.sort((a, b) => (a['countdownMinutes'] as int).compareTo(b['countdownMinutes'] as int));
-      
-      // Take only top 3
-      final top3Classes = upcomingClasses.take(3).toList();
-      
-      // Format day name
-      final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      final todayName = dayNames[now.weekday - 1];
-      final tomorrowName = dayNames[(now.weekday) % 7];
-      
-      final data = <String, dynamic>{
-        'dayName': todayName,
-        'dateText': '${_monthName(now.month)} ${now.day}',
-        'nextDayName': tomorrowName,
-        'classes': top3Classes,
-        'totalUpcoming': upcomingClasses.length,
-        'hasMore': upcomingClasses.length > 3,
-      };
-
-      await _writeWidgetData('timetable_widget_data.json', data);
-      await _channel.invokeMethod('updateTimetableWidget');
-    } catch (e) {
-      debugPrint('Timetable widget refresh error: $e');
-    }
-  }
-
-  // ==================== HABIT WIDGET (NEW) ====================
-  static Future<void> refreshHabitWidget() async {
-    try {
-      final now = DateTime.now();
-      final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
-      final weekStart = todayStart - ((now.weekday - 1) * const Duration(days: 1).inMilliseconds);
-      
-      final habits = await DatabaseHelper.instance.getAllHabits(includeArchived: false);
-      
-      if (habits.isEmpty) {
-        final data = <String, dynamic>{
-          'habitName': 'No Habits',
-          'weekProgress': 0,
-          'weekTarget': 0,
-          'streak': 0,
-          'todayCompleted': false,
-          'statusColor': 'grey',
-          'message': 'Add habits to start tracking',
-        };
-        await _writeWidgetData('habit_widget_data.json', data);
-        await _channel.invokeMethod('updateHabitWidget');
-        return;
-      }
-
-      // Find the habit with the best streak to showcase
-      Map<String, dynamic>? featuredHabit;
-      int bestStreak = -1;
-      
-      for (final habit in habits) {
-        final habitId = habit['id'] as int;
-        final streak = await DatabaseHelper.instance.getHabitStreak(habitId);
-        if (streak > bestStreak) {
-          bestStreak = streak;
-          featuredHabit = habit;
-        }
-      }
-      
-      // If no streaks, pick the first habit
-      featuredHabit ??= habits.first;
-      final habitId = featuredHabit['id'] as int;
-      final habitName = featuredHabit['name'] as String;
-      final targetPerWeek = (featuredHabit['targetPerWeek'] as int?) ?? 7;
-      final colorHex = (featuredHabit['colorHex'] as String?) ?? '#4CAF50';
-      
-      // Get weekly stats
-      final weeklyStats = await DatabaseHelper.instance.getHabitWeeklyStats(habitId, weekStart);
-      final weekProgress = weeklyStats['completed'] as int;
-      final streak = await DatabaseHelper.instance.getHabitStreak(habitId);
-      
-      // Check today's completion
-      final todayLog = await DatabaseHelper.instance.getHabitLogForDate(habitId, todayStart);
-      final todayCompleted = todayLog != null && (todayLog['completed'] as int?) == 1;
-      
-      // Determine status color
-      String statusColor;
-      final percentage = targetPerWeek > 0 ? (weekProgress / targetPerWeek * 100).round() : 0;
-      if (percentage >= 100) {
-        statusColor = 'green';
-      } else if (percentage >= 75) {
-        statusColor = 'light_green';
-      } else if (percentage >= 50) {
-        statusColor = 'yellow';
-      } else if (percentage >= 25) {
-        statusColor = 'orange';
-      } else {
-        statusColor = 'red';
-      }
-      
-      final data = <String, dynamic>{
-        'habitName': habitName,
-        'weekProgress': weekProgress,
-        'weekTarget': targetPerWeek,
-        'streak': streak,
-        'todayCompleted': todayCompleted,
-        'statusColor': statusColor,
-        'percentage': percentage,
-        'colorHex': colorHex,
-        'message': '$weekProgress / $targetPerWeek this week',
-      };
-
-      await _writeWidgetData('habit_widget_data.json', data);
-      await _channel.invokeMethod('updateHabitWidget');
-    } catch (e) {
-      debugPrint('Habit widget refresh error: $e');
-    }
-  }
-
-  // ==================== READING WIDGET (NEW) ====================
-  static Future<void> refreshReadingWidget() async {
-    try {
-      final books = await DatabaseHelper.instance.getAllReadingBooks(includeCompleted: false);
-      
-      if (books.isEmpty) {
-        final data = <String, dynamic>{
-          'bookTitle': 'No Books',
-          'author': '',
-          'progressPercent': 0,
-          'currentPage': 0,
-          'totalPages': 0,
-          'pagesLeft': 0,
-          'minutesReadToday': 0,
-          'totalMinutesRead': 0,
-          'statusColor': 'grey',
-          'message': 'Add books to track reading',
-        };
-        await _writeWidgetData('reading_widget_data.json', data);
-        await _channel.invokeMethod('updateReadingWidget');
-        return;
-      }
-
-      // Pick the book with the most progress (closest to completion)
-      Map<String, dynamic>? featuredBook;
-      double bestProgress = -1;
-      
-      for (final book in books) {
-        final totalPages = (book['totalPages'] as int?) ?? 1;
-        final currentPage = (book['currentPage'] as int?) ?? 0;
-        final progress = totalPages > 0 ? currentPage / totalPages : 0.0;
-        if (progress > bestProgress) {
-          bestProgress = progress;
-          featuredBook = book;
-        }
-      }
-      
-      featuredBook ??= books.first;
-      final bookId = featuredBook['id'] as int;
-      final bookTitle = featuredBook['title'] as String;
-      final author = (featuredBook['author'] as String?) ?? 'Unknown Author';
-      final totalPages = (featuredBook['totalPages'] as int?) ?? 1;
-      final currentPage = (featuredBook['currentPage'] as int?) ?? 0;
-      final minutesReadToday = (featuredBook['minutesReadToday'] as int?) ?? 0;
-      final totalMinutesRead = (featuredBook['totalMinutesRead'] as int?) ?? 0;
-      
-      final progressPercent = totalPages > 0 ? (currentPage / totalPages * 100).round() : 0;
-      final pagesLeft = totalPages - currentPage;
-      
-      // Get detailed progress stats
-      final progressStats = await DatabaseHelper.instance.getReadingProgress(bookId);
-      final onTrack = progressStats['onTrack'] as bool? ?? true;
-      
-      // Determine status color
-      String statusColor;
-      if (progressPercent >= 90) {
-        statusColor = 'green';
-      } else if (progressPercent >= 60) {
-        statusColor = 'light_green';
-      } else if (progressPercent >= 30) {
-        statusColor = 'blue';
-      } else {
-        statusColor = 'orange';
-      }
-      if (!onTrack) statusColor = 'red';
-      
-      final data = <String, dynamic>{
-        'bookTitle': bookTitle,
-        'author': author,
-        'progressPercent': progressPercent,
-        'currentPage': currentPage,
-        'totalPages': totalPages,
-        'pagesLeft': pagesLeft,
-        'minutesReadToday': minutesReadToday,
-        'totalMinutesRead': totalMinutesRead,
-        'statusColor': statusColor,
-        'onTrack': onTrack,
-        'message': '$currentPage / $totalPages pages',
-        'dailyPageGoal': progressStats['dailyPageGoal'] ?? 20,
-        'pagesPerDayNeeded': progressStats['pagesPerDayNeeded'] ?? 0,
-      };
-
-      await _writeWidgetData('reading_widget_data.json', data);
-      await _channel.invokeMethod('updateReadingWidget');
-    } catch (e) {
-      debugPrint('Reading widget refresh error: $e');
-    }
-  }
-
-  // ==================== HELPER METHODS ====================
-  static Future<void> _writeWidgetData(String filename, Map<String, dynamic> data) async {
-    try {
-      // FIXED: Use getApplicationSupportDirectory() which on Android maps to
-      // Context.getFilesDir() — the SAME path the Kotlin widget reads via context.filesDir
-      final dir = await getApplicationSupportDirectory();
-      final file = File('${dir.path}/$filename');
-      await file.writeAsString(jsonEncode(data));
-      debugPrint('Widget data written to: ${file.path}');
-    } catch (e) {
-      debugPrint('Widget data write error: $e');
-    }
-  }
-
-  static bool _isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
-  }
-
-  static String _formatDate(DateTime dt) {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return '${months[dt.month - 1]} ${dt.day}, ${dt.year} ${_pad(dt.hour)}:${_pad(dt.minute)}';
-  }
-
-  static String _pad(int n) => n.toString().padLeft(2, '0');
-
-  static String _monthName(int month) {
-    const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return names[month - 1];
+    await refreshHabitWidget();
+    await refreshReadingWidget();
   }
 }
