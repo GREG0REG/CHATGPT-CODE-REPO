@@ -34,9 +34,17 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                 var minutesReadToday = 0
 
                 try {
-                    val file = File(context.filesDir, READING_DATA_FILE)
-                    if (file.exists()) {
-                        val json = JSONObject(file.readText())
+                    // CRITICAL FIX: Use getApplicationSupportDirectory path
+                    val dir = context.getDir("flutter", Context.MODE_PRIVATE)
+                    val file = File(dir.parentFile, "app_flutter/reading_widget_data.json")
+                    
+                    // Fallback to filesDir for compatibility
+                    val fallbackFile = File(context.filesDir, READING_DATA_FILE)
+                    
+                    val targetFile = if (file.exists()) file else fallbackFile
+
+                    if (targetFile.exists()) {
+                        val json = JSONObject(targetFile.readText())
                         bookTitle = json.optString("bookTitle", bookTitle)
                         currentPage = json.optInt("currentPage", 0)
                         totalPages = json.optInt("totalPages", 0)
@@ -44,6 +52,8 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                         statusColor = json.optString("statusColor", statusColor)
                         reminderText = json.optString("message", reminderText)
                         minutesReadToday = json.optInt("minutesReadToday", 0)
+                    } else {
+                        android.util.Log.w("ReadingWidget", "Data file not found at: ${targetFile.absolutePath}")
                     }
                 } catch (e: Exception) {
                     android.util.Log.e("ReadingWidget", "JSON read failed", e)
@@ -68,14 +78,13 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                 // Set progress bar color and value
                 views.setProgressBar(R.id.reading_widget_progress_bar, 100, progressPercent, false)
 
-                // Build progress drawable with custom color via reflection on tint
-                // RemoteViews limited: we use the progress bar tint via setColorFilter workaround
+                // Apply progress tint color
                 views.setInt(R.id.reading_widget_progress_bar, "setProgressTintList", accentColor)
 
-                // Show reminder if no reading today
+                // Show reminder based on reading status
                 if (minutesReadToday == 0 && totalPages > 0 && currentPage < totalPages) {
                     views.setViewVisibility(R.id.reading_widget_reminder, View.VISIBLE)
-                    views.setTextViewText(R.id.reading_widget_reminder, "⏰ Read today! No session yet")
+                    views.setTextViewText(R.id.reading_widget_reminder, "⏰ $reminderText")
                 } else if (minutesReadToday > 0) {
                     views.setViewVisibility(R.id.reading_widget_reminder, View.VISIBLE)
                     views.setTextViewText(R.id.reading_widget_reminder, "✅ Read ${minutesReadToday}m today")
