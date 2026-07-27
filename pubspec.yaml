@@ -17,6 +17,7 @@ dependencies:
   flutter_local_notifications: ^17.2.3
   timezone: ^0.9.4
   workmanager: ^0.5.2
+  home_widget: ^0.7.0
   image_picker: ^1.1.2
   file_picker: ^8.0.7
   share_plus: ^9.0.0
