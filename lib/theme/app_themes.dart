@@ -1,6 +1,5 @@
 // FILE: lib/theme/app_themes.dart
-// COMPLETE REPLACEMENT — Added 8 new cute pastel themes
-// All existing themes preserved. New themes are unique and different.
+// COMPLETE REPLACEMENT — Added missing buildTheme, glassmorphism, gradientColorsFor, materialYou
 
 import 'package:flutter/material.dart';
 
@@ -24,6 +23,9 @@ enum AppThemeOption {
   lemonSorbet,       // 🍋 Soft yellow + cream
   bubblegumPop,      // 🫧 Bright pink + aqua
   sakuraBloom,       // 🌸 Cherry blossom pink + soft green
+
+  // ── Material You (dynamic colors) ──
+  materialYou,       // 🎨 System dynamic colors
 }
 
 /// Theme metadata for UI display.
@@ -112,6 +114,13 @@ class AppThemes {
       gradientColors: [Color(0xFFFFB7C5), Color(0xFFC8E6C9)],
     ),
 
+    // ── Material You ──
+    ThemeInfo(
+      option: AppThemeOption.materialYou,
+      label: 'Material You',
+      gradientColors: [Color(0xFF6750A4), Color(0xFF958DA5)],
+    ),
+
     // ── Custom (always last) ──
     ThemeInfo(
       option: AppThemeOption.customHex,
@@ -136,5 +145,85 @@ class AppThemes {
       return customColor;
     }
     return info.gradientColors.first;
+  }
+
+  /// Get gradient colors for a theme option.
+  static List<Color>? gradientColorsFor(AppThemeOption option) {
+    final info = getInfo(option);
+    return info?.gradientColors;
+  }
+
+  /// Build a full ThemeData for the given theme option.
+  static ThemeData buildTheme(
+    AppThemeOption option, {
+    required Brightness brightness,
+    Color? customColor,
+    ColorScheme? dynamicScheme,
+    bool highContrast = false,
+  }) {
+    final Color primaryColor = getPrimaryColor(option, customColor: customColor);
+
+    ColorScheme colorScheme;
+    if (option == AppThemeOption.materialYou && dynamicScheme != null) {
+      colorScheme = dynamicScheme.copyWith(brightness: brightness);
+    } else {
+      colorScheme = ColorScheme.fromSeed(
+        seedColor: primaryColor,
+        brightness: brightness,
+      );
+    }
+
+    if (highContrast) {
+      colorScheme = colorScheme.copyWith(
+        surface: brightness == Brightness.dark ? Colors.black : Colors.white,
+        onSurface: brightness == Brightness.dark ? Colors.white : Colors.black,
+      );
+    }
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: colorScheme.surface,
+      appBarTheme: AppBarTheme(
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
+        elevation: 0,
+        centerTitle: true,
+      ),
+      cardTheme: CardTheme(
+        color: colorScheme.surfaceContainerHighest,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: colorScheme.primaryContainer,
+        foregroundColor: colorScheme.onPrimaryContainer,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colorScheme.surfaceContainerHighest,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  /// Glassmorphism decoration helper.
+  static BoxDecoration glassmorphism({
+    required BuildContext context,
+    required double opacity,
+    required BorderRadius borderRadius,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return BoxDecoration(
+      borderRadius: borderRadius,
+      color: cs.surface.withOpacity(opacity),
+      border: Border.all(
+        color: cs.outline.withOpacity(0.1),
+      ),
+    );
   }
 }
