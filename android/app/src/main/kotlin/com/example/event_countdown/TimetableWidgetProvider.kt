@@ -50,9 +50,18 @@ class TimetableWidgetProvider : AppWidgetProvider() {
                 val classesList = mutableListOf<Map<String, String>>()
 
                 try {
-                    val file = File(context.filesDir, TIMETABLE_DATA_FILE)
-                    if (file.exists()) {
-                        val json = JSONObject(file.readText())
+                    // CRITICAL FIX: Use getApplicationSupportDirectory path
+                    val dir = context.getDir("flutter", Context.MODE_PRIVATE)
+                    val file = File(dir.parentFile)
+                    val file = File(dir.parentFile, "app_flutter/timetable_widget_data.json")
+                    
+                    // Fallback to filesDir for compatibility
+                    val fallbackFile = File(context.filesDir, TIMETABLE_DATA_FILE)
+                    
+                    val targetFile = if (file.exists()) file else fallbackFile
+
+                    if (targetFile.exists()) {
+                        val json = JSONObject(targetFile.readText())
                         dayName = json.optString("dayName", dayName)
                         dateText = json.optString("dateText", dateText)
                         val classesArray = json.optJSONArray("classes")
@@ -70,7 +79,7 @@ class TimetableWidgetProvider : AppWidgetProvider() {
                             }
                         }
                     } else {
-                        android.util.Log.w("TimetableWidget", "Data file not found: ${file.absolutePath}")
+                        android.util.Log.w("TimetableWidget", "Data file not found at: ${targetFile.absolutePath}")
                     }
                 } catch (e: Exception) {
                     android.util.Log.e("TimetableWidget", "JSON read failed", e)
@@ -108,7 +117,7 @@ class TimetableWidgetProvider : AppWidgetProvider() {
                                 Color.parseColor("#2196F3")
                             }
 
-                            // Format: "9:00 Math • Hall A • 25 min"
+                            // Format: "9:00 - 10:00  •  Math  •  Hall A  •  25 min"
                             val infoText = "$timeSlot  •  $subject  •  $room  •  $countdownText"
 
                             views.setViewVisibility(ROW_IDS[i], View.VISIBLE)
