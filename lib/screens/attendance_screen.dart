@@ -1,8 +1,8 @@
 // FILE: lib/screens/attendance_screen.dart
-// COMPLETE REWRITE — v11 Attendance Tracker with subjects, schedules, heatmaps, analytics
-// INCLUDES: Navigation to AttendanceDetailScreen and AttendanceAnalyticsScreen
-// FIXED: Proper await chains, cascade delete cleanup, optimized loading
-// ENHANCED: Bulk mark dialog, streak indicator, single-query stats
+// COMPLETE REWRITE — v12 NEET Edition: Sessions, bunk calculator, predictor, countdown
+// FIXED: Division by zero when required=100%
+// CHANGED: "Class" → "Session" throughout for revision-era NEET prep
+// ENHANCED: NEET presets, medical theme, bunk calculator, attendance predictor, weekly report, smart suggestions
 
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -45,6 +45,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     Color(0xFF26C6DA),
   ];
 
+  static const List<String> _neetQuotes = [
+    'Consistency beats intensity. Show up every session!',
+    'Every session counts toward your white coat dream.',
+    'Small steps every day lead to AIIMS.',
+    'Revision today, doctor tomorrow.',
+    'NEET is won in the daily grind, not on exam day.',
+    'One session at a time. One rank at a time.',
+    'Your future patients are counting on you.',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +67,23 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         .subtract(Duration(days: date.weekday - 1));
   }
 
+  DateTime _getNeetDate() {
+    final now = DateTime.now();
+    var year = now.year;
+    var date = DateTime(year, 5, 1);
+    while (date.weekday != DateTime.sunday) {
+      date = date.add(const Duration(days: 1));
+    }
+    if (date.isBefore(now)) {
+      year++;
+      date = DateTime(year, 5, 1);
+      while (date.weekday != DateTime.sunday) {
+        date = date.add(const Duration(days: 1));
+      }
+    }
+    return date;
+  }
+
   String _formatTimeMinutes(int minutes) {
     final h = minutes ~/ 60;
     final m = minutes % 60;
@@ -67,6 +94,27 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   String _dayName(DateTime dt) {
     return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][dt.weekday - 1];
+  }
+
+  String _neetQuote() {
+    final dayOfYear = int.parse(DateFormat('D').format(DateTime.now()));
+    return _neetQuotes[dayOfYear % _neetQuotes.length];
+  }
+
+  // FIXED: Guard against division by zero when required=100
+  String _riskText(double percentage, int absent, int total, double required) {
+    if (total == 0) return 'No data yet';
+    if (required >= 100.0) {
+      if (percentage >= 99.99) return 'Perfect! 100% session attendance';
+      return '100% required — attend every session';
+    }
+    if (percentage >= required) {
+      final canMiss = ((total * (required / 100) - (total - absent)) / (1 - required / 100)).floor();
+      return 'Can miss ${max(0, canMiss)} more sessions';
+    } else {
+      final needAttend = ((required / 100 * total - (total - absent)) / (required / 100)).ceil();
+      return 'Need $needAttend more sessions';
+    }
   }
 
   Future<void> _loadData() async {
@@ -135,7 +183,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       });
     }
 
-    // Only reload detail if a subject is selected and still exists
     if (_selectedSubject != null) {
       final stillExists = _subjects.any((s) => s['name'] == _selectedSubject);
       if (stillExists) {
@@ -176,12 +223,19 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
   }
 
-  Future<void> _addSubject() async {
+    Future<void> _addSubject() async {
     final nameController = TextEditingController();
     final reqController = TextEditingController(text: '75');
     DateTime? semesterStart;
     DateTime? semesterEnd;
     Color selectedColor = _colorPalette[0];
+
+    final neetPresets = {
+      'Physics': '#FF6B6B',
+      'Chemistry': '#4ECDC4',
+      'Botany': '#66BB6A',
+      'Zoology': '#AB47BC',
+    };
 
     final result = await showDialog<Map<String, dynamic>?>(
       context: context,
@@ -274,6 +328,35 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   ),
                   const SizedBox(height: 20),
                   const Text(
+                    'NEET Quick Add',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: neetPresets.entries.map((entry) {
+                      return ActionChip(
+                        avatar: Icon(
+                          entry.key == 'Physics' ? Icons.bolt :
+                          entry.key == 'Chemistry' ? Icons.science :
+                          entry.key == 'Botany' ? Icons.eco :
+                          Icons.psychology,
+                          size: 18,
+                          color: _hexToColor(entry.value),
+                        ),
+                        label: Text(entry.key),
+                        backgroundColor: _hexToColor(entry.value).withOpacity(0.12),
+                        side: BorderSide(color: _hexToColor(entry.value).withOpacity(0.4)),
+                        onPressed: () {
+                          nameController.text = entry.key;
+                          setDialogState(() => selectedColor = _hexToColor(entry.value));
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
                     'Subject Color',
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                   ),
@@ -347,7 +430,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         'colorHex': result['colorHex'],
       });
 
-      // Mark present for today to initialize
       await _markAttendance(result['name'] as String, 'present', DateTime.now());
       await _loadData();
     }
@@ -535,7 +617,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     int endTimeMinutes = 600;
     final roomController = TextEditingController();
     final professorController = TextEditingController();
-    String scheduleType = 'lecture';
+    String scheduleType = 'revision';
 
     final result = await showDialog<Map<String, dynamic>?>(
       context: context,
@@ -543,7 +625,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         builder: (context, setDialogState) {
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text('Add Schedule'),
+            title: const Text('Add Session'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -566,12 +648,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: scheduleType,
-                    decoration: const InputDecoration(labelText: 'Type'),
+                    decoration: const InputDecoration(labelText: 'Session Type'),
                     items: const [
-                      DropdownMenuItem(value: 'lecture', child: Text('Lecture')),
-                      DropdownMenuItem(value: 'lab', child: Text('Lab')),
-                      DropdownMenuItem(value: 'tutorial', child: Text('Tutorial')),
-                      DropdownMenuItem(value: 'seminar', child: Text('Seminar')),
+                      DropdownMenuItem(value: 'revision', child: Text('Revision')),
+                      DropdownMenuItem(value: 'practice', child: Text('Practice')),
+                      DropdownMenuItem(value: 'test', child: Text('Test')),
+                      DropdownMenuItem(value: 'review', child: Text('Review')),
                     ],
                     onChanged: (v) => setDialogState(() => scheduleType = v!),
                   ),
@@ -619,16 +701,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   TextField(
                     controller: roomController,
                     decoration: const InputDecoration(
-                      labelText: 'Room / Location',
-                      hintText: 'e.g., Room 301',
+                      labelText: 'Location / Place',
+                      hintText: 'e.g., Study Room, Library',
                     ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: professorController,
                     decoration: const InputDecoration(
-                      labelText: 'Professor (optional)',
-                      hintText: 'e.g., Dr. Smith',
+                      labelText: 'Mentor (optional)',
+                      hintText: 'e.g., Dr. Sharma',
                     ),
                   ),
                 ],
@@ -667,8 +749,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Schedule?'),
-        content: const Text('This schedule slot will be removed.'),
+        title: const Text('Delete Session?'),
+        content: const Text('This session slot will be removed.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
@@ -741,7 +823,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               controller: noteController,
               decoration: const InputDecoration(
                 labelText: 'Note (optional)',
-                hintText: 'e.g., Medical leave',
+                hintText: 'e.g., Mock test, Revision block',
               ),
               maxLines: 2,
             ),
@@ -780,7 +862,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
-  // ENHANCED: Bulk mark past dates dialog
   Future<void> _showBulkMarkDialog() async {
     if (_subjects.isEmpty) return;
 
@@ -903,7 +984,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       int markedCount = 0;
       for (int i = 0; i < days; i++) {
         final date = startDate.add(Duration(days: i));
-        // Skip weekends optionally - but for now mark all
         final dayStart = DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
         final existing = await DatabaseHelper.instance.getAttendanceLogForSubjectAndDate(subject, dayStart);
         if (existing == null) {
@@ -926,6 +1006,252 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         );
       }
     }
+  }
+
+  // NEW: Bunk Calculator — how many sessions can you safely miss?
+  Future<void> _showBunkCalculator() async {
+    if (_subjects.isEmpty) return;
+    String selectedSubject = _subjects.first['name'] as String;
+    final missController = TextEditingController(text: '1');
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final subject = _subjects.firstWhere((s) => s['name'] == selectedSubject);
+          final percentage = subject['percentage'] as double;
+          final required = subject['requiredPercentage'] as double;
+          final present = subject['present'] as int;
+          final late = subject['late'] as int;
+          final total = subject['total'] as int;
+          final excused = subject['excused'] as int;
+          final effectiveTotal = total - excused;
+          final attended = present + (late * 0.5);
+          final missCount = int.tryParse(missController.text) ?? 0;
+
+          double newPct = 0;
+          if (effectiveTotal + missCount > 0) {
+            newPct = (attended / (effectiveTotal + missCount)) * 100;
+          }
+
+          String resultText;
+          if (missCount <= 0) {
+            resultText = 'Enter sessions to miss';
+          } else if (newPct >= required) {
+            resultText = 'After missing $missCount: ${newPct.toStringAsFixed(1)}% — still safe!';
+          } else {
+            final shortfall = required - newPct;
+            resultText = 'After missing $missCount: ${newPct.toStringAsFixed(1)}% — ${shortfall.toStringAsFixed(1)}% below requirement!';
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              children: [
+                Icon(Icons.calculate_outlined, color: Colors.teal),
+                SizedBox(width: 8),
+                Text('Bunk Calculator'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: selectedSubject,
+                    decoration: const InputDecoration(
+                      labelText: 'Subject',
+                      prefixIcon: Icon(Icons.book),
+                    ),
+                    items: _subjects.map((s) => DropdownMenuItem(
+                      value: s['name'] as String,
+                      child: Text(s['name'] as String),
+                    )).toList(),
+                    onChanged: (v) => setDialogState(() => selectedSubject = v!),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: missController,
+                    decoration: const InputDecoration(
+                      labelText: 'Sessions you plan to miss',
+                      prefixIcon: Icon(Icons.remove_circle_outline),
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: newPct >= required ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: newPct >= required ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          newPct >= required ? Icons.check_circle : Icons.warning,
+                          color: newPct >= required ? Colors.green : Colors.red,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(resultText, style: const TextStyle(fontWeight: FontWeight.w600))),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Current: ${percentage.toStringAsFixed(1)}% ($present P, ${late > 0 ? '$late L, ' : ''}$excused E, $effectiveTotal total)',
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.outline),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+            ],
+          );
+        },
+      ),
+    );
+
+    missController.dispose();
+  }
+
+  // NEW: Attendance Predictor — what if you attend/miss N sessions?
+  Future<void> _showPredictor() async {
+    if (_subjects.isEmpty) return;
+    String selectedSubject = _subjects.first['name'] as String;
+    final countController = TextEditingController(text: '5');
+    bool willAttend = true;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final subject = _subjects.firstWhere((s) => s['name'] == selectedSubject);
+          final percentage = subject['percentage'] as double;
+          final required = subject['requiredPercentage'] as double;
+          final present = subject['present'] as int;
+          final late = subject['late'] as int;
+          final total = subject['total'] as int;
+          final excused = subject['excused'] as int;
+          final effectiveTotal = total - excused;
+          final attended = present + (late * 0.5);
+          final count = int.tryParse(countController.text) ?? 0;
+
+          double newPct = 0;
+          double newAttended = attended;
+          int newTotal = effectiveTotal;
+          if (willAttend) {
+            newAttended += count;
+          }
+          newTotal += count;
+          if (newTotal > 0) {
+            newPct = (newAttended / newTotal) * 100;
+          }
+
+          final diff = newPct - percentage;
+          final diffText = diff >= 0 ? '+${diff.toStringAsFixed(1)}%' : '${diff.toStringAsFixed(1)}%';
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              children: [
+                Icon(Icons.trending_up, color: Colors.indigo),
+                SizedBox(width: 8),
+                Text('Attendance Predictor'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: selectedSubject,
+                    decoration: const InputDecoration(
+                      labelText: 'Subject',
+                      prefixIcon: Icon(Icons.book),
+                    ),
+                    items: _subjects.map((s) => DropdownMenuItem(
+                      value: s['name'] as String,
+                      child: Text(s['name'] as String),
+                    )).toList(),
+                    onChanged: (v) => setDialogState(() => selectedSubject = v!),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: countController,
+                    decoration: const InputDecoration(
+                      labelText: 'Number of upcoming sessions',
+                      prefixIcon: Icon(Icons.format_list_numbered),
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(value: true, label: Text('Attend All'), icon: Icon(Icons.check)),
+                      ButtonSegment(value: false, label: Text('Miss All'), icon: Icon(Icons.close)),
+                    ],
+                    selected: {willAttend},
+                    onSelectionChanged: (set) => setDialogState(() => willAttend = set.first),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Projected: ${newPct.toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: newPct >= required ? Colors.green : Colors.red,
+                          ),
+                        ),
+                        Text(
+                          '($diffText from current ${percentage.toStringAsFixed(1)}%)',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: cs.outline,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          newPct >= required
+                              ? 'You will stay above the $required% requirement.'
+                              : 'You will drop below the $required% requirement!',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: newPct >= required ? Colors.green : Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+            ],
+          );
+        },
+      ),
+    );
+
+    countController.dispose();
   }
 
   Future<void> _markAllTodayPresent() async {
@@ -973,7 +1299,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
     if (confirm == true) {
       final db = await DatabaseHelper.instance.database;
-      // Cascade delete: logs, schedules, then subject
       final logs = await DatabaseHelper.instance.getAttendanceLogsForSubject(subject['name'] as String);
       for (final log in logs) {
         await db.delete('attendance_logs', where: 'id = ?', whereArgs: [log['id']]);
@@ -988,17 +1313,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       if (_selectedSubject == subject['name']) {
         setState(() => _selectedSubject = null);
       }
-    }
-  }
-
-  String _riskText(double percentage, int absent, int total, double required) {
-    if (total == 0) return 'No data yet';
-    if (percentage >= required) {
-      final canMiss = ((total * (required / 100) - (total - absent)) / (1 - required / 100)).floor();
-      return 'Can miss ${max(0, canMiss)} more';
-    } else {
-      final needAttend = ((required / 100 * total - (total - absent)) / (required / 100)).ceil();
-      return 'Need $needAttend more';
     }
   }
 
@@ -1030,7 +1344,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return '$present/${logs.length}';
   }
 
-  // ENHANCED: Calculate streak for a subject
   int _calculateStreak(String subjectName) {
     final logs = _logs.where((l) => l['subjectName'] == subjectName).toList()
       ..sort((a, b) => (b['dateMillis'] as int).compareTo(a['dateMillis'] as int));
@@ -1060,7 +1373,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return streak;
   }
 
-  @override
+    @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
@@ -1083,6 +1396,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               ).then((_) => _loadData());
             },
             tooltip: 'Analytics',
+          ),
+          IconButton(
+            icon: const Icon(Icons.calculate_outlined),
+            onPressed: _showBunkCalculator,
+            tooltip: 'Bunk Calculator',
+          ),
+          IconButton(
+            icon: const Icon(Icons.trending_up),
+            onPressed: _showPredictor,
+            tooltip: 'Predictor',
           ),
           IconButton(
             icon: const Icon(Icons.fact_check_outlined),
@@ -1124,7 +1447,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Add your first subject to start tracking attendance.',
+            'Add your first subject to start tracking session attendance.',
             style: TextStyle(color: cs.outline),
           ),
           const SizedBox(height: 24),
@@ -1141,15 +1464,80 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Widget _buildContent(ColorScheme cs) {
     return Column(
       children: [
+        _buildNeetCountdown(cs),
         _buildOverallStats(cs),
         _buildWeeklyHeatmap(cs),
         const Divider(height: 1),
         Expanded(
           child: _selectedSubject == null
-              ? _buildSubjectList(cs)
+              ? ListView(
+                  children: [
+                    _buildWeeklyReport(cs),
+                    _buildSmartSuggestions(cs),
+                    _buildSubjectList(cs),
+                  ],
+                )
               : _buildSubjectDetail(cs),
         ),
       ],
+    );
+  }
+
+  Widget _buildNeetCountdown(ColorScheme cs) {
+    final neetDate = _getNeetDate();
+    final daysLeft = neetDate.difference(DateTime.now()).inDays;
+    final quote = _neetQuote();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            cs.primary.withOpacity(0.15),
+            cs.tertiary.withOpacity(0.08),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.primary.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: cs.primary.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.local_hospital, color: cs.primary, size: 24),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'NEET $quote',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: cs.primary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$daysLeft days until NEET • ${DateFormat('dd MMM yyyy').format(neetDate)}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1165,7 +1553,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       return (s['percentage'] as double) < req;
     }).length;
 
-    // Calculate overall streak
     int totalStreak = 0;
     for (final s in _subjects) {
       totalStreak += _calculateStreak(s['name'] as String);
@@ -1226,6 +1613,26 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               ),
             ),
           ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _showBunkCalculator,
+                  icon: const Icon(Icons.calculate_outlined, size: 18),
+                  label: const Text('Bunk Calc'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _showPredictor,
+                  icon: const Icon(Icons.trending_up, size: 18),
+                  label: const Text('Predictor'),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -1328,41 +1735,262 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
-  Widget _buildMiniStat(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(fontSize: 11, color: color.withOpacity(0.7)),
-        ),
-      ],
+  Widget _buildWeeklyReport(ColorScheme cs) {
+    final weekStart = DateTime.fromMillisecondsSinceEpoch(_currentWeekStart);
+    int weekPresent = 0;
+    int weekTotal = 0;
+
+    for (int i = 0; i < 7; i++) {
+      final day = weekStart.add(Duration(days: i));
+      final dayStart = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
+      final dayLogs = _weekHeatmap[_dayName(day)] ?? [];
+      for (final log in dayLogs) {
+        weekTotal++;
+        if (log['status'] == 'present' || log['status'] == 'late') {
+          weekPresent++;
+        }
+      }
+    }
+
+    if (weekTotal == 0) return const SizedBox.shrink();
+
+    final weekRate = weekTotal > 0 ? (weekPresent / weekTotal * 100) : 0.0;
+    final trend = weekRate >= 75 ? Icons.trending_up : Icons.trending_down;
+    final trendColor = weekRate >= 75 ? Colors.green : Colors.orange;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(trend, color: trendColor, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Weekly Report',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: cs.onSurface),
+                ),
+                Text(
+                  '$weekPresent of $weekTotal sessions attended (${weekRate.toStringAsFixed(1)}%)',
+                  style: TextStyle(fontSize: 12, color: cs.outline),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: trendColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              weekRate >= 75 ? 'Good Week' : 'Push Harder',
+              style: TextStyle(fontWeight: FontWeight.bold, color: trendColor, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSmartSuggestions(ColorScheme cs) {
+    final suggestions = <Widget>[];
+
+    for (final s in _subjects) {
+      final percentage = s['percentage'] as double;
+      final required = s['requiredPercentage'] as double;
+      final name = s['name'] as String;
+      if (percentage < required) {
+        final gap = (required - percentage).toStringAsFixed(1);
+        suggestions.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Icon(Icons.lightbulb, size: 16, color: Colors.amber),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Attend $name today — $gap% below requirement',
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    if (suggestions.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.amber.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.amber.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.psychology, size: 18, color: Colors.amber),
+              const SizedBox(width: 8),
+              Text(
+                'Smart Suggestions',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.amber.shade800),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...suggestions,
+        ],
+      ),
     );
   }
 
   Widget _buildSubjectList(ColorScheme cs) {
-    return ListView(
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      children: [
-        SizedBox(
-          height: 130,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: _subjects.length,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            itemBuilder: (context, index) {
-              final s = _subjects[index];
-              final percentage = s['percentage'] as double;
-              final required = s['requiredPercentage'] as double;
-              final color = s['color'] as Color;
-              final name = s['name'] as String;
-              final streak = _calculateStreak(name);
+      child: Column(
+        children: [
+          SizedBox(
+            height: 130,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _subjects.length,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              itemBuilder: (context, index) {
+                final s = _subjects[index];
+                final percentage = s['percentage'] as double;
+                final required = s['requiredPercentage'] as double;
+                final color = s['color'] as Color;
+                final name = s['name'] as String;
+                final streak = _calculateStreak(name);
 
-              return GestureDetector(
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AttendanceDetailScreen(
+                          subjectId: s['id'] as int,
+                          subjectName: name,
+                          subjectColor: color,
+                        ),
+                      ),
+                    ).then((_) => _loadData());
+                  },
+                  child: Container(
+                    width: 160,
+                    margin: const EdgeInsets.only(right: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          color.withOpacity(0.15),
+                          color.withOpacity(0.05),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: color.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                name,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        Row(
+                          children: [
+                            Text(
+                              '${percentage.toStringAsFixed(1)}%',
+                              style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                                color: _riskColor(percentage, required),
+                              ),
+                            ),
+                            if (streak > 0) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.local_fire_department, size: 12, color: Colors.amber),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      '$streak',
+                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _riskText(percentage, s['absent'] as int, s['total'] as int, required),
+                          style: TextStyle(fontSize: 11, color: cs.outline),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          ..._subjects.map((s) {
+            final percentage = s['percentage'] as double;
+            final required = s['requiredPercentage'] as double;
+            final color = s['color'] as Color;
+            final name = s['name'] as String;
+            final streak = _calculateStreak(name);
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(color: cs.outlineVariant.withOpacity(0.3)),
+              ),
+              child: InkWell(
                 onTap: () {
                   Navigator.push(
                     context,
@@ -1375,243 +2003,133 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     ),
                   ).then((_) => _loadData());
                 },
-                child: Container(
-                  width: 160,
-                  margin: const EdgeInsets.only(right: 10),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        color.withOpacity(0.15),
-                        color.withOpacity(0.05),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: color.withOpacity(0.3)),
-                  ),
+                borderRadius: BorderRadius.circular(14),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
                           Container(
-                            width: 10,
-                            height: 10,
+                            width: 12,
+                            height: 12,
                             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               name,
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                           ),
-                        ],
-                      ),
-                      const Spacer(),
-                      Row(
-                        children: [
-                          Text(
-                            '${percentage.toStringAsFixed(1)}%',
-                            style: TextStyle(
-                              fontSize: 26,
-                              fontWeight: FontWeight.bold,
-                              color: _riskColor(percentage, required),
-                            ),
-                          ),
-                          if (streak > 0) ...[
-                            const SizedBox(width: 8),
+                          if (streak > 0)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              margin: const EdgeInsets.only(right: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: Colors.amber.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(6),
+                                color: Colors.amber.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.amber.withOpacity(0.3)),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.local_fire_department, size: 12, color: Colors.amber),
+                                  const Icon(Icons.local_fire_department, size: 14, color: Colors.amber),
                                   const SizedBox(width: 2),
                                   Text(
                                     '$streak',
-                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber),
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.amber),
                                   ),
                                 ],
                               ),
                             ),
-                          ],
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _riskColor(percentage, required).withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${percentage.toStringAsFixed(1)}%',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: _riskColor(percentage, required),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _riskText(percentage, s['absent'] as int, s['total'] as int, required),
-                        style: TextStyle(fontSize: 11, color: cs.outline),
-                        overflow: TextOverflow.ellipsis,
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: (percentage / 100).clamp(0.0, 1.0),
+                          minHeight: 6,
+                          backgroundColor: cs.outlineVariant.withOpacity(0.2),
+                          valueColor: AlwaysStoppedAnimation(_riskColor(percentage, required)),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              _buildTinyChip('P', s['present'] as int, Colors.green),
+                              const SizedBox(width: 6),
+                              _buildTinyChip('A', s['absent'] as int, Colors.red),
+                              const SizedBox(width: 6),
+                              _buildTinyChip('L', s['late'] as int, Colors.orange),
+                              const SizedBox(width: 6),
+                              _buildTinyChip('E', s['excused'] as int, Colors.blue),
+                            ],
+                          ),
+                          Text(
+                            _riskText(percentage, s['absent'] as int, s['total'] as int, required),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: _riskColor(percentage, required),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: () => _showMarkDialog(name),
+                              icon: const Icon(Icons.edit, size: 18),
+                              label: const Text('Mark Today'),
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: Icon(Icons.edit_outlined, color: cs.primary, size: 20),
+                            onPressed: () => _editSubject(s),
+                            tooltip: 'Edit Subject',
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.delete_outline, color: cs.error, size: 20),
+                            onPressed: () => _deleteSubject(s),
+                            tooltip: 'Delete Subject',
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 12),
-        ..._subjects.map((s) {
-          final percentage = s['percentage'] as double;
-          final required = s['requiredPercentage'] as double;
-          final color = s['color'] as Color;
-          final name = s['name'] as String;
-          final streak = _calculateStreak(name);
-
-          return Card(
-            margin: const EdgeInsets.only(bottom: 10),
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: BorderSide(color: cs.outlineVariant.withOpacity(0.3)),
-            ),
-            child: InkWell(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AttendanceDetailScreen(
-                      subjectId: s['id'] as int,
-                      subjectName: name,
-                      subjectColor: color,
-                    ),
-                  ),
-                ).then((_) => _loadData());
-              },
-              borderRadius: BorderRadius.circular(14),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            name,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        if (streak > 0)
-                          Container(
-                            margin: const EdgeInsets.only(right: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.amber.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.amber.withOpacity(0.3)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.local_fire_department, size: 14, color: Colors.amber),
-                                const SizedBox(width: 2),
-                                Text(
-                                  '$streak',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.amber),
-                                ),
-                              ],
-                            ),
-                          ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: _riskColor(percentage, required).withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '${percentage.toStringAsFixed(1)}%',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: _riskColor(percentage, required),
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: (percentage / 100).clamp(0.0, 1.0),
-                        minHeight: 6,
-                        backgroundColor: cs.outlineVariant.withOpacity(0.2),
-                        valueColor: AlwaysStoppedAnimation(_riskColor(percentage, required)),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            _buildTinyChip('P', s['present'] as int, Colors.green),
-                            const SizedBox(width: 6),
-                            _buildTinyChip('A', s['absent'] as int, Colors.red),
-                            const SizedBox(width: 6),
-                            _buildTinyChip('L', s['late'] as int, Colors.orange),
-                            const SizedBox(width: 6),
-                            _buildTinyChip('E', s['excused'] as int, Colors.blue),
-                          ],
-                        ),
-                        Text(
-                          _riskText(percentage, s['absent'] as int, s['total'] as int, required),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: _riskColor(percentage, required),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: () => _showMarkDialog(name),
-                            icon: const Icon(Icons.edit, size: 18),
-                            label: const Text('Mark Today'),
-                            style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: Icon(Icons.edit_outlined, color: cs.primary, size: 20),
-                          onPressed: () => _editSubject(s),
-                          tooltip: 'Edit Subject',
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.delete_outline, color: cs.error, size: 20),
-                          onPressed: () => _deleteSubject(s),
-                          tooltip: 'Delete Subject',
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
               ),
-            ),
-          );
-        }).toList(),
-      ],
+            );
+          }).toList(),
+        ],
+      ),
     );
   }
 
@@ -1629,7 +2147,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
-  Widget _buildSubjectDetail(ColorScheme cs) {
+    Widget _buildSubjectDetail(ColorScheme cs) {
     final s = _subjects.firstWhere(
       (sub) => sub['name'] == _selectedSubject,
       orElse: () => {},
@@ -1806,7 +2324,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'No schedule set. Add class timings to get reminders.',
+                          'No schedule set. Add session timings to get reminders.',
                           style: TextStyle(color: cs.outline, fontSize: 13),
                         ),
                       ),
@@ -1822,7 +2340,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   final end = _formatTimeMinutes(sched['endTimeMinutes'] as int);
                   final room = sched['room'] as String?;
                   final professor = sched['professor'] as String?;
-                  final type = (sched['scheduleType'] as String? ?? 'lecture').toUpperCase();
+                  final type = (sched['scheduleType'] as String? ?? 'revision').toUpperCase();
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -1871,7 +2389,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               OutlinedButton.icon(
                 onPressed: () => _addSchedule(s['id'] as int),
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add Schedule'),
+                label: const Text('Add Session'),
               ),
               const SizedBox(height: 24),
               _buildSectionTitle('Quick Mark', cs),
@@ -2059,4 +2577,24 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       ),
     );
   }
+
+  Widget _buildMiniStat(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: color.withOpacity(0.7)),
+        ),
+      ],
+    );
+  }
 }
+
+  
+
+  
