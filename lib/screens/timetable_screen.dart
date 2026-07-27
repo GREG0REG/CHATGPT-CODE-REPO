@@ -41,12 +41,16 @@ class _TimetableScreenState extends State<TimetableScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() => _loading = true);
-    await _loadClasses();
-    await _loadTasks();
-    if (mounted) setState(() => _loading = false);
-    await WidgetService.refreshTimetableWidget();
-  }
+  setState(() => _loading = true);
+  await _loadClasses();
+  await _loadTasks();
+  if (mounted) setState(() => _loading = false);
+  await WidgetService.refreshTimetableWidget();
+  await WidgetService.refreshAttendanceWidget();
+  await WidgetService.refreshHabitWidget();
+  await WidgetService.refreshReadingWidget();
+}
+
 
   Future<void> _loadClasses() async {
     final db = await DatabaseHelper.instance.database;
