@@ -1,6 +1,7 @@
 // FILE: lib/screens/timetable_screen.dart
 // COMPLETE REPLACEMENT — Smart Timetable with vertical timeline, conflict detection, study suggestions
 // FIXED: All-day tasks now display, week view toggle added, conflict overlap highlighting
+// NEET-ENHANCED: 5 AM – 12 AM timeline, longer study blocks, PCB subject hints
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -24,13 +25,13 @@ class _TimetableScreenState extends State<TimetableScreen> {
   List<Map<String, dynamic>> _tasks = [];
   bool _weekView = false;
 
-  // Timeline constants
-  static const int _timelineStartHour = 8;
-  static const int _timelineEndHour = 20;
-  static const int _timelineStartMinutes = _timelineStartHour * 60; // 480
-  static const int _timelineEndMinutes = _timelineEndHour * 60;     // 1200
-  static const int _totalTimelineMinutes = _timelineEndMinutes - _timelineStartMinutes; // 720
-  static const double _hourHeight = 72.0; // pixels per hour
+  // Timeline constants — NEET aspirant schedule: 5 AM to 12 AM
+  static const int _timelineStartHour = 5;
+  static const int _timelineEndHour = 24;
+  static const int _timelineStartMinutes = _timelineStartHour * 60; // 300
+  static const int _timelineEndMinutes = _timelineEndHour * 60;     // 1440
+  static const int _totalTimelineMinutes = _timelineEndMinutes - _timelineStartMinutes; // 1140
+  static const double _hourHeight = 64.0; // pixels per hour
   static const double _timelineWidth = 60.0; // width of time labels column
 
   @override
@@ -543,6 +544,8 @@ class _TimetableScreenState extends State<TimetableScreen> {
     int durationMinutes = (bestSlot['duration'] as int).clamp(30, 120);
     int startMinutes = bestSlot['start'] as int;
 
+    final neetSubjects = ['Physics', 'Chemistry', 'Biology', 'Zoology', 'Botany'];
+
     final result = await showDialog<Map<String, dynamic>?>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -580,9 +583,18 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   const SizedBox(height: 16),
                   TextField(
                     controller: subjectController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Subject *',
-                      prefixIcon: Icon(Icons.book),
+                      prefixIcon: const Icon(Icons.book),
+                      hintText: 'e.g. Physics, Organic Chemistry',
+                      suffixIcon: PopupMenuButton<String>(
+                        icon: const Icon(Icons.arrow_drop_down),
+                        onSelected: (val) {
+                          subjectController.text = val;
+                          setDialogState(() {});
+                        },
+                        itemBuilder: (context) => neetSubjects.map((s) => PopupMenuItem(value: s, child: Text(s))).toList(),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -592,7 +604,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       labelText: 'Duration',
                       prefixIcon: Icon(Icons.timer),
                     ),
-                    items: [30, 45, 60, 90, 120].map((m) => DropdownMenuItem(
+                    items: [30, 45, 60, 90, 120, 150, 180].map((m) => DropdownMenuItem(
                       value: m,
                       child: Text('$m minutes'),
                     )).toList(),
@@ -628,7 +640,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   final endMin = startMinutes + durationMinutes;
                   if (endMin > _timelineEndMinutes) {
                     ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('Study block extends beyond 8 PM')),
+                      const SnackBar(content: Text('Study block extends beyond timeline')),
                     );
                     return;
                   }
@@ -1309,6 +1321,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   final hour = _timelineStartHour + i;
                   final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
                   final ampm = hour >= 12 ? 'PM' : 'AM';
+                  // Handle midnight display
+                  final labelHour = hour == 24 ? 12 : displayHour;
+                  final labelAmpm = hour == 24 ? 'AM' : ampm;
                   return Container(
                     height: _hourHeight,
                     alignment: Alignment.topCenter,
@@ -1320,7 +1335,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       ),
                     ),
                     child: Text(
-                      '$displayHour $ampm',
+                      '$labelHour $labelAmpm',
                       style: TextStyle(
                         fontSize: 11,
                         color: cs.outline,
@@ -1417,7 +1432,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 2),
         decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.06),
+          color: Colors.green.withOpacity(0.06),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Colors.green.withOpacity(0.2), style: BorderStyle.solid),
         ),
