@@ -28,7 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _smartFormat = false;
   bool _use24Hour = true;
   AppThemeOption _theme = AppThemeOption.auroraBorealis;
-  WidgetBackgroundType _bgType = WidgetBackgroundType.themeColor;
+  String _bgType = 'themeColor';
   String? _imagePath;
   ThemeMode _themeMode = ThemeMode.system;
   Color _customColor = const Color(0xFF00BFA5);
@@ -42,6 +42,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _adaptiveRefresh = true;
   bool _loading = true;
   bool _busy = false;
+  bool _themesExpanded = false;
 
   String _batteryStatus = 'Unknown';
   bool _batteryLow = false;
@@ -142,8 +143,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) EventCountdownAppState.of(context)?.updateTheme(option);
   }
 
-  Future<void> _setBgType(WidgetBackgroundType type) async {
-    if (type == WidgetBackgroundType.customImage && _imagePath == null) {
+  Future<void> _setBgType(String type) async {
+    if (type == 'customImage' && _imagePath == null) {
       final picked = await _pickImage();
       if (!picked) return;
     }
@@ -381,51 +382,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const Divider(),
-                const _SectionHeader('App Theme'),
-                ...AppThemes.all.map((info) {
-                  final isSelected = _theme == info.option;
-                  return RadioListTile<AppThemeOption>(
-                    title: Row(children: [
-                      Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(colors: info.gradientColors),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(info.label)
-                    ]),
-                    secondary: isSelected
-                        ? const Icon(Icons.check_circle, color: Colors.green)
-                        : null,
-                    value: info.option,
-                    groupValue: _theme,
-                    onChanged: (v) {
-                      if (v != null) _setTheme(v);
-                      if (v == AppThemeOption.customHex) _showColorPicker();
-                    },
-                  );
-                }),
-                if (_theme == AppThemeOption.customHex) ...[
-                  ListTile(
-                    leading: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: _customColor,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.grey),
-                      ),
-                    ),
-                    title: const Text('Custom Color'),
-                    subtitle: Text(
-                        '#${_customColor.value.toRadixString(16).substring(2).toUpperCase()}'),
-                    trailing:
-                        TextButton(onPressed: _showColorPicker, child: const Text('Change')),
-                  ),
-                ],
+                // ── EXPANDABLE THEME SECTION ──
+                _ExpandableThemeSection(
+                  expanded: _themesExpanded,
+                  onToggle: () => setState(() => _themesExpanded = !_themesExpanded),
+                  currentTheme: _theme,
+                  customColor: _customColor,
+                  onThemeSelected: _setTheme,
+                  onCustomColorTap: _showColorPicker,
+                ),
                 const Divider(),
                 SwitchListTile(
                   secondary: const Icon(Icons.contrast),
@@ -528,22 +493,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   TextButton(onPressed: _clearHistory, child: const Text('Clear History')),
                 const Divider(),
                 const _SectionHeader('Home Screen Widget Background'),
-                RadioListTile<WidgetBackgroundType>(
+                RadioListTile<String>(
                   title: const Text('App theme color'),
                   subtitle: const Text('Default. Uses the theme color above.'),
-                  value: WidgetBackgroundType.themeColor,
+                  value: 'themeColor',
                   groupValue: _bgType,
                   onChanged: (v) => v != null ? _setBgType(v) : null,
                 ),
-                RadioListTile<WidgetBackgroundType>(
+                RadioListTile<String>(
                   title: const Text('Custom image'),
                   subtitle: const Text(
                       'Pick a photo from your gallery (dark overlay applied for readability).'),
-                  value: WidgetBackgroundType.customImage,
+                  value: 'customImage',
                   groupValue: _bgType,
                   onChanged: (v) => v != null ? _setBgType(v) : null,
                 ),
-                if (_bgType == WidgetBackgroundType.customImage) ...[
+                if (_bgType == 'customImage') ...[
                   if (_imagePath != null)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -645,6 +610,202 @@ class _SettingsScreenState extends State<SettingsScreen> {
       case ThemeMode.system:
         return 'Follow system';
     }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EXPANDABLE THEME SECTION WIDGET
+// ═══════════════════════════════════════════════════════════════
+
+class _ExpandableThemeSection extends StatelessWidget {
+  final bool expanded;
+  final VoidCallback onToggle;
+  final AppThemeOption currentTheme;
+  final Color customColor;
+  final ValueChanged<AppThemeOption> onThemeSelected;
+  final VoidCallback onCustomColorTap;
+
+  const _ExpandableThemeSection({
+    required this.expanded,
+    required this.onToggle,
+    required this.currentTheme,
+    required this.customColor,
+    required this.onThemeSelected,
+    required this.onCustomColorTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Column(
+      children: [
+        ListTile(
+          leading: const Icon(Icons.palette),
+          title: const Text('App Theme'),
+          subtitle: Text(_themeLabel(currentTheme)),
+          trailing: AnimatedRotation(
+            turns: expanded ? 0.5 : 0,
+            duration: const Duration(milliseconds: 200),
+            child: Icon(Icons.expand_more, color: cs.primary),
+          ),
+          onTap: onToggle,
+        ),
+        AnimatedCrossFade(
+          firstChild: const SizedBox.shrink(),
+          secondChild: _buildThemeGrid(context),
+          crossFadeState: expanded
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          duration: const Duration(milliseconds: 250),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildThemeGrid(BuildContext context) {
+    final themes = AppThemes.all;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Column(
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: themes.map((info) {
+              final isSelected = currentTheme == info.option;
+              return _ThemeChip(
+                info: info,
+                isSelected: isSelected,
+                onTap: () {
+                  onThemeSelected(info.option);
+                  if (info.option == AppThemeOption.customHex) {
+                    onCustomColorTap();
+                  }
+                },
+              );
+            }).toList(),
+          ),
+          if (currentTheme == AppThemeOption.customHex) ...[
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: customColor,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.grey.shade400),
+                ),
+              ),
+              title: const Text('Custom Color'),
+              subtitle: Text(
+                '#${customColor.value.toRadixString(16).substring(2).toUpperCase()}',
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              trailing: TextButton(
+                onPressed: onCustomColorTap,
+                child: const Text('Change'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _themeLabel(AppThemeOption option) {
+    final info = AppThemes.all.firstWhere(
+      (t) => t.option == option,
+      orElse: () => AppThemes.all.first,
+    );
+    return info.label;
+  }
+}
+
+class _ThemeChip extends StatelessWidget {
+  final ThemeInfo info;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ThemeChip({
+    required this.info,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 86,
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: info.gradientColors,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: isSelected
+                  ? const Icon(Icons.check, color: Colors.white, size: 20)
+                  : null,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              info.label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurface,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
