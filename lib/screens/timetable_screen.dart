@@ -6,7 +6,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../database_helper.dart';
+import '../db/database_helper.dart';
 import '../services/widget_service.dart';
 import 'main_screen.dart';
 
@@ -41,16 +41,14 @@ class _TimetableScreenState extends State<TimetableScreen> {
   }
 
   Future<void> _loadData() async {
-  setState(() => _loading = true);
-  await _loadClasses();
-  await _loadTasks();
-  if (mounted) setState(() => _loading = false);
-  await WidgetService.refreshTimetableWidget();
-  await WidgetService.refreshAttendanceWidget();
-  await WidgetService.refreshHabitWidget();
-  await WidgetService.refreshReadingWidget();
-}
-
+    setState(() => _loading = true);
+    await _loadClasses();
+    await _loadTasks();
+    if (mounted) setState(() => _loading = false);
+    await WidgetService.refreshTimetableWidget();
+    await WidgetService.refreshAttendanceWidget();
+    await WidgetService.refreshHabitWidget();
+  }
 
   Future<void> _loadClasses() async {
     final db = await DatabaseHelper.instance.database;
@@ -1220,7 +1218,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                             Icon(Icons.free_breakfast, size: 16, color: Colors.green.shade700),
                             const SizedBox(width: 6),
                             Text(
-                              '${freeSlots.length} free slot${freeSlots.length == 1 ? '' : 's'} (${freeSlots.fold<int>(0, (sum, s) => sum + (s['duration'] as int)) ~/ 60}h ${freeSlots.fold<int>(0, (sum, s) => sum + (s['duration'] as int)) % 60}m)',
+                                                            '${freeSlots.length} free slot${freeSlots.length == 1 ? '' : 's'} (${freeSlots.fold<int>(0, (sum, s) => sum + (s['duration'] as int)) ~/ 60}h ${freeSlots.fold<int>(0, (sum, s) => sum + (s['duration'] as int)) % 60}m)',
                               style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w500),
                             ),
                           ],
