@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsService {
   static final SettingsService _instance = SettingsService._internal();
+  static SettingsService get instance => _instance;
   factory SettingsService() => _instance;
   SettingsService._internal();
 
@@ -39,6 +40,92 @@ class SettingsService {
     await prefs.setBool('useSystemTheme', value);
   }
 
+  Future<bool> getAdaptiveRefreshEnabled() async {
+    final prefs = await _preferences;
+    return prefs.getBool('adaptiveRefreshEnabled') ?? true;
+  }
+
+  Future<void> setAdaptiveRefreshEnabled(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool('adaptiveRefreshEnabled', value);
+  }
+
+  Future<String> getSelectedTheme() async {
+    final prefs = await _preferences;
+    return prefs.getString('selectedTheme') ?? 'default';
+  }
+
+  Future<void> setSelectedTheme(String value) async {
+    final prefs = await _preferences;
+    await prefs.setString('selectedTheme', value);
+  }
+
+  Future<String> getThemeMode() async {
+    final prefs = await _preferences;
+    return prefs.getString('themeMode') ?? 'system';
+  }
+
+  Future<void> setThemeMode(String value) async {
+    final prefs = await _preferences;
+    await prefs.setString('themeMode', value);
+  }
+
+  Future<int> getCustomColor() async {
+    final prefs = await _preferences;
+    return prefs.getInt('customColor') ?? 0xFF6200EE;
+  }
+
+  Future<void> setCustomColor(int value) async {
+    final prefs = await _preferences;
+    await prefs.setInt('customColor', value);
+  }
+
+  Future<bool> getHighContrast() async {
+    final prefs = await _preferences;
+    return prefs.getBool('highContrast') ?? false;
+  }
+
+  Future<void> setHighContrast(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool('highContrast', value);
+  }
+
+  // ============================================
+  // FIRST LAUNCH
+  // ============================================
+  Future<bool> isFirstLaunch() async {
+    final prefs = await _preferences;
+    return prefs.getBool('isFirstLaunch') ?? true;
+  }
+
+  Future<void> setFirstLaunch(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool('isFirstLaunch', value);
+  }
+
+  // ============================================
+  // FORMAT SETTINGS
+  // ============================================
+  Future<bool> getSmartFormatEnabled() async {
+    final prefs = await _preferences;
+    return prefs.getBool('smartFormatEnabled') ?? true;
+  }
+
+  Future<void> setSmartFormatEnabled(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool('smartFormatEnabled', value);
+  }
+
+  Future<bool> getUse24HourFormat() async {
+    final prefs = await _preferences;
+    return prefs.getBool('use24HourFormat') ?? false;
+  }
+
+  Future<void> setUse24HourFormat(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool('use24HourFormat', value);
+  }
+
   // ============================================
   // NOTIFICATION SETTINGS
   // ============================================
@@ -60,6 +147,16 @@ class SettingsService {
   Future<void> setSoundEnabled(bool value) async {
     final prefs = await _preferences;
     await prefs.setBool('soundEnabled', value);
+  }
+
+  Future<int> getDefaultReminderMinutes() async {
+    final prefs = await _preferences;
+    return prefs.getInt('defaultReminderMinutes') ?? 15;
+  }
+
+  Future<void> setDefaultReminderMinutes(int value) async {
+    final prefs = await _preferences;
+    await prefs.setInt('defaultReminderMinutes', value);
   }
 
   // ============================================
@@ -146,6 +243,26 @@ class SettingsService {
     await prefs.setBool('homeWidgetEnabled', value);
   }
 
+  Future<bool> getWidgetProgressBar() async {
+    final prefs = await _preferences;
+    return prefs.getBool('widgetProgressBar') ?? true;
+  }
+
+  Future<void> setWidgetProgressBar(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool('widgetProgressBar', value);
+  }
+
+  Future<bool> getWidgetPulseAnimation() async {
+    final prefs = await _preferences;
+    return prefs.getBool('widgetPulseAnimation') ?? true;
+  }
+
+  Future<void> setWidgetPulseAnimation(bool value) async {
+    final prefs = await _preferences;
+    await prefs.setBool('widgetPulseAnimation', value);
+  }
+
   // ============================================
   // EXPORT/IMPORT SETTINGS
   // ============================================
@@ -157,6 +274,17 @@ class SettingsService {
   Future<void> setAutoBackup(bool value) async {
     final prefs = await _preferences;
     await prefs.setBool('autoBackup', value);
+  }
+
+  Future<DateTime?> getLastVacuum() async {
+    final prefs = await _preferences;
+    final ms = prefs.getInt('lastVacuum');
+    return ms != null ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
+  }
+
+  Future<void> setLastVacuum(DateTime value) async {
+    final prefs = await _preferences;
+    await prefs.setInt('lastVacuum', value.millisecondsSinceEpoch);
   }
 
   // ============================================
