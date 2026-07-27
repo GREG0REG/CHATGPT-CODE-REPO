@@ -4,7 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../db/database_helper.dart';
+import '../database_helper.dart';
 import '../models/custom_reminder.dart';
 import '../models/event.dart';
 import '../models/subtask.dart';
