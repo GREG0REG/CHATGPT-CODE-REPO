@@ -42,12 +42,20 @@ class HabitWidgetProvider : AppWidgetProvider() {
                 val weekCompletion = mutableListOf<Boolean>()
 
                 try {
-                    val file = File(context.filesDir, HABIT_DATA_FILE)
-                    if (file.exists()) {
-                        val json = JSONObject(file.readText())
+                    // CRITICAL FIX: Use getApplicationSupportDirectory path
+                    val dir = context.getDir("flutter", Context.MODE_PRIVATE)
+                    val file = File(dir.parentFile, "app_flutter/habit_widget_data.json")
+                    
+                    // Fallback to filesDir for compatibility
+                    val fallbackFile = File(context.filesDir, HABIT_DATA_FILE)
+                    
+                    val targetFile = if (file.exists()) file else fallbackFile
+
+                    if (targetFile.exists()) {
+                        val json = JSONObject(targetFile.readText())
                         habitName = json.optString("habitName", habitName)
                         weekProgress = json.optInt("weekProgress", 0)
-                        weekTarget = json.optInt("weekTarget", 7)
+                        weekTarget = json.optInt("weekTarget",                         weekTarget = json.optInt("weekTarget", 7)
                         statusColor = json.optString("colorHex", "#4CAF50")
                         message = json.optString("message", message)
 
@@ -58,6 +66,8 @@ class HabitWidgetProvider : AppWidgetProvider() {
                                 weekCompletion.add(circlesArray.getBoolean(i))
                             }
                         }
+                    } else {
+                        android.util.Log.w("HabitWidget", "Data file not found at: ${targetFile.absolutePath}")
                     }
                 } catch (e: Exception) {
                     android.util.Log.e("HabitWidget", "JSON read failed", e)
