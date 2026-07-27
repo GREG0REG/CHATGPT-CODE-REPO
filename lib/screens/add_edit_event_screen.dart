@@ -4,7 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../database_helper.dart';
+import '../db/database_helper.dart';
 import '../models/custom_reminder.dart';
 import '../models/event.dart';
 import '../models/subtask.dart';
@@ -319,7 +319,7 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
         debugPrint('Notification error: $e');
       }
 
-      await WidgetService.refreshAllWidget();
+      await WidgetService.refreshAllWidgets();
       HapticFeedback.lightImpact();
 
       if (mounted) {
@@ -382,7 +382,7 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
     );
   }
 
-  Widget _buildPrioritySelector() {
+    Widget _buildPrioritySelector() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
