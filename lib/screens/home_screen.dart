@@ -12,7 +12,7 @@ import '../models/event.dart';
 import '../services/notification_service.dart';
 import '../services/recurrence_service.dart';
 import '../services/settings_service.dart';
-import '../services/widget_service.dart';
+import 'package:event_countdown/services/widget_service.dart';
 import '../theme/app_themes.dart';
 import '../event_card.dart';
 import 'add_edit_event_screen.dart';
