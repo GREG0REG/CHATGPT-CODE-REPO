@@ -23,10 +23,16 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         private const val KEY_SUBJECT = "flutter.pomodoro_subject"
         private const val KEY_STATUS = "flutter.pomodoro_status"
         private const val KEY_SESSIONS = "flutter.pomodoro_completed_sessions"
+        // NEW NEET keys
+        private const val KEY_DISTRACTION_COUNT = "flutter.pomodoro_distraction_count"
+        private const val KEY_TOPIC_TAG = "flutter.pomodoro_topic_tag"
 
         const val ACTION_POMODORO_TICK = "com.example.event_countdown.POMODORO_WIDGET_TICK"
         private const val ACTIVE_TICK_INTERVAL_MS = 1_000L
         private const val IDLE_TICK_INTERVAL_MS = 10_000L
+
+        // NEET Exam Date: May 2, 2026
+        private const val NEET_EXAM_MILLIS = 1751423400000L
 
         // Flutter stores numbers unpredictably as Int or Long. These helpers try both.
         private fun getIntPref(prefs: SharedPreferences, key: String, default: Int): Int {
@@ -66,6 +72,12 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             return "$m:$s"
         }
 
+        fun calculateNeetDaysRemaining(): Int {
+            val now = System.currentTimeMillis()
+            val diff = NEET_EXAM_MILLIS - now
+            return (diff / (1000 * 60 * 60 * 24)).toInt().coerceAtLeast(0)
+        }
+
         fun updateWidgetDirectly(
             context: Context,
             appWidgetManager: AppWidgetManager,
@@ -76,15 +88,18 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
                 val phase = prefs.getString(KEY_PHASE, "idle") ?: "idle"
                 val endTime = getLongPref(prefs, KEY_END_TIME, 0L).takeIf { it > 0 }
-                val totalDuration = getIntPref(prefs, KEY_TOTAL_DURATION, 25 * 60)
+                val totalDuration = getIntPref(prefs, KEY_TOTAL_DURATION, 90 * 60)
                 val subject = prefs.getString(KEY_SUBJECT, "Ready to Focus") ?: "Ready to Focus"
                 val status = prefs.getString(KEY_STATUS, "Ready") ?: "Ready"
                 val sessions = getIntPref(prefs, KEY_SESSIONS, 0)
+                val topicTag = prefs.getString(KEY_TOPIC_TAG, null)
+                val distractionCount = getIntPref(prefs, KEY_DISTRACTION_COUNT, 0)
 
                 val remainingSeconds = calculateRemainingTime(endTime)
+                val neetDays = calculateNeetDaysRemaining()
 
                 val timerText = when {
-                    phase == "idle" -> "Tap to start"
+                    phase == "idle" -> "Tap to Start"
                     phase == "paused" -> {
                         val savedRemaining = getIntPref(prefs, "flutter.pomodoro_remaining_seconds", 0)
                         formatTime(savedRemaining)
@@ -101,34 +116,77 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     else -> 0
                 }
 
-                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, subject=$subject, timer=$timerText, remaining=$remainingSeconds")
+                // Determine phase colors and drawables
+                val (ringDrawable, phaseColor, bgColor) = when {
+                    phase.equals("shortBreak", ignoreCase = true) ||
+                    phase.equals("longBreak", ignoreCase = true) -> {
+                        Triple(R.drawable.widget_circular_progress_green, Color.parseColor("#00C9A7"), Color.parseColor("#0A2E2A"))
+                    }
+                    phase.equals("paused", ignoreCase = true) -> {
+                        Triple(R.drawable.widget_circular_progress_orange, Color.parseColor("#FFA726"), Color.parseColor("#2A1F0A"))
+                    }
+                    phase.equals("focusing", ignoreCase = true) -> {
+                        Triple(R.drawable.widget_circular_progress_teal, Color.parseColor("#5B6EF5"), Color.parseColor("#0F0F23"))
+                    }
+                    else -> {
+                        Triple(R.drawable.widget_circular_progress, Color.parseColor("#5B6EF5"), Color.parseColor("#0F0F23"))
+                    }
+                }
+
+                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, subject=$subject, timer=$timerText, remaining=$remainingSeconds, progress=$progressPercent")
 
                 val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
 
-                views.setTextViewText(R.id.pomodoro_widget_subject, subject)
-                views.setTextViewText(R.id.pomodoro_widget_timer, timerText)
-                views.setTextViewText(R.id.pomodoro_widget_status, status)
-                views.setProgressBar(R.id.pomodoro_progress_ring, 100, progressPercent, false)
+                // ── Apply background color ──
+                views.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", bgColor)
 
-                val themeColor = when {
-                    phase.equals("shortBreak", ignoreCase = true) ||
-                    phase.equals("longBreak", ignoreCase = true) -> Color.parseColor("#00BFA5")
-                    phase.equals("paused", ignoreCase = true) -> Color.parseColor("#FFA726")
-                    else -> Color.parseColor("#FF6B6B")
+                // ── NEET Countdown Banner ──
+                if (neetDays > 0) {
+                    views.setViewVisibility(R.id.neet_banner, android.view.View.VISIBLE)
+                    views.setTextViewText(R.id.neet_days_text, "$neetDays")
+                    views.setTextViewText(R.id.neet_label_text, if (neetDays == 1) "day left" else "days left")
+                    val bannerColor = if (neetDays <= 30) Color.parseColor("#FF6B6B") else Color.parseColor("#667EEA")
+                    views.setInt(R.id.neet_banner, "setBackgroundColor", bannerColor)
+                } else {
+                    views.setViewVisibility(R.id.neet_banner, android.view.View.GONE)
                 }
 
-                views.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", themeColor)
+                // ── Subject & Topic ──
+                val displaySubject = if (topicTag != null) "$subject • $topicTag" else subject
+                views.setTextViewText(R.id.pomodoro_widget_subject, displaySubject)
                 views.setTextColor(R.id.pomodoro_widget_subject, Color.WHITE)
-                views.setTextColor(R.id.pomodoro_widget_timer, Color.WHITE)
-                views.setTextColor(R.id.pomodoro_widget_status, Color.WHITE)
 
+                // ── Timer (centered in ring) ──
+                views.setTextViewText(R.id.pomodoro_widget_timer, timerText)
+                views.setTextColor(R.id.pomodoro_widget_timer, Color.WHITE)
+
+                // ── Status ──
+                views.setTextViewText(R.id.pomodoro_widget_status, status)
+                views.setTextColor(R.id.pomodoro_widget_status, Color.parseColor("#B0FFFFFF"))
+
+                // ── Circular Progress Ring ──
+                views.setProgressBar(R.id.pomodoro_progress_ring, 100, progressPercent, false)
+                // Apply the appropriate drawable based on phase
+                views.setInt(R.id.pomodoro_progress_ring, "setProgressDrawable", ringDrawable)
+
+                // ── Session Counter ──
                 if (sessions > 0) {
                     views.setViewVisibility(R.id.pomodoro_session_chips, android.view.View.VISIBLE)
-                    views.setTextViewText(R.id.completed_sessions, "\uD83D\uDD25 $sessions")
+                    views.setTextViewText(R.id.completed_sessions, "🔥 $sessions")
+                    views.setTextColor(R.id.completed_sessions, Color.parseColor("#FFA726"))
                 } else {
                     views.setViewVisibility(R.id.pomodoro_session_chips, android.view.View.GONE)
                 }
 
+                // ── Distraction Counter (only during focus) ──
+                if (phase.equals("focusing", ignoreCase = true) && distractionCount > 0) {
+                    views.setViewVisibility(R.id.distraction_chip, android.view.View.VISIBLE)
+                    views.setTextViewText(R.id.distraction_text, "⚡ $distractionCount")
+                } else {
+                    views.setViewVisibility(R.id.distraction_chip, android.view.View.GONE)
+                }
+
+                // ── Tap to open app ──
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 if (launchIntent != null) {
                     val pendingIntent = PendingIntent.getActivity(
@@ -166,7 +224,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 )
                 alarmManager.cancel(pendingIntent)
                 val triggerAt = SystemClock.elapsedRealtime() + intervalMillis
-                
+
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         alarmManager.setExactAndAllowWhileIdle(
@@ -213,20 +271,17 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         }
     }
 
-    // CRITICAL FIX: Added onEnabled to schedule first alarm when widget is placed
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
         android.util.Log.i("PomodoroWidget", "onEnabled: scheduling first tick")
         scheduleTick(context, IDLE_TICK_INTERVAL_MS)
     }
 
-    // CRITICAL FIX: onUpdate now calls scheduleTick so alarm is always rescheduled
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         android.util.Log.i("PomodoroWidget", "onUpdate: ${appWidgetIds.size} widgets")
         for (widgetId in appWidgetIds) {
             updateWidgetDirectly(context, appWidgetManager, widgetId)
         }
-        // CRITICAL FIX: Always reschedule tick after update so widget keeps running when app closes
         scheduleTick(context, IDLE_TICK_INTERVAL_MS)
     }
 
@@ -260,7 +315,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         super.onDisabled(context)
         cancelAlarm(context)
     }
-    
+
     private fun cancelAlarm(context: Context) {
         try {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
