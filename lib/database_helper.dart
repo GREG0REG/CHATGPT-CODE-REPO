@@ -1,6 +1,11 @@
 // FILE: lib/db/database_helper.dart
-// COMPLETE REPLACEMENT — Merged v13 + v14: All features unified
-// PRESERVED: All existing tables, migrations v1-v14, and every existing CRUD method
+// COMPLETE REPLACEMENT — Version 16 (NEET Edition)
+// FIXED: Import paths resolved, getAllClassSchedules() added
+// FIXED: Event._validateMap now accepts bool AND int for boolean fields
+// NEW: gpa_courses table with proper GPA schema
+// NEW: NEET fields in events and study_sessions tables
+// NEW: 5 NEET analytics methods
+// ALL v1-v15 migrations preserved, v15→v16 migration added
 
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -34,7 +39,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 15, // BUMPED: v15 adds NEET fields to study_sessions
+      version: 16, // BUMPED: v16 adds NEET fields + gpa_courses + fixes
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -51,14 +56,15 @@ class DatabaseHelper {
         if (oldVersion < 11) await _migrateV10ToV11(db);
         if (oldVersion < 12) await _migrateV11ToV12(db);
         if (oldVersion < 13) await _migrateV12ToV13(db);
-        if (oldVersion < 14) await _migrateV13ToV14(db); // NEW: reading_sessions
-        if (oldVersion < 15) await _migrateV14ToV15(db); // NEW: NEET study session fields
+        if (oldVersion < 14) await _migrateV13ToV14(db);
+        if (oldVersion < 15) await _migrateV14ToV15(db);
+        if (oldVersion < 16) await _migrateV15ToV16(db); // NEW: NEET + gpa_courses
       },
     );
   }
 
   Future<void> _createTables(Database db) async {
-    // ---- EXISTING TABLES (UNCHANGED) ----
+    // ---- EVENTS (with NEET fields v16) ----
     await db.execute("""
       CREATE TABLE events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,9 +81,15 @@ class DatabaseHelper {
         iconName TEXT,
         priority INTEGER DEFAULT 2,
         subjectTag TEXT,
-        isCompleted INTEGER DEFAULT 0
+        isCompleted INTEGER DEFAULT 0,
+        isNeetExam INTEGER DEFAULT 0,
+        neetTotalMarks INTEGER,
+        neetTargetScore INTEGER,
+        neetSubjectFocus TEXT
       )
     """);
+
+    // ---- CUSTOM REMINDERS ----
     await db.execute("""
       CREATE TABLE custom_reminders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,6 +100,8 @@ class DatabaseHelper {
         isEnabled INTEGER DEFAULT 1
       )
     """);
+
+    // ---- NOTIFICATION HISTORY ----
     await db.execute("""
       CREATE TABLE notification_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,7 +112,7 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- STUDY SUITE TABLES ----
+    // ---- STUDY SESSIONS (with NEET fields v16) ----
     await db.execute("""
       CREATE TABLE study_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -110,9 +124,18 @@ class DatabaseHelper {
         notes TEXT,
         distractionCount INTEGER DEFAULT 0,
         intensityRating INTEGER DEFAULT 0,
-        topicTag TEXT
+        topicTag TEXT,
+        neetSubject INTEGER,
+        mcqsAttempted INTEGER DEFAULT 0,
+        mcqsCorrect INTEGER DEFAULT 0,
+        difficultyLevel INTEGER DEFAULT 1,
+        revisionRound INTEGER DEFAULT 0,
+        mockTestScore INTEGER,
+        mockTestRank INTEGER
       )
     """);
+
+    // ---- SUBTASKS ----
     await db.execute("""
       CREATE TABLE subtasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,6 +145,8 @@ class DatabaseHelper {
         orderIndex INTEGER DEFAULT 0
       )
     """);
+
+    // ---- FLASHCARDS ----
     await db.execute("""
       CREATE TABLE flashcards (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -143,6 +168,8 @@ class DatabaseHelper {
         reviewHistoryJson TEXT
       )
     """);
+
+    // ---- STUDY SCHEDULES ----
     await db.execute("""
       CREATE TABLE study_schedules (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -154,6 +181,8 @@ class DatabaseHelper {
         isAccepted INTEGER DEFAULT 0
       )
     """);
+
+    // ---- DAILY GOALS ----
     await db.execute("""
       CREATE TABLE daily_goals (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -176,7 +205,7 @@ class DatabaseHelper {
         createdAtMillis INTEGER NOT NULL
       )
     """);
-    
+
     // ---- FLASHCARD REVIEW HISTORY (v8) ----
     await db.execute("""
       CREATE TABLE flashcard_review_history (
@@ -203,8 +232,8 @@ class DatabaseHelper {
         streakCount INTEGER DEFAULT 0
       )
     """);
-    
-    // ---- GRADE COMPONENTS (v8) ----
+
+    // ---- GRADE COMPONENTS (v8) — LEGACY, preserved for backward compat ----
     await db.execute("""
       CREATE TABLE grade_components (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -215,7 +244,21 @@ class DatabaseHelper {
         createdAtMillis INTEGER NOT NULL
       )
     """);
-    
+
+    // ---- GPA COURSES (v16) — NEW proper GPA schema ----
+    await db.execute("""
+      CREATE TABLE gpa_courses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        credits INTEGER NOT NULL DEFAULT 3,
+        grade TEXT NOT NULL,
+        gradePoints REAL NOT NULL,
+        semester TEXT DEFAULT 'Current',
+        subjectCategory TEXT,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+
     // ---- QUICK NOTES (v8) ----
     await db.execute("""
       CREATE TABLE quick_notes (
@@ -386,9 +429,7 @@ class DatabaseHelper {
       )
     """);
 
-    // ═══════════════════════════════════════════════════════════════
-    // NEW TABLE (v14): READING SESSIONS — Detailed session tracking
-    // ═══════════════════════════════════════════════════════════════
+    // ---- READING SESSIONS (v14) ----
     await db.execute("""
       CREATE TABLE reading_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -405,8 +446,8 @@ class DatabaseHelper {
     """);
   }
 
-  // ============================================
-  // MIGRATIONS v1-v13 (PRESERVED EXACTLY)
+    // ============================================
+  // MIGRATIONS v1-v15 (PRESERVED EXACTLY)
   // ============================================
   Future<void> _migrateV1ToV2(Database db) async {
     await db.execute('ALTER TABLE events ADD COLUMN recurrence INTEGER DEFAULT 0');
@@ -713,9 +754,6 @@ class DatabaseHelper {
     await db.execute('ALTER TABLE habit_logs ADD COLUMN metricValue INTEGER');
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // NEW MIGRATION: v13 → v14 — Add reading_sessions table
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _migrateV13ToV14(Database db) async {
     await db.execute("""
       CREATE TABLE reading_sessions (
@@ -733,17 +771,47 @@ class DatabaseHelper {
     """);
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // NEW MIGRATION: v14 → v15 — Add NEET fields to study_sessions
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _migrateV14ToV15(Database db) async {
     await db.execute('ALTER TABLE study_sessions ADD COLUMN distractionCount INTEGER DEFAULT 0');
     await db.execute('ALTER TABLE study_sessions ADD COLUMN intensityRating INTEGER DEFAULT 0');
     await db.execute('ALTER TABLE study_sessions ADD COLUMN topicTag TEXT');
   }
-// --- END PART 1 ---
 
-      // ============================================
+  // ═══════════════════════════════════════════════════════════════
+  // NEW MIGRATION: v15 → v16 — NEET fields + gpa_courses table
+  // ═══════════════════════════════════════════════════════════════
+  Future<void> _migrateV15ToV16(Database db) async {
+    // 1. Add NEET columns to 'events' table
+    await db.execute('ALTER TABLE events ADD COLUMN isNeetExam INTEGER DEFAULT 0');
+    await db.execute('ALTER TABLE events ADD COLUMN neetTotalMarks INTEGER');
+    await db.execute('ALTER TABLE events ADD COLUMN neetTargetScore INTEGER');
+    await db.execute('ALTER TABLE events ADD COLUMN neetSubjectFocus TEXT');
+
+    // 2. Add NEET columns to 'study_sessions' table
+    await db.execute('ALTER TABLE study_sessions ADD COLUMN neetSubject INTEGER');
+    await db.execute('ALTER TABLE study_sessions ADD COLUMN mcqsAttempted INTEGER DEFAULT 0');
+    await db.execute('ALTER TABLE study_sessions ADD COLUMN mcqsCorrect INTEGER DEFAULT 0');
+    await db.execute('ALTER TABLE study_sessions ADD COLUMN difficultyLevel INTEGER DEFAULT 1');
+    await db.execute('ALTER TABLE study_sessions ADD COLUMN revisionRound INTEGER DEFAULT 0');
+    await db.execute('ALTER TABLE study_sessions ADD COLUMN mockTestScore INTEGER');
+    await db.execute('ALTER TABLE study_sessions ADD COLUMN mockTestRank INTEGER');
+
+    // 3. Create NEW 'gpa_courses' table (proper GPA schema)
+    await db.execute("""
+      CREATE TABLE gpa_courses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        credits INTEGER NOT NULL DEFAULT 3,
+        grade TEXT NOT NULL,
+        gradePoints REAL NOT NULL,
+        semester TEXT DEFAULT 'Current',
+        subjectCategory TEXT,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+  }
+
+    // ============================================
   // EVENT CRUD (PRESERVED)
   // ============================================
   Future<int> insertEvent(Event event) async {
@@ -834,7 +902,7 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // STUDY SESSION CRUD (PRESERVED)
+  // STUDY SESSION CRUD (PRESERVED + NEET ENHANCED)
   // ============================================
   Future<int> insertStudySession(StudySession session) async {
     final db = await database;
@@ -896,7 +964,118 @@ class DatabaseHelper {
       whereArgs: [id],
     );
   }
-// --- END PART 2 ---
+
+  // ═══════════════════════════════════════════════════════════════
+  // NEW: NEET ANALYTICS METHODS (v16)
+  // ═══════════════════════════════════════════════════════════════
+
+  /// Helper: Convert NEET subject index to name
+  String _neetSubjectName(int index) {
+    const names = ['Physics', 'Chemistry', 'Biology', 'General'];
+    return (index >= 0 && index < names.length) ? names[index] : 'Unknown';
+  }
+
+  /// Get study sessions filtered by NEET subject (0=Physics, 1=Chemistry, 2=Biology, 3=General)
+  Future<List<StudySession>> getStudySessionsForNeetSubject(int neetSubjectIndex) async {
+    final db = await database;
+    final rows = await db.query(
+      'study_sessions',
+      where: 'neetSubject = ?',
+      whereArgs: [neetSubjectIndex],
+      orderBy: 'completedAtMillis DESC',
+    );
+    return rows.map((r) => StudySession.fromMap(r)).toList();
+  }
+
+  /// Get today's study time broken down by NEET subject
+  /// Returns: {'Physics': 120, 'Chemistry': 90, 'Biology': 180}
+  Future<Map<String, int>> getTodayNeetSubjectMinutes() async {
+    final db = await database;
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final endOfDay = startOfDay + const Duration(days: 1).inMilliseconds;
+
+    final result = await db.rawQuery("""
+      SELECT neetSubject, COALESCE(SUM(durationMinutes), 0) as total
+      FROM study_sessions
+      WHERE completedAtMillis >= ? AND completedAtMillis < ? AND neetSubject IS NOT NULL
+      GROUP BY neetSubject
+    """, [startOfDay, endOfDay]);
+
+    final Map<String, int> breakdown = {};
+    for (final row in result) {
+      final subjectIdx = row['neetSubject'] as int?;
+      if (subjectIdx != null) {
+        breakdown[_neetSubjectName(subjectIdx)] = (row['total'] as int?) ?? 0;
+      }
+    }
+    return breakdown;
+  }
+
+  /// Get MCQ accuracy percentage by NEET subject
+  /// Returns: {'Physics': 85.5, 'Chemistry': 72.3, 'Biology': 91.0}
+  Future<Map<String, double>> getNeetSubjectAccuracy() async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT neetSubject,
+        SUM(mcqsAttempted) as attempted,
+        SUM(mcqsCorrect) as correct
+      FROM study_sessions
+      WHERE neetSubject IS NOT NULL AND mcqsAttempted > 0
+      GROUP BY neetSubject
+    """);
+
+    final Map<String, double> accuracy = {};
+    for (final row in result) {
+      final subjectIdx = row['neetSubject'] as int?;
+      final attempted = (row['attempted'] as int?) ?? 0;
+      final correct = (row['correct'] as int?) ?? 0;
+      if (subjectIdx != null && attempted > 0) {
+        accuracy[_neetSubjectName(subjectIdx)] = (correct / attempted * 100);
+      }
+    }
+    return accuracy;
+  }
+
+  /// Get total MCQs attempted and correct across all sessions
+  /// Returns: {'attempted': 1250, 'correct': 980}
+  Future<Map<String, int>> getTotalMcqStats() async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT 
+        COALESCE(SUM(mcqsAttempted), 0) as attempted,
+        COALESCE(SUM(mcqsCorrect), 0) as correct
+      FROM study_sessions
+    """);
+
+    return {
+      'attempted': (result.first['attempted'] as int?) ?? 0,
+      'correct': (result.first['correct'] as int?) ?? 0,
+    };
+  }
+
+  /// Get mock test score history (sorted by date desc)
+  Future<List<Map<String, dynamic>>> getMockTestScores() async {
+    final db = await database;
+    final rows = await db.rawQuery("""
+      SELECT completedAtMillis, mockTestScore, mockTestRank, subjectTag, neetSubject
+      FROM study_sessions
+      WHERE mockTestScore IS NOT NULL
+      ORDER BY completedAtMillis DESC
+    """);
+    return rows;
+  }
+
+  /// Get best (highest) mock test score
+  Future<int> getBestMockTestScore() async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT MAX(mockTestScore) as best
+      FROM study_sessions
+      WHERE mockTestScore IS NOT NULL
+    """);
+    return (result.first['best'] as int?) ?? 0;
+  }
 
     // ============================================
   // SUBTASK CRUD (PRESERVED)
@@ -1146,9 +1325,8 @@ class DatabaseHelper {
     if (rows.isEmpty) return 0;
     return DailyCardGoal.fromMap(rows.first).streakCount;
   }
-// --- END PART 3 ---
 
-    // ============================================
+  // ============================================
   // STUDY SCHEDULE CRUD (PRESERVED)
   // ============================================
   Future<int> insertStudySchedule(StudySchedule schedule) async {
@@ -1326,9 +1504,8 @@ class DatabaseHelper {
     """, [minutes, id]);
   }
 
-
-  // ============================================
-  // GRADE COMPONENT CRUD (PRESERVED)
+    // ============================================
+  // GRADE COMPONENT CRUD (PRESERVED — LEGACY)
   // ============================================
   Future<int> insertGradeComponent(Map<String, dynamic> component) async {
     final db = await database;
@@ -1367,6 +1544,83 @@ class DatabaseHelper {
   Future<void> clearGradeComponents() async {
     final db = await database;
     await db.delete('grade_components');
+  }
+
+  // ============================================
+  // GPA COURSES CRUD (NEW v16 — Proper GPA Schema)
+  // ============================================
+  Future<int> insertGpaCourse(Map<String, dynamic> course) async {
+    final db = await database;
+    final grade = course['grade'] as String;
+    final data = {
+      'name': course['name'],
+      'credits': course['credits'] ?? 3,
+      'grade': grade,
+      'gradePoints': course['gradePoints'] ?? _gradeToPoints(grade),
+      'semester': course['semester'] ?? 'Current',
+      'subjectCategory': course['subjectCategory'],
+      'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
+    };
+    return db.insert('gpa_courses', data);
+  }
+
+  Future<int> updateGpaCourse(int id, Map<String, dynamic> course) async {
+    final db = await database;
+    final grade = course['grade'] as String?;
+    final data = <String, dynamic>{
+      'name': course['name'],
+      'credits': course['credits'] ?? 3,
+      if (grade != null) 'grade': grade,
+      if (grade != null) 'gradePoints': course['gradePoints'] ?? _gradeToPoints(grade),
+      'semester': course['semester'] ?? 'Current',
+      'subjectCategory': course['subjectCategory'],
+    };
+    return db.update('gpa_courses', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteGpaCourse(int id) async {
+    final db = await database;
+    return db.delete('gpa_courses', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllGpaCourses() async {
+    final db = await database;
+    final rows = await db.query('gpa_courses', orderBy: 'createdAtMillis DESC');
+    return rows;
+  }
+
+  Future<List<Map<String, dynamic>>> getGpaCoursesBySemester(String semester) async {
+    final db = await database;
+    final rows = await db.query(
+      'gpa_courses',
+      where: 'semester = ?',
+      whereArgs: [semester],
+      orderBy: 'createdAtMillis DESC',
+    );
+    return rows;
+  }
+
+  Future<void> clearGpaCourses() async {
+    final db = await database;
+    await db.delete('gpa_courses');
+  }
+
+  static double _gradeToPoints(String grade) {
+    switch (grade) {
+      case 'A+': return 4.0;
+      case 'A': return 4.0;
+      case 'A-': return 3.7;
+      case 'B+': return 3.3;
+      case 'B': return 3.0;
+      case 'B-': return 2.7;
+      case 'C+': return 2.3;
+      case 'C': return 2.0;
+      case 'C-': return 1.7;
+      case 'D+': return 1.3;
+      case 'D': return 1.0;
+      case 'F': return 0.0;
+      default: return 0.0;
+    }
   }
 
   // ============================================
@@ -1421,10 +1675,8 @@ class DatabaseHelper {
     if (rows.isEmpty) return null;
     return rows.first;
   }
-// --- END PART 4 ---
 
-  
-    // ============================================
+  // ============================================
   // ATTENDANCE LOGS CRUD (PRESERVED)
   // ============================================
   Future<int> insertAttendanceLog(Map<String, dynamic> log) async {
@@ -1693,7 +1945,7 @@ class DatabaseHelper {
     final db = await database;
     final data = {
       'subjectName': timetableClass['subjectName'],
-      'classType': timetableClass['classType'] ?? 'lecture',
+            'classType': timetableClass['classType'] ?? 'lecture',
       'dayOfWeek': timetableClass['dayOfWeek'],
       'startTimeMinutes': timetableClass['startTimeMinutes'],
       'endTimeMinutes': timetableClass['endTimeMinutes'],
@@ -1989,13 +2241,22 @@ class DatabaseHelper {
     return db.update('class_schedule', data, where: 'id = ?', whereArgs: [id]);
   }
 
-    // ═══════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════
   // FIXED: deleteClassSchedule — was copy-pasted from getAllClassSchedules()
   // Returns int (rows deleted) instead of List<Map>
   // ═══════════════════════════════════════════════════════════════
   Future<int> deleteClassSchedule(int id) async {
     final db = await database;
     return db.delete('class_schedule', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // FIXED: Added missing getAllClassSchedules() method
+  // ═══════════════════════════════════════════════════════════════
+  Future<List<Map<String, dynamic>>> getAllClassSchedules() async {
+    final db = await database;
+    final rows = await db.query('class_schedule', orderBy: 'dayOfWeek ASC, startTimeMinutes ASC');
+    return rows;
   }
 
   Future<Map<String, dynamic>?> getClassScheduleById(int id) async {
@@ -2036,7 +2297,7 @@ class DatabaseHelper {
     );
   }
 
-  // ============================================
+    // ============================================
   // HABITS CRUD (PRESERVED)
   // ============================================
   Future<int> insertHabit(Map<String, dynamic> habit) async {
@@ -2201,24 +2462,24 @@ class DatabaseHelper {
     final db = await database;
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
-    
+
     final rows = await db.query(
       'habit_logs',
       where: 'habitId = ? AND completed = 1',
       whereArgs: [habitId],
       orderBy: 'dateMillis DESC',
     );
-    
+
     if (rows.isEmpty) return 0;
-    
+
     int streak = 0;
     int expectedDateMillis = todayStart;
-    
+
     for (final row in rows) {
       final dateMillis = row['dateMillis'] as int;
       final date = DateTime.fromMillisecondsSinceEpoch(dateMillis);
       final dayStart = DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
-      
+
       if (dayStart == expectedDateMillis) {
         streak++;
         expectedDateMillis -= const Duration(days: 1).inMilliseconds;
@@ -2226,37 +2487,36 @@ class DatabaseHelper {
         break;
       }
     }
-    
+
     return streak;
   }
 
   Future<Map<String, dynamic>> getHabitWeeklyStats(int habitId, int weekStartMillis) async {
     final db = await database;
     final weekEndMillis = weekStartMillis + const Duration(days: 7).inMilliseconds;
-    
+
     final completedResult = await db.rawQuery("""
       SELECT COUNT(*) as completed FROM habit_logs
       WHERE habitId = ? AND dateMillis >= ? AND dateMillis < ? AND completed = 1
     """, [habitId, weekStartMillis, weekEndMillis]);
-    
+
     final totalResult = await db.rawQuery("""
       SELECT COUNT(*) as total FROM habit_logs
       WHERE habitId = ? AND dateMillis >= ? AND dateMillis < ?
     """, [habitId, weekStartMillis, weekEndMillis]);
-    
+
     final habit = await getHabitById(habitId);
     final targetPerWeek = (habit?['targetPerWeek'] as int?) ?? 7;
-    
+
     return {
       'completed': (completedResult.first['completed'] as int?) ?? 0,
       'total': (totalResult.first['total'] as int?) ?? 0,
       'targetPerWeek': targetPerWeek,
-      'percentage': targetPerWeek > 0 
+      'percentage': targetPerWeek > 0
           ? (((completedResult.first['completed'] as int?) ?? 0) / targetPerWeek * 100).round()
           : 0,
     };
   }
-
 
   // ============================================
   // READING BOOKS CRUD (PRESERVED + ENHANCED)
@@ -2302,7 +2562,6 @@ class DatabaseHelper {
 
   Future<int> deleteReadingBook(int id) async {
     final db = await database;
-    // Cascade delete reading sessions for this book
     await db.delete('reading_sessions', where: 'bookId = ?', whereArgs: [id]);
     return db.delete('reading_books', where: 'id = ?', whereArgs: [id]);
   }
@@ -2339,31 +2598,28 @@ class DatabaseHelper {
     return rows;
   }
 
-  // ENHANCED: Now also logs a reading session record
   Future<void> updateReadingProgress(int id, int currentPage, int minutesRead) async {
     final db = await database;
     final book = await getReadingBookById(id);
     if (book == null) return;
-    
+
     final oldPage = (book['currentPage'] as int?) ?? 0;
     final totalPages = (book['totalPages'] as int?) ?? 1;
     final pagesRead = currentPage - oldPage;
     final isCompleted = currentPage >= totalPages;
-    
-    // Update book record
+
     await db.update(
       'reading_books',
       {
         'currentPage': currentPage,
-        'minutesReadToday': (book['minutesReadToday'] as int?) ?? 0 + minutesRead,
-        'totalMinutesRead': (book['totalMinutesRead'] as int?) ?? 0 + minutesRead,
+        'minutesReadToday': ((book['minutesReadToday'] as int?) ?? 0) + minutesRead,
+        'totalMinutesRead': ((book['totalMinutesRead'] as int?) ?? 0) + minutesRead,
         'isCompleted': isCompleted ? 1 : 0,
       },
       where: 'id = ?',
       whereArgs: [id],
     );
 
-    // Log reading session if actual progress was made
     if (pagesRead > 0 && minutesRead > 0) {
       final pagesPerMin = pagesRead / minutesRead;
       await db.insert('reading_sessions', {
@@ -2400,19 +2656,19 @@ class DatabaseHelper {
         'onTrack': false,
       };
     }
-    
+
     final totalPages = (book['totalPages'] as int?) ?? 1;
     final currentPage = (book['currentPage'] as int?) ?? 0;
     final dailyGoal = (book['dailyPageGoal'] as int?) ?? 20;
     final targetEndMillis = book['targetEndDateMillis'] as int?;
-    
+
     final percentage = totalPages > 0 ? (currentPage / totalPages * 100).round() : 0;
     final pagesLeft = totalPages - currentPage;
-    
+
     int daysLeft = 0;
     double pagesPerDayNeeded = 0;
     bool onTrack = true;
-    
+
     if (targetEndMillis != null && pagesLeft > 0) {
       final now = DateTime.now();
       final targetDate = DateTime.fromMillisecondsSinceEpoch(targetEndMillis);
@@ -2424,7 +2680,7 @@ class DatabaseHelper {
         onTrack = false;
       }
     }
-    
+
     return {
       'percentage': percentage,
       'pagesLeft': pagesLeft,
@@ -2440,18 +2696,18 @@ class DatabaseHelper {
   Future<Map<String, dynamic>> getOverallReadingStats() async {
     final db = await database;
     final books = await getAllReadingBooks();
-    
+
     int totalBooks = books.length;
     int completedBooks = 0;
     int totalPagesRead = 0;
     int totalMinutesRead = 0;
-    
+
     for (final book in books) {
       if ((book['isCompleted'] as int?) == 1) completedBooks++;
       totalPagesRead += (book['currentPage'] as int?) ?? 0;
       totalMinutesRead += (book['totalMinutesRead'] as int?) ?? 0;
     }
-    
+
     return {
       'totalBooks': totalBooks,
       'completedBooks': completedBooks,
@@ -2461,12 +2717,10 @@ class DatabaseHelper {
       'completionRate': totalBooks > 0 ? (completedBooks / totalBooks * 100).round() : 0,
     };
   }
-// --- END PART 5 ---
 
-    // ═══════════════════════════════════════════════════════════════
-  // NEW CRUD: READING SESSIONS (v14)
-  // ═══════════════════════════════════════════════════════════════
-
+  // ============================================
+  // READING SESSIONS CRUD (v14)
+  // ============================================
   Future<int> insertReadingSession(Map<String, dynamic> session) async {
     final db = await database;
     final data = {
@@ -2522,17 +2776,14 @@ class DatabaseHelper {
     return rows.first;
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // PART 2: NEW READING STATS & ANALYTICS METHODS
-  // ═══════════════════════════════════════════════════════════════
-
-  /// Get reading streak: consecutive days with reading sessions up to today
+  // ============================================
+  // READING STATS METHODS (v14)
+  // ============================================
   Future<int> getReadingStreak(int bookId) async {
     final db = await database;
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
 
-    // Get all session dates for this book, normalized to day start, ordered desc
     final rows = await db.rawQuery("""
       SELECT DISTINCT 
         CAST(sessionDateMillis / 86400000 as INTEGER) as dayBucket
@@ -2559,15 +2810,12 @@ class DatabaseHelper {
     return streak;
   }
 
-  /// Get pages read per day for last N days (for consistency graph)
-  /// Returns List of {'date': 'M/D', 'pages': int}
   Future<List<Map<String, dynamic>>> getPagesPerDayHistory(int bookId, int days) async {
     final db = await database;
     final now = DateTime.now();
     final endMillis = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch + const Duration(days: 1).inMilliseconds;
     final startMillis = endMillis - Duration(days: days).inMilliseconds;
 
-    // Get all sessions in range
     final rows = await db.query(
       'reading_sessions',
       where: 'bookId = ? AND sessionDateMillis >= ? AND sessionDateMillis < ?',
@@ -2575,7 +2823,6 @@ class DatabaseHelper {
       orderBy: 'sessionDateMillis ASC',
     );
 
-    // Bucket by day
     final Map<String, int> dayMap = {};
     for (int i = 0; i < days; i++) {
       final date = now.subtract(Duration(days: days - 1 - i));
@@ -2593,7 +2840,6 @@ class DatabaseHelper {
     return dayMap.entries.map((e) => {'date': e.key, 'pages': e.value}).toList();
   }
 
-  /// Get average pages per minute from all sessions for a book
   Future<double> getAveragePagesPerMinute(int bookId) async {
     final db = await database;
     final result = await db.rawQuery("""
@@ -2611,7 +2857,6 @@ class DatabaseHelper {
     return totalPages / totalMinutes;
   }
 
-  /// Get total reading time and pages for a book from sessions
   Future<Map<String, dynamic>> getReadingSessionTotals(int bookId) async {
     final db = await database;
     final result = await db.rawQuery("""
@@ -2632,7 +2877,6 @@ class DatabaseHelper {
     };
   }
 
-  /// Get best reading day (most pages) for a book
   Future<Map<String, dynamic>?> getBestReadingDay(int bookId) async {
     final db = await database;
     final result = await db.rawQuery("""
@@ -2658,7 +2902,6 @@ class DatabaseHelper {
     };
   }
 
-  /// Get estimated completion date based on average reading speed
   Future<DateTime?> getEstimatedCompletionDate(int bookId) async {
     final book = await getReadingBookById(bookId);
     if (book == null) return null;
@@ -2671,14 +2914,12 @@ class DatabaseHelper {
     final avgSpeed = await getAveragePagesPerMinute(bookId);
     if (avgSpeed <= 0) return null;
 
-    // Assume 30 min reading per day average
     final pagesPerDay = avgSpeed * 30;
     final daysNeeded = (pagesLeft / pagesPerDay).ceil();
 
     return DateTime.now().add(Duration(days: daysNeeded));
   }
 
-  /// Get reading consistency score (0-100) based on session regularity
   Future<int> getReadingConsistencyScore(int bookId) async {
     final db = await database;
     final now = DateTime.now();
@@ -2694,12 +2935,9 @@ class DatabaseHelper {
     return (activeDays / 30 * 100).round().clamp(0, 100);
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // NEW: 8 STATS METHODS FOR stats_screen.dart
-  // ═══════════════════════════════════════════════════════════════
-
-  /// 1. Returns 24 entries (hour 0-23) with {'hour': int, 'minutes': int}
-  /// Groups study_sessions by hour of day (completedAtMillis)
+  // ============================================
+  // STATS METHODS (8 methods for stats_screen.dart)
+  // ============================================
   Future<Map<int, int>> getSessionsByHour() async {
     final db = await database;
     final result = await db.rawQuery("""
@@ -2725,8 +2963,6 @@ class DatabaseHelper {
     return hourlyMinutes;
   }
 
-  /// 2. Returns average durationMinutes from all study_sessions
-  /// Returns 0.0 if no sessions
   Future<double> getAverageSessionDuration() async {
     final db = await database;
     final result = await db.rawQuery("""
@@ -2739,8 +2975,6 @@ class DatabaseHelper {
     return (avg as num).toDouble();
   }
 
-  /// 3. Returns MAX(durationMinutes) from study_sessions
-  /// Returns 0 if no sessions
   Future<int> getLongestSession() async {
     final db = await database;
     final result = await db.rawQuery("""
@@ -2751,7 +2985,6 @@ class DatabaseHelper {
     return (result.first['maxDuration'] as int?) ?? 0;
   }
 
-  /// 4. Count study_sessions where completedAtMillis is today
   Future<int> getTodaySessionCount() async {
     final db = await database;
     final now = DateTime.now();
@@ -2767,7 +3000,6 @@ class DatabaseHelper {
     return (result.first['count'] as int?) ?? 0;
   }
 
-  /// 5. Groups by sessionType, returns {'pomodoro': count, 'deep_work': count, ...}
   Future<Map<String, int>> getSessionTypeBreakdown() async {
     final db = await database;
     final result = await db.rawQuery("""
@@ -2786,8 +3018,6 @@ class DatabaseHelper {
     return breakdown;
   }
 
-  /// 6. Sum durationMinutes where completedAtMillis >= weekStartMillis
-  /// and < weekStartMillis + 7 days
   Future<int> getWeeklyMinutes(int weekStartMillis) async {
     final db = await database;
     final weekEndMillis = weekStartMillis + const Duration(days: 7).inMilliseconds;
@@ -2801,7 +3031,6 @@ class DatabaseHelper {
     return (result.first['total'] as int?) ?? 0;
   }
 
-  /// 7. Sum durationMinutes for given year/month
   Future<int> getMonthlyMinutes(int year, int month) async {
     final db = await database;
     final startOfMonth = DateTime(year, month, 1).millisecondsSinceEpoch;
@@ -2818,12 +3047,9 @@ class DatabaseHelper {
     return (result.first['total'] as int?) ?? 0;
   }
 
-  /// 8. Calculate a 0-100 efficiency score based on daily_goals
-  /// Combines: achievedMinutes vs targetMinutes ratio, streak bonus, session count
   Future<int> getStudyEfficiencyScore() async {
     final db = await database;
-    
-    // Get overall goal completion ratio from daily_goals
+
     final goalResult = await db.rawQuery("""
       SELECT 
         COALESCE(SUM(targetMinutes), 0) as totalTarget,
@@ -2834,33 +3060,27 @@ class DatabaseHelper {
     final totalTarget = (goalResult.first['totalTarget'] as int?) ?? 0;
     final totalAchieved = (goalResult.first['totalAchieved'] as int?) ?? 0;
 
-    // Get total session count for volume metric
     final sessionResult = await db.rawQuery("""
       SELECT COUNT(*) as sessionCount
       FROM study_sessions
     """);
     final sessionCount = (sessionResult.first['sessionCount'] as int?) ?? 0;
 
-    // Get latest streak
     final streak = await getLatestStreak();
 
-    // Base score: achieved / target ratio (max 60 points)
     double baseScore = 0;
     if (totalTarget > 0) {
       baseScore = (totalAchieved / totalTarget * 60).clamp(0.0, 60.0);
     } else if (totalAchieved > 0) {
-      // No targets set but some study done — partial credit
       baseScore = 30.0;
     }
 
-    // Volume bonus: up to 20 points for having many sessions
     double volumeScore = 0;
     if (sessionCount >= 50) volumeScore = 20;
     else if (sessionCount >= 20) volumeScore = 15;
     else if (sessionCount >= 10) volumeScore = 10;
     else if (sessionCount >= 5) volumeScore = 5;
 
-    // Streak bonus: up to 20 points
     double streakScore = 0;
     if (streak >= 14) streakScore = 20;
     else if (streak >= 7) streakScore = 15;
@@ -2872,9 +3092,8 @@ class DatabaseHelper {
   }
 
   // ============================================
-  // COMPREHENSIVE EXPORT/IMPORT (PRESERVED + v14)
+  // EXPORT/IMPORT (PRESERVED + v16)
   // ============================================
-
   Future<Map<String, List<Map<String, dynamic>>>> exportAllTables() async {
     final db = await database;
     final result = <String, List<Map<String, dynamic>>>{};
@@ -2892,6 +3111,7 @@ class DatabaseHelper {
       'flashcard_review_history',
       'daily_card_goals',
       'grade_components',
+      'gpa_courses', // NEW v16
       'quick_notes',
       'attendance_logs',
       'attendance_subjects',
@@ -2903,7 +3123,7 @@ class DatabaseHelper {
       'habits',
       'habit_logs',
       'reading_books',
-      'reading_sessions', // NEW v14
+      'reading_sessions',
     ];
 
     for (final table in tables) {
@@ -2947,5 +3167,4 @@ class DatabaseHelper {
     await db.execute('VACUUM');
   }
 }
-// --- END PART 6 ---
 // --- END OF FILE ---
