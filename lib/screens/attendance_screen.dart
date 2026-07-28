@@ -1465,6 +1465,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
+  Widget _buildContent(ColorScheme cs) {
+    if (_selectedSubject != null) {
+      return _buildSubjectDetail(cs);
+    }
+    return _buildSubjectList(cs);
+  }
+
     Widget _buildSubjectList(ColorScheme cs) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -2136,7 +2143,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title, ColorScheme cs) {
+    Widget _buildSectionTitle(String title, ColorScheme cs) {
     return Row(
       children: [
         Container(
