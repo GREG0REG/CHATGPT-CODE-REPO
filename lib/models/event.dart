@@ -82,6 +82,17 @@ class EventIcons {
     'group': Icons.group,
     'presentation': Icons.present_to_all,
     'work': Icons.work,
+    // NEET-specific icons
+    'stethoscope': Icons.medical_services,
+    'microscope': Icons.biotech,
+    'dna': Icons.favorite,
+    'atom': Icons.circle,
+    'beaker': Icons.science,
+    'hospital': Icons.local_hospital,
+    'pill': Icons.medication,
+    'brain': Icons.psychology,
+    'heart': Icons.favorite,
+    'bone': Icons.accessibility,
   };
 
   static IconData? getIcon(String? name) => icons[name] ?? Icons.event;
@@ -107,11 +118,17 @@ class Event {
   final String? yearlySpecificDatesJson;
   final String? excludedDatesJson;
 
-  // --- Student Study Pack fields (NEW) ---
+  // --- Student Study Pack fields ---
   final String? iconName;
   final int priority; // 0=none, 1=low, 2=normal, 3=high, 4=urgent
   final String? subjectTag;
   final bool isCompleted;
+
+  // --- NEET-specific fields ---
+  final bool isNeetExam;           // Is this a NEET exam/mock test event?
+  final int? neetTotalMarks;       // Total marks for this test (usually 720)
+  final int? neetTargetScore;      // Target score (e.g., 680+ for govt college)
+  final String? neetSubjectFocus;  // Which subject to focus: 'Physics', 'Chemistry', 'Biology', 'All'
 
   const Event({
     this.id,
@@ -129,6 +146,11 @@ class Event {
     this.priority = 2, // default normal
     this.subjectTag,
     this.isCompleted = false,
+    // NEET fields
+    this.isNeetExam = false,
+    this.neetTotalMarks,
+    this.neetTargetScore,
+    this.neetSubjectFocus,
   });
 
   // --- Computed properties ---
@@ -173,13 +195,12 @@ class Event {
   }
 
   // ============================================
-  // URGENCY COLOR (FIXED - uses the same target as countdown text)
+  // URGENCY COLOR
   // ============================================
   Color getUrgencyColor(DateTime now) {
     if (isCompleted) return Colors.grey;
 
     final nowMillis = now.millisecondsSinceEpoch;
-    // FIX: Use the same target that countdown text uses
     final target = _countdownTargetMillis;
     final diff = Duration(milliseconds: target - nowMillis);
 
@@ -194,14 +215,12 @@ class Event {
     }
   }
 
-  /// The millis used for countdown display (start time if before start, else deadline/date)
+  /// The millis used for countdown display
   int get _countdownTargetMillis {
     final nowMillis = DateTime.now().millisecondsSinceEpoch;
-    // If we have a start time and we're before it, count down to start
     if (startTimeMillis != null && nowMillis < startTimeMillis!) {
       return startTimeMillis!;
     }
-    // Otherwise count down to deadline or date
     return deadlineMillis ?? dateMillis;
   }
 
@@ -238,7 +257,6 @@ class Event {
     }
   }
 
-  // FIX: Added ?? Icons.event so it never returns null
   IconData get iconData => EventIcons.getIcon(iconName) ?? Icons.event;
 
   /// Convenience: returns the countdown text string for this event at [now].
@@ -246,7 +264,6 @@ class Event {
     if (isCompleted) return 'Completed';
 
     final nowMillis = now.millisecondsSinceEpoch;
-    // FIX: Use start time if before start, else deadline/date
     int targetMillis;
     if (startTimeMillis != null && nowMillis < startTimeMillis!) {
       targetMillis = startTimeMillis!;
@@ -258,7 +275,6 @@ class Event {
 
     if (diff.isNegative) return 'Completed';
 
-    // Check if counting down to start vs deadline
     final isBeforeStart = startTimeMillis != null && nowMillis < startTimeMillis!;
     final suffix = isBeforeStart ? ' until start' : ' left';
 
@@ -272,6 +288,22 @@ class Event {
       final minutes = diff.inMinutes < 1 ? 1 : diff.inMinutes;
       return '$minutes minute${minutes == 1 ? '' : 's'}$suffix';
     }
+  }
+
+  // ============================================
+  // NEET HELPERS
+  // ============================================
+
+  /// Get NEET score progress if target is set
+  double? get neetProgressPercent {
+    if (neetTargetScore == null || neetTotalMarks == null) return null;
+    if (neetTotalMarks! <= 0) return null;
+    return (neetTargetScore! / neetTotalMarks! * 100).clamp(0.0, 100.0);
+  }
+
+  /// Check if this is a high-priority NEET event
+  bool get isHighPriorityNeet {
+    return isNeetExam && (priority >= 3);
   }
 
   // ============================================
@@ -299,6 +331,14 @@ class Event {
     String? subjectTag,
     bool clearSubjectTag = false,
     bool? isCompleted,
+    // NEET fields
+    bool? isNeetExam,
+    int? neetTotalMarks,
+    bool clearNeetTotalMarks = false,
+    int? neetTargetScore,
+    bool clearNeetTargetScore = false,
+    String? neetSubjectFocus,
+    bool clearNeetSubjectFocus = false,
   }) {
     return Event(
       id: id ?? this.id,
@@ -325,11 +365,16 @@ class Event {
       priority: priority ?? this.priority,
       subjectTag: clearSubjectTag ? null : (subjectTag ?? this.subjectTag),
       isCompleted: isCompleted ?? this.isCompleted,
+      // NEET fields
+      isNeetExam: isNeetExam ?? this.isNeetExam,
+      neetTotalMarks: clearNeetTotalMarks ? null : (neetTotalMarks ?? this.neetTotalMarks),
+      neetTargetScore: clearNeetTargetScore ? null : (neetTargetScore ?? this.neetTargetScore),
+      neetSubjectFocus: clearNeetSubjectFocus ? null : (neetSubjectFocus ?? this.neetSubjectFocus),
     );
   }
 
   // ============================================
-  // VALIDATION (FIX for Issue 55)
+  // VALIDATION (FIXED for Issue 55)
   // ============================================
   /// Validates that a raw map contains valid Event data with detailed errors.
   static void _validateMap(Map<String, dynamic> map) {
@@ -387,8 +432,22 @@ class Event {
     if (map['subjectTag'] != null && map['subjectTag'] is! String) {
       errors.add('"subjectTag" must be a String or null, got ${map['subjectTag'].runtimeType}');
     }
-    if (map['isCompleted'] != null && map['isCompleted'] is! int) {
-      errors.add('"isCompleted" must be an int or null, got ${map['isCompleted'].runtimeType}');
+    // FIX: Accept both int and bool for isCompleted (JSON compatibility)
+    if (map['isCompleted'] != null && map['isCompleted'] is! int && map['isCompleted'] is! bool) {
+      errors.add('"isCompleted" must be an int, bool, or null, got ${map['isCompleted'].runtimeType}');
+    }
+    // NEET fields validation
+    if (map['isNeetExam'] != null && map['isNeetExam'] is! int && map['isNeetExam'] is! bool) {
+      errors.add('"isNeetExam" must be an int, bool, or null, got ${map['isNeetExam'].runtimeType}');
+    }
+    if (map['neetTotalMarks'] != null && map['neetTotalMarks'] is! int) {
+      errors.add('"neetTotalMarks" must be an int or null, got ${map['neetTotalMarks'].runtimeType}');
+    }
+    if (map['neetTargetScore'] != null && map['neetTargetScore'] is! int) {
+      errors.add('"neetTargetScore" must be an int or null, got ${map['neetTargetScore'].runtimeType}');
+    }
+    if (map['neetSubjectFocus'] != null && map['neetSubjectFocus'] is! String) {
+      errors.add('"neetSubjectFocus" must be a String or null, got ${map['neetSubjectFocus'].runtimeType}');
     }
 
     if (errors.isNotEmpty) {
@@ -413,6 +472,11 @@ class Event {
       'priority': priority,
       'subjectTag': subjectTag,
       'isCompleted': isCompleted ? 1 : 0,
+      // NEET fields
+      'isNeetExam': isNeetExam ? 1 : 0,
+      'neetTotalMarks': neetTotalMarks,
+      'neetTargetScore': neetTargetScore,
+      'neetSubjectFocus': neetSubjectFocus,
     };
   }
 
@@ -436,8 +500,21 @@ class Event {
       iconName: map['iconName'] as String?,
       priority: (map['priority'] as int?)?.clamp(0, 4) ?? 2,
       subjectTag: map['subjectTag'] as String?,
-      isCompleted: (map['isCompleted'] as int? ?? 0) == 1,
+      isCompleted: _parseBool(map['isCompleted']),
+      // NEET fields
+      isNeetExam: _parseBool(map['isNeetExam']),
+      neetTotalMarks: map['neetTotalMarks'] as int?,
+      neetTargetScore: map['neetTargetScore'] as int?,
+      neetSubjectFocus: map['neetSubjectFocus'] as String?,
     );
+  }
+
+  /// Safely parse int/bool to bool
+  static bool _parseBool(dynamic value) {
+    if (value == null) return false;
+    if (value is bool) return value;
+    if (value is int) return value == 1;
+    return false;
   }
 
   Map<String, dynamic> toJson() => toMap();
