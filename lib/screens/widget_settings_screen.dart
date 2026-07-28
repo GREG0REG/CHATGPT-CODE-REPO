@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/settings_service.dart';
-import '../services/widget_service.dart';
+import 'package:event_countdown/services/widget_service.dart';
 
 /// Dedicated widget configuration screen.
 /// Accessed from Settings > Advanced Widget Settings or from widget long-press menu.
