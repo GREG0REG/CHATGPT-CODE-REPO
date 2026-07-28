@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Event Countdown</string>
+    <string name="app_name">StudyFlow</string>
     <string name="widget_description">Shows the title and countdown for your next event.</string>
-    <string name="pomodoro_widget_description">Shows your active Pomodoro timer and focus subject.</string>
+    <string name="pomodoro_widget_description">NEET Focus timer with circular progress, exam countdown, and session tracking.</string>
     <string name="widget_settings">Widget Settings</string>
     <string name="mark_done">Mark Done</string>
     <string name="open_app">Open App</string>
