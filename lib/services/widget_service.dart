@@ -6,7 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:event_countdown/db/database_helper.dart';
+import 'package:../db/database_helper.dart ';
 
 class WidgetService {
   static const String _eventDataFile = 'widget_data.json';
