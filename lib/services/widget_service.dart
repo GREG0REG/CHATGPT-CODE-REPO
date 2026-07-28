@@ -1,7 +1,6 @@
 // FILE: lib/services/widget_service.dart
-// COMPLETE REPLACEMENT — All 6 widgets unified, all syntax errors fixed
-// FIXES: Package-style import, no HomeWidget dependency (writes JSON directly),
-//        correct static methods in class, balanced braces, proper try-catch blocks
+// COMPLETE REPLACEMENT — NEET Edition v15
+// Added: Pomodoro widget writes NEET data JSON, updated refresh logic
 
 import 'dart:convert';
 import 'dart:io';
@@ -57,12 +56,12 @@ class WidgetService {
         final event = upcoming.first;
         final eventDate = DateTime.fromMillisecondsSinceEpoch(event.dateMillis);
         final diff = eventDate.difference(now);
-        
+
         String countdownText;
         String urgencyLabel = '';
         String urgencyColor = '';
         int progress = 0;
-        
+
         if (diff.inDays > 7) {
           countdownText = '${diff.inDays} days left';
           urgencyLabel = 'On track';
@@ -105,11 +104,23 @@ class WidgetService {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // POMODORO WIDGET
+  // POMODORO WIDGET — NEET Enhanced
   // ═══════════════════════════════════════════════════════════════
   static Future<void> refreshPomodoroWidget() async {
     try {
-      debugPrint('WidgetService: Pomodoro widget refreshed');
+      // The PomodoroWidgetProvider reads directly from SharedPreferences,
+      // but we also write a JSON backup for any future JSON-based widget
+      final now = DateTime.now();
+      final neetDate = DateTime(2026, 5, 2);
+      final neetDays = neetDate.difference(DateTime(now.year, now.month, now.day)).inDays;
+
+      await _writeJson(_pomodoroDataFile, {
+        'neetDaysRemaining': neetDays > 0 ? neetDays : 0,
+        'neetExamDate': '2026-05-02',
+        'refreshedAt': now.millisecondsSinceEpoch,
+      });
+
+      debugPrint('WidgetService: Pomodoro widget refreshed (NEET: $neetDays days)');
     } catch (e) {
       debugPrint('WidgetService: Pomodoro widget error: $e');
     }
