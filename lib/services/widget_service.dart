@@ -6,7 +6,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:../db/database_helper.dart ';
+import 'package:home_widget/home_widget.dart';
+import 'package:event_countdown/db/database_helper.dart';
 
 class WidgetService {
   static const String _eventDataFile = 'widget_data.json';
@@ -28,6 +29,22 @@ class WidgetService {
       debugPrint('WidgetService: Wrote $filename');
     } catch (e) {
       debugPrint('WidgetService: Failed to write $filename: $e');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // GENERIC REFRESH WIDGET — called by many screens
+  // ═══════════════════════════════════════════════════════════════
+  static Future<void> refreshWidget() async {
+    try {
+      await refreshEventWidget();
+      await HomeWidget.updateWidget(
+        name: 'EventCountdownWidget',
+        iOSName: 'EventCountdownWidget',
+      );
+      debugPrint('WidgetService: refreshWidget() completed');
+    } catch (e) {
+      debugPrint('WidgetService: refreshWidget() error: $e');
     }
   }
 
