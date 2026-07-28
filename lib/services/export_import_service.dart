@@ -1,4 +1,273 @@
- == null) {
+import 'dart:io';
+import 'dart:convert';
+
+import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:file_picker/file_picker.dart';
+
+import 'package:event_countdown/db/database_helper.dart';
+import 'package:event_countdown/models/event.dart';
+import 'package:event_countdown/models/attendance_record.dart';
+import 'package:event_countdown/models/timetable_entry.dart';
+
+// ==================== CONSTANTS ====================
+
+const String _kAppName = 'Event Countdown';
+const String _kAppVersion = '1.0.0';
+
+// ==================== HELPER CLASSES ====================
+
+/// Result of an export operation
+class ExportResult {
+  final bool success;
+  final String? filePath;
+  final int? eventCount;
+  final int? totalTableCount;
+  final int? fileSizeBytes;
+  final DateTime? exportedAt;
+  final String? exportType;
+  final String? checksum;
+  final String? errorMessage;
+
+  const ExportResult({
+    required this.success,
+    this.filePath,
+    this.eventCount,
+    this.totalTableCount,
+    this.fileSizeBytes,
+    this.exportedAt,
+    this.exportType,
+    this.checksum,
+    this.errorMessage,
+  });
+}
+
+/// Preview of an import file before actual import
+class ImportPreview {
+  final String exportType;
+  final String appVersion;
+  final DateTime? exportedAt;
+  final Map<String, int> tableRowCounts;
+  final int totalRows;
+  final String? checksum;
+  final bool checksumValid;
+  final List<String> warnings;
+
+  const ImportPreview({
+    required this.exportType,
+    required this.appVersion,
+    this.exportedAt,
+    required this.tableRowCounts,
+    required this.totalRows,
+    this.checksum,
+    required this.checksumValid,
+    required this.warnings,
+  });
+}
+
+/// Simple CSV encoding/decoding helper
+class _CsvHelper {
+  static String encode(List<List<String>> rows) {
+    final buffer = StringBuffer();
+    for (final row in rows) {
+      final escaped = row.map((field) {
+        if (field.contains(',') || field.contains('"') || field.contains('\n')) {
+          final escapedField = field.replaceAll('"', '""');
+          return '"$escapedField"';
+        }
+        return field;
+      }).join(',');
+      buffer.writeln(escaped);
+    }
+    return buffer.toString();
+  }
+
+  static List<List<String>> decode(String csv) {
+    final rows = <List<String>>[];
+    final lines = csv.split('\n');
+    for (var line in lines) {
+      line = line.trim();
+      if (line.isEmpty) continue;
+      final fields = <String>[];
+      var current = StringBuffer();
+      var inQuotes = false;
+      for (var i = 0; i < line.length; i++) {
+        final char = line[i];
+        if (char == '"') {
+          if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+            current.write('"');
+            i++; // skip next quote
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char == ',' && !inQuotes) {
+          fields.add(current.toString());
+          current = StringBuffer();
+        } else {
+          current.write(char);
+        }
+      }
+      fields.add(current.toString());
+      rows.add(fields);
+    }
+    return rows;
+  }
+}
+
+/// Placeholder service for PDF generation (text-based report)
+class PdfPlaceholderService {
+  static Future<String> generateTextReport({
+    required String title,
+    required String subtitle,
+    required List<String> headers,
+    required List<List<String>> rows,
+  }) async {
+    final buffer = StringBuffer();
+    buffer.writeln('=' * 60);
+    buffer.writeln(title);
+    buffer.writeln(subtitle);
+    buffer.writeln('=' * 60);
+    buffer.writeln();
+    buffer.writeln(headers.join(' | '));
+    buffer.writeln('-' * 60);
+    for (final row in rows) {
+      buffer.writeln(row.join(' | '));
+    }
+    buffer.writeln();
+    buffer.writeln('Generated: ${DateTime.now().toIso8601String()}');
+    buffer.writeln('=' * 60);
+
+    final dir = await getApplicationDocumentsDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = 'report_${timestamp}.txt';
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsString(buffer.toString(), encoding: utf8);
+    return file.path;
+  }
+}
+
+/// WorkManager helper for monthly auto-backup
+class BackupWorkManager {
+  static void initialize() {
+    // Placeholder initialization
+    if (kDebugMode) debugPrint('BackupWorkManager initialized');
+  }
+
+  static Future<void> registerMonthlyBackup() async {
+    // Placeholder - integrate with workmanager package as needed
+    if (kDebugMode) debugPrint('Monthly backup registered');
+  }
+
+  static Future<void> cancelMonthlyBackup() async {
+    // Placeholder
+    if (kDebugMode) debugPrint('Monthly backup cancelled');
+  }
+}
+
+// ==================== MAIN SERVICE CLASS ====================
+
+class ExportImportService {
+  ExportImportService._();
+
+  // ==================== HELPER METHODS ====================
+
+  /// Compute SHA-256 checksum of a string
+  static String _computeChecksum(String data) {
+    final bytes = utf8.encode(data);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  /// Safely extract a string from dynamic value
+  static String _safeString(dynamic value, String defaultValue) {
+    if (value is String) return value;
+    if (value != null) return value.toString();
+    return defaultValue;
+  }
+
+  /// Safely parse a DateTime from dynamic value
+  static DateTime? _safeDateTimeParse(dynamic value) {
+    if (value is DateTime) return value;
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /// Write data to a ZIP .ecbackup file
+  static Future<String> _writeZipFile({
+    required String exportType,
+    required String dataJsonString,
+    required String fileName,
+  }) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final filePath = p.join(dir.path, fileName);
+
+    final manifest = {
+      'exportType': exportType,
+      'checksum': _computeChecksum(dataJsonString),
+      'appName': _kAppName,
+      'appVersion': _kAppVersion,
+      'exportedAt': DateTime.now().toUtc().toIso8601String(),
+      'version': 1,
+    };
+
+    final manifestJson = const JsonEncoder.withIndent('  ').convert(manifest);
+
+    final archive = Archive();
+    archive.addFile(ArchiveFile('data.json', dataJsonString.length, dataJsonString));
+    archive.addFile(ArchiveFile('manifest.json', manifestJson.length, manifestJson));
+
+    final zipEncoder = ZipEncoder();
+    final zipData = zipEncoder.encode(archive);
+    if (zipData == null) {
+      throw Exception('Failed to encode ZIP archive');
+    }
+
+    final file = File(filePath);
+    await file.writeAsBytes(zipData);
+    return filePath;
+  }
+
+  /// Read and verify a ZIP .ecbackup file
+  static Future<Map<String, dynamic>> _readZipFile(String filePath) async {
+    final file = File(filePath);
+    final bytes = await file.readAsBytes();
+
+    final archive = ZipDecoder().decodeBytes(bytes);
+    if (archive.isEmpty) {
+      throw Exception('Corrupted backup: archive is empty');
+    }
+
+    String? dataString;
+    String? manifestString;
+
+    for (final af in archive) {
+      if (af.name == 'data.json') {
+        dataString = utf8.decode(af.content as List<int>);
+      } else if (af.name == 'manifest.json') {
+        manifestString = utf8.decode(af.content as List<int>);
+      }
+    }
+
+    if (dataString == null) {
+      throw Exception('Corrupted backup: data.json missing from archive');
+    }
+    if (manifestString == null) {
+      throw Exception('Corrupted backup: manifest.json missing from archive');
+    }
+
+    final manifest = jsonDecode(manifestString) as Map<String, dynamic>;
+    final checksum = manifest['checksum'];
+    if (checksum == null) {
       throw Exception('Corrupted backup: checksum missing from manifest');
     }
 
@@ -35,7 +304,7 @@
       final jsonString = const JsonEncoder.withIndent('  ').convert(jsonList);
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'event_countdown_export_\$timestamp.ecbackup';
+      final fileName = 'event_countdown_export_$timestamp.ecbackup';
 
       final path = await _writeZipFile(
         exportType: 'events',
@@ -58,12 +327,12 @@
       );
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        debugPrint('exportToJson error: \$e');
+        debugPrint('exportToJson error: $e');
         debugPrint(stackTrace.toString());
       }
       return ExportResult(
         success: false,
-        errorMessage: 'Export failed: \$e',
+        errorMessage: 'Export failed: $e',
         exportedAt: DateTime.now(),
         exportType: 'events',
       );
@@ -89,7 +358,7 @@
       final jsonString = const JsonEncoder.withIndent('  ').convert(exportMap);
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'event_countdown_full_export_\$timestamp.ecbackup';
+      final fileName = 'event_countdown_full_export_$timestamp.ecbackup';
 
       final path = await _writeZipFile(
         exportType: 'full',
@@ -112,12 +381,12 @@
       );
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        debugPrint('exportAllData error: \$e');
+        debugPrint('exportAllData error: $e');
         debugPrint(stackTrace.toString());
       }
       return ExportResult(
         success: false,
-        errorMessage: 'Full export failed: \$e',
+        errorMessage: 'Full export failed: $e',
         exportedAt: DateTime.now(),
         exportType: 'full',
       );
@@ -144,8 +413,8 @@
 
       final dir = await getApplicationDocumentsDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'event_countdown_export_\$timestamp.json';
-      final file = File('\${dir.path}/\$fileName');
+      final fileName = 'event_countdown_export_$timestamp.json';
+      final file = File('${dir.path}/$fileName');
       await file.writeAsString(jsonString, encoding: utf8);
 
       final fileSize = await file.length();
@@ -161,12 +430,12 @@
       );
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        debugPrint('exportEventsAsPlainJson error: \$e');
+        debugPrint('exportEventsAsPlainJson error: $e');
         debugPrint(stackTrace.toString());
       }
       return ExportResult(
         success: false,
-        errorMessage: 'Plain JSON export failed: \$e',
+        errorMessage: 'Plain JSON export failed: $e',
         exportedAt: DateTime.now(),
         exportType: 'events_plain_json',
       );
@@ -198,13 +467,13 @@
       return result;
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        debugPrint('exportAndShareEvents error: \$e');
+        debugPrint('exportAndShareEvents error: $e');
         debugPrint(stackTrace.toString());
       }
       return ExportResult(
         success: false,
         filePath: result.filePath,
-        errorMessage: 'Sharing failed: \$e\n\nThe file was saved at: \${result.filePath}',
+        errorMessage: 'Sharing failed: $e\n\nThe file was saved at: ${result.filePath}',
         eventCount: result.eventCount,
         totalTableCount: result.totalTableCount,
         fileSizeBytes: result.fileSizeBytes,
@@ -238,13 +507,13 @@
       return result;
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        debugPrint('exportAndShareAllData error: \$e');
+        debugPrint('exportAndShareAllData error: $e');
         debugPrint(stackTrace.toString());
       }
       return ExportResult(
         success: false,
         filePath: result.filePath,
-        errorMessage: 'Sharing failed: \$e\n\nThe file was saved at: \${result.filePath}',
+        errorMessage: 'Sharing failed: $e\n\nThe file was saved at: ${result.filePath}',
         eventCount: result.eventCount,
         totalTableCount: result.totalTableCount,
         fileSizeBytes: result.fileSizeBytes,
@@ -307,13 +576,13 @@
       );
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        debugPrint('saveExportToDevice error: \$e');
+        debugPrint('saveExportToDevice error: $e');
         debugPrint(stackTrace.toString());
       }
       return ExportResult(
         success: false,
         filePath: result.filePath,
-        errorMessage: 'Save to device failed: \$e',
+        errorMessage: 'Save to device failed: $e',
         eventCount: result.eventCount,
         totalTableCount: result.totalTableCount,
         fileSizeBytes: result.fileSizeBytes,
@@ -370,13 +639,13 @@
       );
     } catch (e, stackTrace) {
       if (kDebugMode) {
-        debugPrint('saveFullExportToDevice error: \$e');
+        debugPrint('saveFullExportToDevice error: $e');
         debugPrint(stackTrace.toString());
       }
       return ExportResult(
         success: false,
         filePath: result.filePath,
-        errorMessage: 'Save to device failed: \$e',
+        errorMessage: 'Save to device failed: $e',
         eventCount: result.eventCount,
         totalTableCount: result.totalTableCount,
         fileSizeBytes: result.fileSizeBytes,
@@ -396,12 +665,12 @@
         final downloadsDir = Directory('/storage/emulated/0/Download');
         if (await downloadsDir.exists()) {
           final fileName = p.basename(sourcePath);
-          final destPath = '\${downloadsDir.path}/\$fileName';
+          final destPath = '${downloadsDir.path}/$fileName';
           await File(sourcePath).copy(destPath);
           return destPath;
         }
       } catch (e) {
-        if (kDebugMode) debugPrint('Could not copy to Downloads: \$e');
+        if (kDebugMode) debugPrint('Could not copy to Downloads: $e');
       }
     }
     return null;
@@ -464,7 +733,7 @@
     try {
       final file = File(filePath);
       if (!await file.exists()) {
-        throw Exception('File not found: \$filePath');
+        throw Exception('File not found: $filePath');
       }
 
       final fileSize = await file.length();
@@ -538,7 +807,7 @@
         warnings.add('No data tables found in file');
       }
       if (decoded['exportVersion'] != null && decoded['exportVersion'] != 1 && decoded['exportVersion'] != 2) {
-        warnings.add('Unknown export version: \${decoded['exportVersion']}');
+        warnings.add('Unknown export version: ${decoded['exportVersion']}');
       }
 
       return ImportPreview(
@@ -559,7 +828,7 @@
         tableRowCounts: {},
         totalRows: 0,
         checksumValid: false,
-        warnings: ['Error reading file: \$e'],
+        warnings: ['Error reading file: $e'],
       );
     }
   }
@@ -570,12 +839,12 @@
   static Future<int> importFromJson(String filePath) async {
     final file = File(filePath);
     if (!await file.exists()) {
-      throw Exception('File not found: \$filePath');
+      throw Exception('File not found: $filePath');
     }
 
     final fileSize = await file.length();
     if (fileSize == 0) {
-      throw Exception('File is empty (0 bytes): \$filePath');
+      throw Exception('File is empty (0 bytes): $filePath');
     }
 
     List<dynamic> eventList;
@@ -631,19 +900,19 @@
     for (var i = 0; i < eventList.length; i++) {
       final item = eventList[i];
       if (item is! Map) {
-        errors.add('Index \$i: expected a map, got \${item.runtimeType}');
+        errors.add('Index $i: expected a map, got ${item.runtimeType}');
         continue;
       }
       try {
         final event = Event.fromJson(Map<String, dynamic>.from(item));
         events.add(event);
       } catch (e) {
-        errors.add('Index \$i: \$e');
+        errors.add('Index $i: $e');
       }
     }
 
     if (errors.isNotEmpty && events.isEmpty) {
-      throw FormatException('All \${eventList.length} events failed to parse: \n\${errors.take(5).join('\n')}');
+      throw FormatException('All ${eventList.length} events failed to parse: \n${errors.take(5).join('\n')}');
     }
 
     if (events.isEmpty) {
@@ -656,7 +925,7 @@
       backup = await DatabaseHelper.instance.getAllEventsSorted();
     } catch (e) {
       backup = [];
-      if (kDebugMode) debugPrint('Could not create backup before import: \$e');
+      if (kDebugMode) debugPrint('Could not create backup before import: $e');
     }
 
     try {
@@ -668,11 +937,11 @@
           await DatabaseHelper.instance.replaceAllEvents(backup);
         } catch (restoreError) {
           throw Exception(
-              'Import failed AND backup restore failed. Database may be in an inconsistent state. Error: \$restoreError');
+              'Import failed AND backup restore failed. Database may be in an inconsistent state. Error: $restoreError');
         }
       }
       throw Exception(
-          'Import failed. Database restored from backup. Error: \$e');
+          'Import failed. Database restored from backup. Error: $e');
     }
 
     return events.length;
@@ -682,12 +951,12 @@
   static Future<void> importAllData(String filePath) async {
     final file = File(filePath);
     if (!await file.exists()) {
-      throw Exception('File not found: \$filePath');
+      throw Exception('File not found: $filePath');
     }
 
     final fileSize = await file.length();
     if (fileSize == 0) {
-      throw Exception('File is empty (0 bytes): \$filePath');
+      throw Exception('File is empty (0 bytes): $filePath');
     }
 
     late final Map<String, dynamic> decoded;
@@ -727,7 +996,7 @@
 
     final exportVersion = decoded['exportVersion'];
     if (exportVersion != 1) {
-      throw Exception('Unsupported export version: \$exportVersion');
+      throw Exception('Unsupported export version: $exportVersion');
     }
 
     final tablesData = decoded['tables'];
@@ -742,7 +1011,7 @@
       final value = entry.value;
       if (value is! List) {
         throw Exception(
-            'Invalid data for table "\$key": expected a list, got \${value.runtimeType}');
+            'Invalid data for table "$key": expected a list, got ${value.runtimeType}');
       }
       typedTables[key] = value.cast<Map<String, dynamic>>();
     }
@@ -755,11 +1024,11 @@
         try {
           Event.fromJson(eventList[i]);
         } catch (e) {
-          errors.add('Invalid event at index \$i: \$e');
+          errors.add('Invalid event at index $i: $e');
         }
       }
       if (errors.isNotEmpty) {
-        throw FormatException('Event validation failed:\n\${errors.take(10).join('\n')}');
+        throw FormatException('Event validation failed:\n${errors.take(10).join('\n')}');
       }
     }
 
@@ -769,7 +1038,7 @@
       backup = await DatabaseHelper.instance.exportAllTables();
     } catch (e) {
       backup = {};
-      if (kDebugMode) debugPrint('Could not create backup before import: \$e');
+      if (kDebugMode) debugPrint('Could not create backup before import: $e');
     }
 
     try {
@@ -781,11 +1050,11 @@
           await DatabaseHelper.instance.importAllTables(backup);
         } catch (restoreError) {
           throw Exception(
-              'Import failed AND backup restore failed. Database may be in an inconsistent state. Error: \$restoreError');
+              'Import failed AND backup restore failed. Database may be in an inconsistent state. Error: $restoreError');
         }
       }
       throw Exception(
-          'Import failed. Database restored from backup. Error: \$e');
+          'Import failed. Database restored from backup. Error: $e');
     }
   }
 
@@ -843,8 +1112,8 @@
 
     final dir = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = 'attendance_report_\$timestamp.csv';
-    final file = File('\${dir.path}/\$fileName');
+    final fileName = 'attendance_report_$timestamp.csv';
+    final file = File('${dir.path}/$fileName');
     await file.writeAsString(csvContent, encoding: utf8);
     return file.path;
   }
@@ -890,8 +1159,8 @@
 
     final dir = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = 'timetable_export_\$timestamp.csv';
-    final file = File('\${dir.path}/\$fileName');
+    final fileName = 'timetable_export_$timestamp.csv';
+    final file = File('${dir.path}/$fileName');
     await file.writeAsString(csvContent, encoding: utf8);
     return file.path;
   }
@@ -973,7 +1242,7 @@
   static Future<List<AttendanceRecord>> importAttendanceFromCsv(String filePath) async {
     final file = File(filePath);
     if (!await file.exists()) {
-      throw Exception('File not found: \$filePath');
+      throw Exception('File not found: $filePath');
     }
 
     final contents = await file.readAsString(encoding: utf8);
@@ -1002,12 +1271,12 @@
         final record = AttendanceRecord.fromCsvRow(rows[i]);
         records.add(record);
       } catch (e) {
-        errors.add('Row \${i + 1}: \$e');
+        errors.add('Row ${i + 1}: $e');
       }
     }
 
     if (errors.isNotEmpty && records.isEmpty) {
-      throw FormatException('All rows failed to parse:\n\${errors.take(5).join('\n')}');
+      throw FormatException('All rows failed to parse:\n${errors.take(5).join('\n')}');
     }
 
     return records;
@@ -1017,7 +1286,7 @@
   static Future<List<TimetableEntry>> importTimetableFromCsv(String filePath) async {
     final file = File(filePath);
     if (!await file.exists()) {
-      throw Exception('File not found: \$filePath');
+      throw Exception('File not found: $filePath');
     }
 
     final contents = await file.readAsString(encoding: utf8);
@@ -1046,12 +1315,12 @@
         final entry = TimetableEntry.fromCsvRow(rows[i]);
         entries.add(entry);
       } catch (e) {
-        errors.add('Row \${i + 1}: \$e');
+        errors.add('Row ${i + 1}: $e');
       }
     }
 
     if (errors.isNotEmpty && entries.isEmpty) {
-      throw FormatException('All rows failed to parse:\n\${errors.take(5).join('\n')}');
+      throw FormatException('All rows failed to parse:\n${errors.take(5).join('\n')}');
     }
 
     return entries;
