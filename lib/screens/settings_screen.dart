@@ -5,8 +5,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
-import '../services/export_import_service.dart';
-import '../services/backup_service.dart';
+import 'package:event_countdown/services/export_import_service.dart';
+import 'package:event_countdown/services/backup_service.dart';
+import 'package:event_countdown/services/widget_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
