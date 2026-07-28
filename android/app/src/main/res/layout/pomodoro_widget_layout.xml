@@ -1,78 +1,186 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 
+  NEET Edition Pomodoro Widget Layout
+  - Circular progress ring centered with timer inside
+  - NEET countdown banner at top
+  - Subject + topic below ring
+  - Session counter and distraction chip at bottom
+  - All elements centered and responsive to resize
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/pomodoro_widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FF6B6B"
-    android:padding="16dp">
+    android:background="#0F0F23"
+    android:padding="12dp">
 
-    <LinearLayout
+    <!-- Main centered content container -->
+    <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:gravity="center_vertical">
+        android:layout_height="match_parent">
 
-        <TextView
-            android:id="@+id/pomodoro_widget_subject"
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- NEET Countdown Banner (top) -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <LinearLayout
+            android:id="@+id/neet_banner"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_alignParentTop="true"
+            android:layout_centerHorizontal="true"
+            android:layout_marginBottom="8dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp"
+            android:background="#667EEA">
+
+            <TextView
+                android:id="@+id/neet_days_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="120"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF" />
+
+            <TextView
+                android:id="@+id/neet_label_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="days left"
+                android:textSize="10sp"
+                android:textColor="#E0E0E0" />
+        </LinearLayout>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- Center Container: Ring + Timer + Subject -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <RelativeLayout
+            android:id="@+id/center_container"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_below="@id/neet_banner"
+            android:layout_above="@id/bottom_container"
+            android:gravity="center">
+
+            <!-- Circular Progress Ring -->
+            <ProgressBar
+                android:id="@+id/pomodoro_progress_ring"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:layout_centerInParent="true"
+                android:indeterminate="false"
+                android:max="100"
+                android:progress="0"
+                android:progressDrawable="@drawable/widget_circular_progress"
+                android:rotation="-90" />
+
+            <!-- Timer Text (centered inside ring) -->
+            <TextView
+                android:id="@+id/pomodoro_widget_timer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:text="Tap to Start"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.02" />
+
+            <!-- Status Text (below timer, still centered) -->
+            <TextView
+                android:id="@+id/pomodoro_widget_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/pomodoro_widget_timer"
+                android:layout_centerHorizontal="true"
+                android:layout_marginTop="2dp"
+                android:text="Ready"
+                android:textSize="10sp"
+                android:textColor="#B0FFFFFF" />
+
+        </RelativeLayout>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- Subject Name (below center container) -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <TextView
+            android:id="@+id/pomodoro_widget_subject"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_above="@id/bottom_container"
+            android:layout_marginBottom="4dp"
+            android:gravity="center"
             android:text="Ready to Focus"
-            android:textSize="14sp"
+            android:textSize="11sp"
             android:textStyle="bold"
             android:textColor="#FFFFFF"
-            android:alpha="0.95"
+            android:alpha="0.9"
             android:maxLines="1"
             android:ellipsize="end" />
 
-        <TextView
-            android:id="@+id/pomodoro_widget_timer"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Tap to start"
-            android:textSize="40sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFF"
-            android:layout_marginTop="6dp"
-            android:letterSpacing="0.02"
-            android:fontFamily="monospace" />
-
-        <TextView
-            android:id="@+id/pomodoro_widget_status"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Focus"
-            android:textSize="13sp"
-            android:textColor="#FFFFFF"
-            android:alpha="0.7"
-            android:layout_marginTop="2dp" />
-
-        <ProgressBar
-            android:id="@+id/pomodoro_progress_ring"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="4dp"
-            android:layout_marginTop="10dp"
-            android:progressDrawable="@drawable/widget_progress_drawable"
-            android:max="100"
-            android:progress="0" />
-
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- Bottom Container: Session + Distraction Chips -->
+        <!-- ═══════════════════════════════════════════════ -->
         <LinearLayout
-            android:id="@+id/pomodoro_session_chips"
-            android:layout_width="match_parent"
+            android:id="@+id/bottom_container"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_centerHorizontal="true"
             android:orientation="horizontal"
-            android:layout_marginTop="8dp"
-            android:visibility="gone">
+            android:gravity="center"
+            android:layout_marginTop="4dp">
 
-            <TextView
-                android:id="@+id/completed_sessions"
+            <!-- Session Counter -->
+            <LinearLayout
+                android:id="@+id/pomodoro_session_chips"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🔥 0"
-                android:textSize="12sp"
-                android:textColor="#FFFFFF"
-                android:alpha="0.8" />
-        </LinearLayout>
-    </LinearLayout>
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="2dp"
+                android:background="#20FFA726"
+                android:visibility="gone">
 
+                <TextView
+                    android:id="@+id/completed_sessions"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🔥 0"
+                    android:textSize="10sp"
+                    android:textColor="#FFA726"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Distraction Counter -->
+            <LinearLayout
+                android:id="@+id/distraction_chip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="2dp"
+                android:background="#20FF9800"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/distraction_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⚡ 0"
+                    android:textSize="10sp"
+                    android:textColor="#FF9800"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+    </RelativeLayout>
 </FrameLayout>
