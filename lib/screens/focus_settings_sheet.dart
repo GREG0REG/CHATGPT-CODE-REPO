@@ -1,9 +1,11 @@
+// FILE: lib/screens/focus_settings_sheet.dart
+// COMPLETE REPLACEMENT — NEET Edition v15
+// Added: NEET exam date picker, distraction toggle, intensity rating toggle,
+//        custom preset editor with NEET defaults
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../services/focus_settings_service.dart';
 
-/// Bottom sheet for all Pomodoro / Focus settings.
-/// Replaces the old "Pomodoro & Goals" section in SettingsScreen.
 class FocusSettingsSheet extends StatefulWidget {
   const FocusSettingsSheet({super.key});
 
@@ -14,347 +16,454 @@ class FocusSettingsSheet extends StatefulWidget {
 class _FocusSettingsSheetState extends State<FocusSettingsSheet> {
   final _fs = FocusSettingsService.instance;
 
-  bool _loading = true;
-
-  String _preset = 'classic';
-  int _customFocus = 25;
-  int _customShortBreak = 5;
-  int _customLongBreak = 15;
-  int _customSessions = 4;
-
-  int _dailyGoalMinutes = 120;
-  int _dailyGoalPomodoros = 4;
+  int _customFocus = 90;
+  int _customShort = 15;
+  int _customLong = 30;
+  int _customSessions = 3;
+  int _dailyGoalMin = 360;
+  int _dailyGoalPomos = 4;
 
   bool _autoStartBreak = false;
   bool _timerSound = true;
   bool _sessionNotes = false;
-  bool _keepScreenAwake = true;
+  bool _keepAwake = true;
+  bool _showNeetCountdown = true;
+  bool _distractionLog = true;
+  bool _intensityRating = true;
+
+  DateTime _neetExamDate = DateTime(2026, 5, 2);
+
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadAll();
+    _loadSettings();
   }
 
-  Future<void> _loadAll() async {
-    final preset = await _fs.getDefaultPreset();
-    final cFocus = await _fs.getCustomFocusMinutes();
-    final cShort = await _fs.getCustomShortBreakMinutes();
-    final cLong = await _fs.getCustomLongBreakMinutes();
-    final cSess = await _fs.getCustomSessionsBeforeLongBreak();
-
-    final dMin = await _fs.getDailyGoalMinutes();
-    final dPomo = await _fs.getDailyGoalPomodoros();
-
+  Future<void> _loadSettings() async {
+    final focus = await _fs.getCustomFocusMinutes();
+    final short = await _fs.getCustomShortBreakMinutes();
+    final long = await _fs.getCustomLongBreakMinutes();
+    final sessions = await _fs.getCustomSessionsBeforeLongBreak();
+    final goalMin = await _fs.getDailyGoalMinutes();
+    final goalPomos = await _fs.getDailyGoalPomodoros();
     final autoBreak = await _fs.getAutoStartBreak();
-    final tSound = await _fs.getTimerSoundEnabled();
-    final sNotes = await _fs.getSessionNotesEnabled();
+    final sound = await _fs.getTimerSoundEnabled();
+    final notes = await _fs.getSessionNotesEnabled();
     final awake = await _fs.getKeepScreenAwake();
+    final showNeet = await _fs.getShowNeetCountdown();
+    final distract = await _fs.getDistractionLogEnabled();
+    final intensity = await _fs.getIntensityRatingEnabled();
+    final neetMillis = await _fs.getNeetExamDateMillis();
+
+    if (!mounted) return;
+    setState(() {
+      _customFocus = focus;
+      _customShort = short;
+      _customLong = long;
+      _customSessions = sessions;
+      _dailyGoalMin = goalMin;
+      _dailyGoalPomos = goalPomos;
+      _autoStartBreak = autoBreak;
+      _timerSound = sound;
+      _sessionNotes = notes;
+      _keepAwake = awake;
+      _showNeetCountdown = showNeet;
+      _distractionLog = distract;
+      _intensityRating = intensity;
+      _neetExamDate = DateTime.fromMillisecondsSinceEpoch(neetMillis);
+      _loading = false;
+    });
+  }
+
+  Future<void> _save() async {
+    await _fs.setCustomFocusMinutes(_customFocus);
+    await _fs.setCustomShortBreakMinutes(_customShort);
+    await _fs.setCustomLongBreakMinutes(_customLong);
+    await _fs.setCustomSessionsBeforeLongBreak(_customSessions);
+    await _fs.setDailyGoalMinutes(_dailyGoalMin);
+    await _fs.setDailyGoalPomodoros(_dailyGoalPomos);
+    await _fs.setAutoStartBreak(_autoStartBreak);
+    await _fs.setTimerSoundEnabled(_timerSound);
+    await _fs.setSessionNotesEnabled(_sessionNotes);
+    await _fs.setKeepScreenAwake(_keepAwake);
+    await _fs.setShowNeetCountdown(_showNeetCountdown);
+    await _fs.setDistractionLogEnabled(_distractionLog);
+    await _fs.setIntensityRatingEnabled(_intensityRating);
+    await _fs.setNeetExamDateMillis(_neetExamDate.millisecondsSinceEpoch);
 
     if (mounted) {
-      setState(() {
-        _preset = preset;
-        _customFocus = cFocus;
-        _customShortBreak = cShort;
-        _customLongBreak = cLong;
-        _customSessions = cSess;
-        _dailyGoalMinutes = dMin;
-        _dailyGoalPomodoros = dPomo;
-        _autoStartBreak = autoBreak;
-        _timerSound = tSound;
-        _sessionNotes = sNotes;
-        _keepScreenAwake = awake;
-        _loading = false;
-      });
+      Navigator.pop(context);
     }
   }
 
-  Future<void> _setPreset(String v) async {
-    await _fs.setDefaultPreset(v);
-    setState(() => _preset = v);
-  }
-
-  Future<void> _setCustomFocus(int v) async {
-    await _fs.setCustomFocusMinutes(v);
-    setState(() => _customFocus = v);
-  }
-
-  Future<void> _setCustomShortBreak(int v) async {
-    await _fs.setCustomShortBreakMinutes(v);
-    setState(() => _customShortBreak = v);
-  }
-
-  Future<void> _setCustomLongBreak(int v) async {
-    await _fs.setCustomLongBreakMinutes(v);
-    setState(() => _customLongBreak = v);
-  }
-
-  Future<void> _setCustomSessions(int v) async {
-    await _fs.setCustomSessionsBeforeLongBreak(v);
-    setState(() => _customSessions = v);
-  }
-
-  Future<void> _setDailyGoalMinutes(int v) async {
-    await _fs.setDailyGoalMinutes(v);
-    setState(() => _dailyGoalMinutes = v);
-  }
-
-  Future<void> _setDailyGoalPomodoros(int v) async {
-    await _fs.setDailyGoalPomodoros(v);
-    setState(() => _dailyGoalPomodoros = v);
-  }
-
-  Future<void> _setAutoStartBreak(bool v) async {
-    await _fs.setAutoStartBreak(v);
-    setState(() => _autoStartBreak = v);
-  }
-
-  Future<void> _setTimerSound(bool v) async {
-    await _fs.setTimerSoundEnabled(v);
-    setState(() => _timerSound = v);
-  }
-
-  Future<void> _setSessionNotes(bool v) async {
-    await _fs.setSessionNotesEnabled(v);
-    setState(() => _sessionNotes = v);
-  }
-
-  Future<void> _setKeepScreenAwake(bool v) async {
-    await _fs.setKeepScreenAwake(v);
-    setState(() => _keepScreenAwake = v);
+  Future<void> _pickNeetDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _neetExamDate,
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2030, 12, 31),
+      helpText: 'Select NEET Exam Date',
+    );
+    if (picked != null) {
+      setState(() => _neetExamDate = picked);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final scheme = Theme.of(context).colorScheme;
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Handle
-            Center(
-              child: Container(
-                margin: const EdgeInsets.only(top: 12, bottom: 8),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: cs.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
+    if (_loading) {
+      return const SizedBox(
+        height: 400,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Row(
-                children: [
-                  Text(
-                    'Focus Settings',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: cs.onSurface,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(32),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
+                ),
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Row(
                   children: [
-                    // ── Preset ──
-                    _sectionHeader('Timer Preset'),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: SegmentedButton<String>(
-                        segments: const [
-                          ButtonSegment(value: 'classic', label: Text('Classic')),
-                          ButtonSegment(value: 'deepWork', label: Text('Deep')),
-                          ButtonSegment(value: 'examCrunch', label: Text('Exam')),
-                          ButtonSegment(value: 'custom', label: Text('Custom')),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.psychology_alt, color: scheme.onPrimaryContainer, size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Focus Settings',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: scheme.onSurface,
+                            ),
+                          ),
+                          Text(
+                            'Customize your NEET study sessions',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: scheme.outline,
+                            ),
+                          ),
                         ],
-                        selected: {_preset},
-                        onSelectionChanged: (sel) {
-                          if (sel.isNotEmpty) _setPreset(sel.first);
-                        },
                       ),
                     ),
-
-                    // Custom sliders
-                    if (_preset == 'custom') ...[
-                      const SizedBox(height: 16),
-                      _sliderTile(
-                        label: 'Focus duration',
-                        value: _customFocus,
-                        min: 5,
-                        max: 120,
-                        divisions: 23,
-                        suffix: 'min',
-                        onChanged: _setCustomFocus,
-                      ),
-                      _sliderTile(
-                        label: 'Short break',
-                        value: _customShortBreak,
-                        min: 1,
-                        max: 30,
-                        divisions: 29,
-                        suffix: 'min',
-                        onChanged: _setCustomShortBreak,
-                      ),
-                      _sliderTile(
-                        label: 'Long break',
-                        value: _customLongBreak,
-                        min: 5,
-                        max: 60,
-                        divisions: 11,
-                        suffix: 'min',
-                        onChanged: _setCustomLongBreak,
-                      ),
-                      _sliderTile(
-                        label: 'Sessions before long break',
-                        value: _customSessions,
-                        min: 1,
-                        max: 8,
-                        divisions: 7,
-                        suffix: '',
-                        onChanged: _setCustomSessions,
-                      ),
-                    ],
-
-                    const Divider(height: 32),
-
-                    // ── Daily Goal ──
-                    _sectionHeader('Daily Goal'),
-                    _sliderTile(
-                      label: 'Target minutes',
-                      value: _dailyGoalMinutes,
-                      min: 30,
-                      max: 480,
-                      divisions: 15,
-                      suffix: 'min',
-                      onChanged: _setDailyGoalMinutes,
+                    TextButton(
+                      onPressed: _save,
+                      child: const Text('Save'),
                     ),
-                    _sliderTile(
-                      label: 'Target sessions',
-                      value: _dailyGoalPomodoros,
-                      min: 1,
-                      max: 16,
-                      divisions: 15,
-                      suffix: 'sessions',
-                      onChanged: _setDailyGoalPomodoros,
-                    ),
-
-                    const Divider(height: 32),
-
-                    // ── Toggles ──
-                    _sectionHeader('Behavior'),
-                    SwitchListTile(
-                      title: const Text('Auto-start Break'),
-                      subtitle: const Text('Automatically begin break after focus ends'),
-                      value: _autoStartBreak,
-                      onChanged: _setAutoStartBreak,
-                    ),
-                    SwitchListTile(
-                      title: const Text('Timer Sound'),
-                      subtitle: const Text('Play sound when timer completes'),
-                      value: _timerSound,
-                      onChanged: _setTimerSound,
-                    ),
-                    SwitchListTile(
-                      title: const Text('Session Notes'),
-                      subtitle: const Text('Prompt for a note after each focus session'),
-                      value: _sessionNotes,
-                      onChanged: _setSessionNotes,
-                    ),
-                    SwitchListTile(
-                      title: const Text('Keep Screen Awake'),
-                      subtitle: const Text('Prevent screen from sleeping during focus'),
-                      value: _keepScreenAwake,
-                      onChanged: _setKeepScreenAwake,
-                    ),
-
-                    const SizedBox(height: 24),
                   ],
                 ),
               ),
-          ],
-        ),
-      ),
+              const Divider(),
+              // Content
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  children: [
+                    // ── NEET Exam Date ──
+                    _buildSectionTitle('NEET Exam Countdown', Icons.calendar_month),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: _pickNeetDate,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerHighest.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: scheme.outlineVariant.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.event, color: scheme.primary, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Exam Date',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: scheme.outline,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${_neetExamDate.day} ${_monthName(_neetExamDate.month)} ${_neetExamDate.year}',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: scheme.onSurface,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(Icons.edit_calendar, color: scheme.outline, size: 18),
+                          ],
+                        ),
+                      ),
+                    ),
+                    _buildSwitchTile(
+                      'Show Countdown Banner',
+                      'Display days until NEET on Focus screen',
+                      _showNeetCountdown,
+                      (v) => setState(() => _showNeetCountdown = v),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ── Custom Preset ──
+                    _buildSectionTitle('Custom Preset', Icons.tune),
+                    const SizedBox(height: 8),
+                    _buildDurationSlider(
+                      'Focus Duration',
+                      _customFocus,
+                      15,
+                      180,
+                      (v) => setState(() => _customFocus = v),
+                      Icons.hourglass_top,
+                    ),
+                    _buildDurationSlider(
+                      'Short Break',
+                      _customShort,
+                      5,
+                      30,
+                      (v) => setState(() => _customShort = v),
+                      Icons.coffee,
+                    ),
+                    _buildDurationSlider(
+                      'Long Break',
+                      _customLong,
+                      10,
+                      60,
+                      (v) => setState(() => _customLong = v),
+                      Icons.bedtime,
+                    ),
+                    _buildDurationSlider(
+                      'Sessions Before Long Break',
+                      _customSessions,
+                      1,
+                      8,
+                      (v) => setState(() => _customSessions = v),
+                      Icons.repeat,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ── Daily Goals ──
+                    _buildSectionTitle('Daily Goals', Icons.track_changes),
+                    const SizedBox(height: 8),
+                    _buildDurationSlider(
+                      'Daily Target (minutes)',
+                      _dailyGoalMin,
+                      30,
+                      720,
+                      (v) => setState(() => _dailyGoalMin = v),
+                      Icons.schedule,
+                    ),
+                    _buildDurationSlider(
+                      'Daily Target (sessions)',
+                      _dailyGoalPomos,
+                      1,
+                      12,
+                      (v) => setState(() => _dailyGoalPomos = v),
+                      Icons.local_fire_department,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ── Features ──
+                    _buildSectionTitle('Features', Icons.auto_awesome),
+                    _buildSwitchTile(
+                      'Distraction Log',
+                      'Track distractions during focus sessions',
+                      _distractionLog,
+                      (v) => setState(() => _distractionLog = v),
+                    ),
+                    _buildSwitchTile(
+                      'Session Intensity Rating',
+                      'Rate focus quality after each session',
+                      _intensityRating,
+                      (v) => setState(() => _intensityRating = v),
+                    ),
+                    _buildSwitchTile(
+                      'Session Notes',
+                      'Add notes after completing a session',
+                      _sessionNotes,
+                      (v) => setState(() => _sessionNotes = v),
+                    ),
+                    _buildSwitchTile(
+                      'Keep Screen Awake',
+                      'Prevent screen from sleeping during focus',
+                      _keepAwake,
+                      (v) => setState(() => _keepAwake = v),
+                    ),
+                    _buildSwitchTile(
+                      'Timer Sound',
+                      'Play sound when timer completes',
+                      _timerSound,
+                      (v) => setState(() => _timerSound = v),
+                    ),
+                    _buildSwitchTile(
+                      'Auto-start Break',
+                      'Automatically start break after focus',
+                      _autoStartBreak,
+                      (v) => setState(() => _autoStartBreak = v),
+                    ),
+                    const SizedBox(height: 32),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _sectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: Theme.of(context).colorScheme.primary,
+  Widget _buildSectionTitle(String title, IconData icon) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: scheme.primary),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: scheme.onSurface,
+            letterSpacing: 0.3,
+          ),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _sliderTile({
-    required String label,
-    required int value,
-    required double min,
-    required double max,
-    required int divisions,
-    required String suffix,
-    required ValueChanged<int> onChanged,
-  }) {
-    final cs = Theme.of(context).colorScheme;
+  Widget _buildDurationSlider(
+    String label,
+    int value,
+    int min,
+    int max,
+    ValueChanged<int> onChanged,
+    IconData icon,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(label, style: const TextStyle(fontSize: 14)),
-              ),
+              Icon(icon, size: 16, color: scheme.outline),
+              const SizedBox(width: 8),
               Text(
-                '$value $suffix',
+                label,
                 style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: cs.primary,
+                  fontSize: 13,
+                  color: scheme.onSurface.withOpacity(0.8),
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$value',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: scheme.onPrimaryContainer,
+                  ),
                 ),
               ),
             ],
           ),
           Slider(
             value: value.toDouble(),
-            min: min,
-            max: max,
-            divisions: divisions,
-            label: '$value',
+            min: min.toDouble(),
+            max: max.toDouble(),
+            divisions: max - min,
             onChanged: (v) => onChanged(v.round()),
+            activeColor: scheme.primary,
           ),
         ],
       ),
     );
   }
-}
+
+  Widget _buildSwitchTile(
+    String title,
+    String subtitle,
+    bool value,
+    ValueChanged<bool> onChanged,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    return SwitchListTile.adaptive(
+      title: Text(
+        title,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: scheme.onSurface,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          fontSize: 12,
+          color: scheme.outline,
+        ),
+      ),
+      value: value,
+      onChanged: onChanged,
+      activeColor: scheme.primary,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+    );
+  }
+
+  String _monthName(int month) {
+    const names = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return names[month];
+  }
+} 
