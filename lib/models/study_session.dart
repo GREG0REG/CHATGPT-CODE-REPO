@@ -1,3 +1,7 @@
+// FILE: lib/models/study_session.dart
+// COMPLETE REPLACEMENT — NEET Edition v15
+// Added: distractionCount, intensityRating, topicTag fields
+
 /// A logged study session from the Pomodoro timer.
 class StudySession {
   final int? id;
@@ -5,8 +9,11 @@ class StudySession {
   final String? subjectTag;    // e.g. "Math", "Physics"
   final int durationMinutes;   // actual focused minutes
   final int completedAtMillis; // timestamp
-  final String sessionType;    // 'pomodoro', 'deep_work', 'exam_crunch', 'custom'
-  final String? notes;       // session notes
+  final String sessionType;    // 'pomodoro', 'deep_work', 'exam_crunch', 'custom', 'neet_revision', 'neet_deep', 'neet_sprint'
+  final String? notes;         // session notes
+  final int distractionCount;  // NEW: distractions logged during session
+  final int intensityRating;   // NEW: 1-5 focus quality rating
+  final String? topicTag;      // NEW: specific topic within subject
 
   const StudySession({
     this.id,
@@ -16,6 +23,9 @@ class StudySession {
     required this.completedAtMillis,
     this.sessionType = 'pomodoro',
     this.notes,
+    this.distractionCount = 0,
+    this.intensityRating = 0,
+    this.topicTag,
   });
 
   Map<String, dynamic> toMap() {
@@ -27,6 +37,9 @@ class StudySession {
       'completedAtMillis': completedAtMillis,
       'sessionType': sessionType,
       'notes': notes,
+      'distractionCount': distractionCount,
+      'intensityRating': intensityRating,
+      'topicTag': topicTag,
     };
   }
 
@@ -39,6 +52,9 @@ class StudySession {
       completedAtMillis: map['completedAtMillis'] as int,
       sessionType: map['sessionType'] as String? ?? 'pomodoro',
       notes: map['notes'] as String?,
+      distractionCount: map['distractionCount'] as int? ?? 0,
+      intensityRating: map['intensityRating'] as int? ?? 0,
+      topicTag: map['topicTag'] as String?,
     );
   }
 
@@ -50,6 +66,9 @@ class StudySession {
     int? completedAtMillis,
     String? sessionType,
     String? notes,
+    int? distractionCount,
+    int? intensityRating,
+    String? topicTag,
     bool clearNotes = false,
   }) {
     return StudySession(
@@ -60,6 +79,9 @@ class StudySession {
       completedAtMillis: completedAtMillis ?? this.completedAtMillis,
       sessionType: sessionType ?? this.sessionType,
       notes: clearNotes ? null : (notes ?? this.notes),
+      distractionCount: distractionCount ?? this.distractionCount,
+      intensityRating: intensityRating ?? this.intensityRating,
+      topicTag: topicTag ?? this.topicTag,
     );
   }
 }
