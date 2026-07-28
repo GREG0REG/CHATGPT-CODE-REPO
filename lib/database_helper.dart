@@ -5,6 +5,7 @@
 // NEW: gpa_courses table with proper GPA schema
 // NEW: NEET fields in events and study_sessions tables
 // NEW: 5 NEET analytics methods
+// NEW: DateTime convenience overloads for timetable, habit, reading APIs
 // ALL v1-v15 migrations preserved, v15→v16 migration added
 
 import 'package:sqflite/sqflite.dart';
@@ -446,7 +447,7 @@ class DatabaseHelper {
     """);
   }
 
-    // ============================================
+  // ============================================
   // MIGRATIONS v1-v15 (PRESERVED EXACTLY)
   // ============================================
   Future<void> _migrateV1ToV2(Database db) async {
@@ -811,7 +812,7 @@ class DatabaseHelper {
     """);
   }
 
-    // ============================================
+  // ============================================
   // EVENT CRUD (PRESERVED)
   // ============================================
   Future<int> insertEvent(Event event) async {
@@ -1077,7 +1078,7 @@ class DatabaseHelper {
     return (result.first['best'] as int?) ?? 0;
   }
 
-    // ============================================
+  // ============================================
   // SUBTASK CRUD (PRESERVED)
   // ============================================
   Future<int> insertSubtask(Subtask subtask) async {
@@ -1504,7 +1505,7 @@ class DatabaseHelper {
     """, [minutes, id]);
   }
 
-    // ============================================
+  // ============================================
   // GRADE COMPONENT CRUD (PRESERVED — LEGACY)
   // ============================================
   Future<int> insertGradeComponent(Map<String, dynamic> component) async {
@@ -1918,7 +1919,7 @@ class DatabaseHelper {
     return rows;
   }
 
-  // ============================================
+    // ============================================
   // TIMETABLE CLASSES CRUD (PRESERVED)
   // ============================================
   Future<int> insertTimetableClass(Map<String, dynamic> timetableClass) async {
@@ -1945,7 +1946,7 @@ class DatabaseHelper {
     final db = await database;
     final data = {
       'subjectName': timetableClass['subjectName'],
-            'classType': timetableClass['classType'] ?? 'lecture',
+      'classType': timetableClass['classType'] ?? 'lecture',
       'dayOfWeek': timetableClass['dayOfWeek'],
       'startTimeMinutes': timetableClass['startTimeMinutes'],
       'endTimeMinutes': timetableClass['endTimeMinutes'],
@@ -2090,6 +2091,12 @@ class DatabaseHelper {
       orderBy: 'startTimeMinutes ASC',
     );
     return rows;
+  }
+
+  /// Convenience overload: accepts DateTime instead of millis
+  Future<List<Map<String, dynamic>>> getTimetableTasksForDateTime(DateTime date) async {
+    final startOfDay = DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
+    return getTimetableTasksForDate(startOfDay);
   }
 
   Future<List<Map<String, dynamic>>> getTimetableTasksForDateRange(int startMillis, int endMillis) async {
@@ -2297,7 +2304,7 @@ class DatabaseHelper {
     );
   }
 
-    // ============================================
+  // ============================================
   // HABITS CRUD (PRESERVED)
   // ============================================
   Future<int> insertHabit(Map<String, dynamic> habit) async {
@@ -2448,6 +2455,13 @@ class DatabaseHelper {
     return rows;
   }
 
+  /// Convenience overload: accepts DateTime instead of millis
+  Future<List<Map<String, dynamic>>> getHabitLogsForDateTimeRange(int habitId, DateTime start, DateTime end) async {
+    final startMillis = DateTime(start.year, start.month, start.day).millisecondsSinceEpoch;
+    final endMillis = DateTime(end.year, end.month, end.day).millisecondsSinceEpoch + const Duration(days: 1).inMilliseconds;
+    return getHabitLogsForDateRange(habitId, startMillis, endMillis);
+  }
+
   Future<int> getHabitCompletionCountForWeek(int habitId, int weekStartMillis) async {
     final db = await database;
     final weekEndMillis = weekStartMillis + const Duration(days: 7).inMilliseconds;
@@ -2456,6 +2470,12 @@ class DatabaseHelper {
       WHERE habitId = ? AND dateMillis >= ? AND dateMillis < ? AND completed = 1
     """, [habitId, weekStartMillis, weekEndMillis]);
     return (result.first['count'] as int?) ?? 0;
+  }
+
+  /// Convenience overload: accepts DateTime instead of millis
+  Future<int> getHabitCompletionCountForWeekDateTime(int habitId, DateTime weekStart) async {
+    final weekStartMillis = DateTime(weekStart.year, weekStart.month, weekStart.day).millisecondsSinceEpoch;
+    return getHabitCompletionCountForWeek(habitId, weekStartMillis);
   }
 
   Future<int> getHabitStreak(int habitId) async {
