@@ -368,6 +368,34 @@ class PomodoroService {
     await WidgetService.refreshPomodoroWidget();
   }
 
+  Future<void> _startShortBreak() async {
+    _phase = PomodoroPhase.shortBreak;
+    _remainingSeconds = _preset.shortBreakMinutes * 60;
+    _totalDurationSeconds = _remainingSeconds;
+
+    phaseNotifier.value = _phase;
+    remainingSecondsNotifier.value = _remainingSeconds;
+
+    await _persistState();
+    _startTimer();
+    await WidgetService.refreshPomodoroWidget();
+    debugPrint('☕ Short break started: ${_preset.shortBreakMinutes} min');
+  }
+
+  Future<void> _startLongBreak() async {
+    _phase = PomodoroPhase.longBreak;
+    _remainingSeconds = _preset.longBreakMinutes * 60;
+    _totalDurationSeconds = _remainingSeconds;
+
+    phaseNotifier.value = _phase;
+    remainingSecondsNotifier.value = _remainingSeconds;
+
+    await _persistState();
+    _startTimer();
+    await WidgetService.refreshPomodoroWidget();
+    debugPrint('🌴 Long break started: ${_preset.longBreakMinutes} min');
+  }
+
   void _startTimer() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) async {
