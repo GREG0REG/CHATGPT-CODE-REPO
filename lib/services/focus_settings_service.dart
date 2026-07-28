@@ -23,13 +23,18 @@ class FocusSettingsService {
   static const _kLastSubjectName = 'focus_last_subject_name';
   static const _kSessionNotesEnabled = 'focus_session_notes_enabled';
   static const _kKeepScreenAwake = 'focus_keep_screen_awake';
+  // NEW NEET keys
+  static const _kNeetExamDateMillis = 'neet_exam_date_millis';
+  static const _kShowNeetCountdown = 'show_neet_countdown';
+  static const _kDistractionLogEnabled = 'focus_distraction_log_enabled';
+  static const _kIntensityRatingEnabled = 'focus_intensity_rating_enabled';
 
   Future<SharedPreferences> get _prefs async => SharedPreferences.getInstance();
 
   // ── Preset ──
   Future<String> getDefaultPreset() async {
     final p = await _prefs;
-    return p.getString(_kPomodoroPreset) ?? 'classic';
+    return p.getString(_kPomodoroPreset) ?? 'NEET Revision';
   }
 
   Future<void> setDefaultPreset(String preset) async {
@@ -40,7 +45,7 @@ class FocusSettingsService {
   // ── Custom Durations ──
   Future<int> getCustomFocusMinutes() async {
     final p = await _prefs;
-    return p.getInt(_kCustomFocusMinutes) ?? 25;
+    return p.getInt(_kCustomFocusMinutes) ?? 90;
   }
 
   Future<void> setCustomFocusMinutes(int v) async {
@@ -50,7 +55,7 @@ class FocusSettingsService {
 
   Future<int> getCustomShortBreakMinutes() async {
     final p = await _prefs;
-    return p.getInt(_kCustomShortBreakMinutes) ?? 5;
+    return p.getInt(_kCustomShortBreakMinutes) ?? 15;
   }
 
   Future<void> setCustomShortBreakMinutes(int v) async {
@@ -60,7 +65,7 @@ class FocusSettingsService {
 
   Future<int> getCustomLongBreakMinutes() async {
     final p = await _prefs;
-    return p.getInt(_kCustomLongBreakMinutes) ?? 15;
+    return p.getInt(_kCustomLongBreakMinutes) ?? 30;
   }
 
   Future<void> setCustomLongBreakMinutes(int v) async {
@@ -70,7 +75,7 @@ class FocusSettingsService {
 
   Future<int> getCustomSessionsBeforeLongBreak() async {
     final p = await _prefs;
-    return p.getInt(_kCustomSessionsBeforeLongBreak) ?? 4;
+    return p.getInt(_kCustomSessionsBeforeLongBreak) ?? 3;
   }
 
   Future<void> setCustomSessionsBeforeLongBreak(int v) async {
@@ -81,7 +86,7 @@ class FocusSettingsService {
   // ── Daily Goals ──
   Future<int> getDailyGoalMinutes() async {
     final p = await _prefs;
-    return p.getInt(_kDailyGoalMinutes) ?? 120;
+    return p.getInt(_kDailyGoalMinutes) ?? 360;
   }
 
   Future<void> setDailyGoalMinutes(int v) async {
@@ -168,5 +173,48 @@ class FocusSettingsService {
     } else {
       await p.setString(_kLastSubjectName, name);
     }
+  }
+
+  // ── NEW: NEET Exam Countdown ──
+  Future<int> getNeetExamDateMillis() async {
+    final p = await _prefs;
+    // Default: May 2, 2026
+    return p.getInt(_kNeetExamDateMillis) ?? DateTime(2026, 5, 2).millisecondsSinceEpoch;
+  }
+
+  Future<void> setNeetExamDateMillis(int millis) async {
+    final p = await _prefs;
+    await p.setInt(_kNeetExamDateMillis, millis);
+  }
+
+  Future<bool> getShowNeetCountdown() async {
+    final p = await _prefs;
+    return p.getBool(_kShowNeetCountdown) ?? true;
+  }
+
+  Future<void> setShowNeetCountdown(bool v) async {
+    final p = await _prefs;
+    await p.setBool(_kShowNeetCountdown, v);
+  }
+
+  // ── NEW: Distraction & Intensity ──
+  Future<bool> getDistractionLogEnabled() async {
+    final p = await _prefs;
+    return p.getBool(_kDistractionLogEnabled) ?? true;
+  }
+
+  Future<void> setDistractionLogEnabled(bool v) async {
+    final p = await _prefs;
+    await p.setBool(_kDistractionLogEnabled, v);
+  }
+
+  Future<bool> getIntensityRatingEnabled() async {
+    final p = await _prefs;
+    return p.getBool(_kIntensityRatingEnabled) ?? true;
+  }
+
+  Future<void> setIntensityRatingEnabled(bool v) async {
+    final p = await _prefs;
+    await p.setBool(_kIntensityRatingEnabled, v);
   }
 }
