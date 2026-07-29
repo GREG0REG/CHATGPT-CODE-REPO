@@ -192,8 +192,68 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       }
     }
 
+    
+    // ── Write widget data for home screen widget ──
+    if (_subjects.isNotEmpty) {
+      final topSubject = _subjects.first;
+      final topName = topSubject['name'] as String;
+      final topPresent = (topSubject['present'] as int?) ?? 0;
+      final topLate = (topSubject['late'] as int?) ?? 0;
+      final topExcused = (topSubject['excused'] as int?) ?? 0;
+      final topTotal = (topSubject['total'] as int?) ?? 0;
+      final topEffectiveTotal = topTotal - topExcused;
+      final topAttended = topPresent + (topLate * 0.5);
+      final topPercentage = topEffectiveTotal > 0 ? ((topAttended / topEffectiveTotal) * 100).toInt() : 0;
+      final topRequired = (topSubject['requiredPercentage'] as double?) ?? 75.0;
+      final topStreak = _calculateStreak(topName);
+
+      String statusColorKey;
+      if (topPercentage >= 75) {
+        statusColorKey = "green";
+      } else if (topPercentage >= 60) {
+        statusColorKey = "orange";
+      } else {
+        statusColorKey = "red";
+      }
+
+      String canMissText;
+      if (topEffectiveTotal == 0) {
+        canMissText = 'No data yet';
+      } else if (topRequired >= 100.0) {
+        if (topPercentage >= 99) {
+          canMissText = 'Perfect attendance!';
+        } else {
+          canMissText = '100% required — attend all';
+        }
+      } else if (topPercentage >= topRequired) {
+        final canMiss = ((topEffectiveTotal * (topRequired / 100) - (topEffectiveTotal - ((topSubject['absent'] as int?) ?? 0))) / (1 - topRequired / 100)).floor();
+        canMissText = 'Can miss ${canMiss > 0 ? canMiss : 0} more';
+      } else {
+        final needAttend = ((topRequired / 100 * topEffectiveTotal - topAttended) / (topRequired / 100)).ceil();
+        canMissText = 'Need $needAttend more sessions';
+      }
+
+      try {
+        final dir = await getApplicationSupportDirectory();
+        final file = File('${dir.path}/attendance_widget_data.json');
+        final data = {
+          'subjectName': topName,
+          'attended': topPresent + topLate,
+          'total': topEffectiveTotal,
+          'percentage': topPercentage,
+          'statusColor': statusColorKey,
+          'canMissText': canMissText,
+          'streakDays': topStreak,
+        };
+        await file.writeAsString(jsonEncode(data));
+      } catch (e) {
+        debugPrint('AttendanceScreen: Widget data write failed: $e');
+      }
+    }
+
     await WidgetService.refreshAttendanceWidget();
   }
+
 
   Future<void> _loadDetailForSubject(String subjectName) async {
     final subject = _subjects.firstWhere(
