@@ -120,7 +120,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
-  Future<void> _loadData() async {
+    Future<void> _loadData() async {
     setState(() => _loading = true);
 
     final subjectRows = await DatabaseHelper.instance.getAllAttendanceSubjects();
@@ -187,7 +187,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
 
     if (_selectedSubject != null) {
-      final stillExists = _subjects.any((s) => s['name'] == _selectedSubject);
+      final stillExists = subjectData.any((s) => s['name'] == _selectedSubject);
       if (stillExists) {
         await _loadDetailForSubject(_selectedSubject!);
       } else {
@@ -195,10 +195,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       }
     }
 
-    
     // ── Write widget data for home screen widget ──
-    if (_subjects.isNotEmpty) {
-      final topSubject = _subjects.first;
+    // FIXED: Use subjectData (local) instead of _subjects (state) because setState hasn't finished yet
+    if (subjectData.isNotEmpty) {
+      final topSubject = subjectData.first;
       final topName = topSubject['name'] as String;
       final topPresent = (topSubject['present'] as int?) ?? 0;
       final topLate = (topSubject['late'] as int?) ?? 0;
@@ -237,8 +237,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       }
 
       try {
-        final dir = await getApplicationSupportDirectory();
-        final file = File('${dir.path}/attendance_widget_data.json');
+        final directory = await getApplicationSupportDirectory();
+        final file = File('${directory.path}/attendance_widget_data.json');
         final data = {
           'subjectName': topName,
           'attended': topPresent + topLate,
@@ -249,8 +249,27 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           'streakDays': topStreak,
         };
         await file.writeAsString(jsonEncode(data));
+        debugPrint('Attendance widget data written to: ${file.path}');
       } catch (e) {
         debugPrint('AttendanceScreen: Widget data write failed: $e');
+      }
+    } else {
+      // Write empty state so widget shows "No Subjects" instead of stale data
+      try {
+        final directory = await getApplicationSupportDirectory();
+        final file = File('${directory.path}/attendance_widget_data.json');
+        final data = {
+          'subjectName': 'No Subjects',
+          'attended': 0,
+          'total': 0,
+          'percentage': 0,
+          'statusColor': 'grey',
+          'canMissText': 'Add subjects to track attendance',
+          'streakDays': 0,
+        };
+        await file.writeAsString(jsonEncode(data));
+      } catch (e) {
+        debugPrint('AttendanceScreen: Empty widget data write failed: $e');
       }
     }
 
