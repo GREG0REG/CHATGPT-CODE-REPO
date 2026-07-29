@@ -11,6 +11,7 @@ import android.content.SharedPreferences
 import android.graphics.Color
 import android.os.Build
 import android.os.SystemClock
+import android.view.View
 import android.widget.RemoteViews
 
 class PomodoroWidgetProvider : AppWidgetProvider() {
@@ -116,20 +117,20 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     else -> 0
                 }
 
-                // Determine phase colors and drawables
-                val (ringDrawable, phaseColor, bgColor) = when {
+                // Determine phase colors and background
+                val (phaseColor, bgColor, showDefaultRing, showBreakRing, showPausedRing) = when {
                     phase.equals("shortBreak", ignoreCase = true) ||
                     phase.equals("longBreak", ignoreCase = true) -> {
-                        Triple(R.drawable.widget_circular_progress_green, Color.parseColor("#00C9A7"), Color.parseColor("#0A2E2A"))
+                        Quintuple(Color.parseColor("#00C9A7"), Color.parseColor("#0A2E2A"), false, true, false)
                     }
                     phase.equals("paused", ignoreCase = true) -> {
-                        Triple(R.drawable.widget_circular_progress_orange, Color.parseColor("#FFA726"), Color.parseColor("#2A1F0A"))
+                        Quintuple(Color.parseColor("#FFA726"), Color.parseColor("#2A1F0A"), false, false, true)
                     }
                     phase.equals("focusing", ignoreCase = true) -> {
-                        Triple(R.drawable.widget_circular_progress_teal, Color.parseColor("#5B6EF5"), Color.parseColor("#0F0F23"))
+                        Quintuple(Color.parseColor("#5B6EF5"), Color.parseColor("#0F0F23"), true, false, false)
                     }
                     else -> {
-                        Triple(R.drawable.widget_circular_progress, Color.parseColor("#5B6EF5"), Color.parseColor("#0F0F23"))
+                        Quintuple(Color.parseColor("#5B6EF5"), Color.parseColor("#0F0F23"), true, false, false)
                     }
                 }
 
@@ -142,13 +143,13 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
                 // ── NEET Countdown Banner ──
                 if (neetDays > 0) {
-                    views.setViewVisibility(R.id.neet_banner, android.view.View.VISIBLE)
+                    views.setViewVisibility(R.id.neet_banner, View.VISIBLE)
                     views.setTextViewText(R.id.neet_days_text, "$neetDays")
                     views.setTextViewText(R.id.neet_label_text, if (neetDays == 1) "day left" else "days left")
                     val bannerColor = if (neetDays <= 30) Color.parseColor("#FF6B6B") else Color.parseColor("#667EEA")
                     views.setInt(R.id.neet_banner, "setBackgroundColor", bannerColor)
                 } else {
-                    views.setViewVisibility(R.id.neet_banner, android.view.View.GONE)
+                    views.setViewVisibility(R.id.neet_banner, View.GONE)
                 }
 
                 // ── Subject & Topic ──
@@ -165,25 +166,30 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 views.setTextColor(R.id.pomodoro_widget_status, Color.parseColor("#B0FFFFFF"))
 
                 // ── Circular Progress Ring ──
-                views.setProgressBar(R.id.pomodoro_progress_ring, 100, progressPercent, false)
-                // Apply the appropriate drawable based on phase
-                views.setInt(R.id.pomodoro_progress_ring, "setProgressDrawable", ringDrawable)
+                // FIXED: Toggle visibility of pre-configured rings instead of setProgressDrawable
+                views.setProgressBar(R.id.pomodoro_progress_ring_default, 100, progressPercent, false)
+                views.setProgressBar(R.id.pomodoro_progress_ring_break, 100, progressPercent, false)
+                views.setProgressBar(R.id.pomodoro_progress_ring_paused, 100, progressPercent, false)
+
+                views.setViewVisibility(R.id.pomodoro_progress_ring_default, if (showDefaultRing) View.VISIBLE else View.GONE)
+                views.setViewVisibility(R.id.pomodoro_progress_ring_break, if (showBreakRing) View.VISIBLE else View.GONE)
+                views.setViewVisibility(R.id.pomodoro_progress_ring_paused, if (showPausedRing) View.VISIBLE else View.GONE)
 
                 // ── Session Counter ──
                 if (sessions > 0) {
-                    views.setViewVisibility(R.id.pomodoro_session_chips, android.view.View.VISIBLE)
+                    views.setViewVisibility(R.id.pomodoro_session_chips, View.VISIBLE)
                     views.setTextViewText(R.id.completed_sessions, "🔥 $sessions")
                     views.setTextColor(R.id.completed_sessions, Color.parseColor("#FFA726"))
                 } else {
-                    views.setViewVisibility(R.id.pomodoro_session_chips, android.view.View.GONE)
+                    views.setViewVisibility(R.id.pomodoro_session_chips, View.GONE)
                 }
 
                 // ── Distraction Counter (only during focus) ──
                 if (phase.equals("focusing", ignoreCase = true) && distractionCount > 0) {
-                    views.setViewVisibility(R.id.distraction_chip, android.view.View.VISIBLE)
+                    views.setViewVisibility(R.id.distraction_chip, View.VISIBLE)
                     views.setTextViewText(R.id.distraction_text, "⚡ $distractionCount")
                 } else {
-                    views.setViewVisibility(R.id.distraction_chip, android.view.View.GONE)
+                    views.setViewVisibility(R.id.distraction_chip, View.GONE)
                 }
 
                 // ── Tap to open app ──
@@ -211,6 +217,11 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 scheduleTick(context, IDLE_TICK_INTERVAL_MS)
             }
         }
+
+        // Helper data class for 5 values
+        private data class Quintuple<A, B, C, D, E>(
+            val first: A, val second: B, val third: C, val fourth: D, val fifth: E
+        )
 
         fun scheduleTick(context: Context, intervalMillis: Long) {
             try {
@@ -278,6 +289,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        super.onUpdate(context, appWidgetManager, appWidgetIds)
         android.util.Log.i("PomodoroWidget", "onUpdate: ${appWidgetIds.size} widgets")
         for (widgetId in appWidgetIds) {
             updateWidgetDirectly(context, appWidgetManager, widgetId)
@@ -286,6 +298,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // CRITICAL FIX: Must call super.onReceive() so onUpdate/onEnabled/etc get dispatched
         super.onReceive(context, intent)
         android.util.Log.i("PomodoroWidget", "onReceive: ${intent.action}")
         when (intent.action) {
