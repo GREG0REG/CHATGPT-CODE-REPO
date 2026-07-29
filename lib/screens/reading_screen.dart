@@ -11,7 +11,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import '../db/database_helper.dart';
+import 'package:event_countdown/db/database_helper.dart';
 
 // ═══════════════════════════════════════════════════════════════
 // READING SCREEN — Main Book List
