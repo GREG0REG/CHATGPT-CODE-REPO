@@ -639,8 +639,6 @@ class NotificationService {
           channelId: _channelPreClass,
           channelName: 'Pre-Class Alerts',
           channelDesc: 'Alerts 15 minutes before each scheduled class',
-          importance: Importance.high,
-          priority: Priority.high,
           payload: payload,
           actions: [
             const AndroidNotificationAction(
@@ -920,8 +918,6 @@ class NotificationService {
             channelId: _channelAssignment,
             channelName: 'Assignment Deadlines',
             channelDesc: 'Reminders for assignment and task deadlines',
-            importance: Importance.high,
-            priority: Priority.high,
           );
         } else {
           await Workmanager().registerOneOffTask(
@@ -955,8 +951,6 @@ class NotificationService {
             channelId: _channelAssignment,
             channelName: 'Assignment Deadlines',
             channelDesc: 'Reminders for assignment and task deadlines',
-            importance: Importance.high,
-            priority: Priority.high,
           );
         } else {
           await Workmanager().registerOneOffTask(
@@ -1088,8 +1082,6 @@ class NotificationService {
             channelId: _channelExam,
             channelName: 'Exam Countdowns',
             channelDesc: 'Countdown reminders for upcoming exams',
-            importance: Importance.high,
-            priority: Priority.high,
           );
         } else {
           await Workmanager().registerOneOffTask(
@@ -1122,8 +1114,6 @@ class NotificationService {
             channelId: _channelExam,
             channelName: 'Exam Countdowns',
             channelDesc: 'Countdown reminders for upcoming exams',
-            importance: Importance.high,
-            priority: Priority.high,
           );
         } else {
           await Workmanager().registerOneOffTask(
