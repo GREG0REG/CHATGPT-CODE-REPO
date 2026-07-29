@@ -17,7 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:workmanager/workmanager.dart';
 import '../models/event.dart';
 import '../models/notification_history.dart';
-import '../db/database_helper.dart';
+import '../database_helper.dart';
 
 // ============================================================================
 // WORKMANAGER TASK NAMES
