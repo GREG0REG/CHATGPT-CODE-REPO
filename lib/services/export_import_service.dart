@@ -9,7 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 
-import 'package:event_countdown/db/database_helper.dart';
+import 'package:event_countdown/database_helper.dart';
 import 'package:event_countdown/models/event.dart';
 
 // ==================== CONSTANTS ====================
