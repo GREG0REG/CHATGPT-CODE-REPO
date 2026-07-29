@@ -1665,8 +1665,7 @@ class _BookDetailScreenState extends State<BookDetailScreen> with SingleTickerPr
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: cs.outline.withOpacity(0.15))),
                       child: ListTile(
                         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: Text('$content
-$dateStr', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                        subtitle: Text('$content\n$dateStr', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                         isThreeLine: true,
                         trailing: IconButton(icon: Icon(Icons.delete_outline, size: 18, color: cs.error), onPressed: () => _deleteNote(note['id'] as int)),
                       ),
@@ -1751,7 +1750,7 @@ class _LogSessionDialogState extends State<_LogSessionDialog> {
         FilledButton(
           onPressed: () {
             final minutes = int.tryParse(_minutesController.text.trim());
-            final pages = int.tryParse(_pagesController.text.trim());
+                        final pages = int.tryParse(_pagesController.text.trim());
             if (minutes == null || minutes <= 0 || pages == null || pages <= 0) {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter valid numbers')));
               return;
