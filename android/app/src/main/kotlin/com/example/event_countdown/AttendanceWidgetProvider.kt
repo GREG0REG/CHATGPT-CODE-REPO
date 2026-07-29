@@ -21,40 +21,39 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
             appWidgetManager: AppWidgetManager,
             widgetId: Int
         ) {
+            var subjectName = "No Subjects"
+            var attended = 0
+            var total = 0
+            var percentage = 0
+            var statusColorStr = "grey"
+            var canMissText = "Add subjects to track attendance"
+
             try {
-                var subjectName = "No Subjects"
-                var attended = 0
-                var total = 0
-                var percentage = 0
-                var statusColorStr = "grey"
-                var canMissText = "Add subjects to track attendance"
+                // CRITICAL FIX: Use getApplicationSupportDirectory path
+                val dir = context.getDir("flutter", Context.MODE_PRIVATE)
+                val file = File(dir.parentFile, "app_flutter/attendance_widget_data.json")
 
-                try {
-                    // CRITICAL FIX: Use getApplicationSupportDirectory path
-                    val dir = context.getDir("flutter", Context.MODE_PRIVATE)
-                    val file = File(dir.parentFile, "app_flutter/attendance_widget_data.json")
-                    
-                    // Fallback to filesDir for compatibility
-                    val fallbackFile = File(context.filesDir, ATTENDANCE_DATA_FILE)
-                    
-                    val targetFile = if (file.exists()) file else fallbackFile
-                    
-                    if (targetFile.exists()) {
-                        val json.exists()) {
-                        val json = JSONObject(targetFile.readText())
-                        subjectName = json.optString("subjectName", subjectName)
-                        attended = json.optInt("attended", 0)
-                        total = json.optInt("total", 0)
-                        percentage = json.optInt("percentage", 0)
-                        statusColorStr = json.optString("statusColor", "grey")
-                        canMissText = json.optString("canMissText", canMissText)
-                    } else {
-                        android.util.Log.w("AttendanceWidget", "Data file not found at: ${targetFile.absolutePath}")
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("AttendanceWidget", "JSON read failed", e)
+                // Fallback to filesDir for compatibility
+                val fallbackFile = File(context.filesDir, ATTENDANCE_DATA_FILE)
+
+                val targetFile = if (file.exists()) file else fallbackFile
+
+                if (targetFile.exists()) {
+                    val json = JSONObject(targetFile.readText())
+                    subjectName = json.optString("subjectName", subjectName)
+                    attended = json.optInt("attended", 0)
+                    total = json.optInt("total", 0)
+                    percentage = json.optInt("percentage", 0)
+                    statusColorStr = json.optString("statusColor", "grey")
+                    canMissText = json.optString("canMissText", canMissText)
+                } else {
+                    android.util.Log.w("AttendanceWidget", "Data file not found at: ${targetFile.absolutePath}")
                 }
+            } catch (e: Exception) {
+                android.util.Log.e("AttendanceWidget", "JSON read failed", e)
+            }
 
+            try {
                 val views = RemoteViews(context.packageName, R.layout.attendance_widget_layout)
 
                 // Subject name
@@ -105,7 +104,6 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
 
                 appWidgetManager.updateAppWidget(widgetId, views)
                 android.util.Log.i("AttendanceWidget", "Widget $widgetId updated: $subjectName $percentage%")
-
             } catch (e: Exception) {
                 android.util.Log.e("AttendanceWidget", "Update failed", e)
             }
