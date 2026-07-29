@@ -178,8 +178,8 @@ class FocusSettingsService {
   // ── NEW: NEET Exam Countdown ──
   Future<int> getNeetExamDateMillis() async {
     final p = await _prefs;
-    // Default: May 2, 2026
-    return p.getInt(_kNeetExamDateMillis) ?? DateTime(2026, 5, 2).millisecondsSinceEpoch;
+    // Default: May 2, 2027 (user's actual date)
+    return p.getInt(_kNeetExamDateMillis) ?? DateTime(2027, 5, 2).millisecondsSinceEpoch;
   }
 
   Future<void> setNeetExamDateMillis(int millis) async {
