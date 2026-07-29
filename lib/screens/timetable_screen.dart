@@ -6,7 +6,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:event_countdown/db/database_helper.dart';
+import 'package:event_countdown/database_helper.dart';
 import '../services/widget_service.dart';
 import 'main_screen.dart';
 
