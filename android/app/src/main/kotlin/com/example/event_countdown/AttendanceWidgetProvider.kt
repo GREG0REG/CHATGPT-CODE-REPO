@@ -31,16 +31,30 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
             var streakDays = 0
 
             try {
-                // CRITICAL FIX: Use getApplicationSupportDirectory path
-                val dir = context.getDir("flutter", Context.MODE_PRIVATE)
-                val file = File(dir.parentFile, "app_flutter/attendance_widget_data.json")
+                // FIXED: Try multiple possible paths where Flutter might write the file
+                val possiblePaths = listOf(
+                    // Path 1: Standard app files directory
+                    File(context.filesDir, ATTENDANCE_DATA_FILE),
+                    // Path 2: Flutter's getApplicationSupportDirectory() 
+                    File(context.filesDir.parentFile, "app_flutter/$ATTENDANCE_DATA_FILE"),
+                    // Path 3: Alternative flutter path
+                    File(context.getDir("flutter", Context.MODE_PRIVATE).parentFile, "app_flutter/$ATTENDANCE_DATA_FILE"),
+                    // Path 4: External files dir
+                    File(context.getExternalFilesDir(null), ATTENDANCE_DATA_FILE),
+                    // Path 5: Cache dir fallback
+                    File(context.cacheDir, ATTENDANCE_DATA_FILE)
+                )
 
-                // Fallback to filesDir for compatibility
-                val fallbackFile = File(context.filesDir, ATTENDANCE_DATA_FILE)
+                var targetFile: File? = null
+                for (file in possiblePaths) {
+                    android.util.Log.d("AttendanceWidget", "Checking path: ${file.absolutePath} exists=${file.exists()}")
+                    if (file.exists()) {
+                        targetFile = file
+                        break
+                    }
+                }
 
-                val targetFile = if (file.exists()) file else fallbackFile
-
-                if (targetFile.exists()) {
+                if (targetFile != null) {
                     val json = JSONObject(targetFile.readText())
                     subjectName = json.optString("subjectName", subjectName)
                     attended = json.optInt("attended", 0)
@@ -49,8 +63,9 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     statusColorStr = json.optString("statusColor", "grey")
                     canMissText = json.optString("canMissText", canMissText)
                     streakDays = json.optInt("streakDays", 0)
+                    android.util.Log.i("AttendanceWidget", "Loaded data from: ${targetFile.absolutePath}")
                 } else {
-                    android.util.Log.w("AttendanceWidget", "Data file not found at: ${targetFile.absolutePath}")
+                    android.util.Log.w("AttendanceWidget", "Data file not found in any path")
                 }
             } catch (e: Exception) {
                 android.util.Log.e("AttendanceWidget", "JSON read failed", e)
@@ -68,34 +83,41 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                 // Percentage inside the ring
                 views.setTextViewText(R.id.attendance_widget_percent, "$percentage%")
 
-                // Progress ring (0-100) - FIXED: Toggle visibility instead of setProgressDrawable
-                val showGreen = percentage >= 75
-                val showOrange = percentage in 60..74
-                val showRed = percentage < 60
-
+                // Progress ring (0-100)
                 views.setProgressBar(R.id.attendance_widget_progress_green, 100, percentage.coerceIn(0, 100), false)
                 views.setProgressBar(R.id.attendance_widget_progress_orange, 100, percentage.coerceIn(0, 100), false)
                 views.setProgressBar(R.id.attendance_widget_progress_red, 100, percentage.coerceIn(0, 100), false)
 
-                views.setViewVisibility(R.id.attendance_widget_progress_green, if (showGreen) View.VISIBLE else View.GONE)
+                // FIXED: Always show one ring. Default to green for 0% (no data yet / safe start)
+                val showGreen = percentage >= 75
+                val showOrange = percentage in 60..74
+                val showRed = percentage < 60 && percentage > 0
+                
+                // For 0% (no subjects / empty state), show grey ring or default green
+                val showGrey = percentage == 0
+
+                views.setViewVisibility(R.id.attendance_widget_progress_green, if (showGreen || showGrey) View.VISIBLE else View.GONE)
                 views.setViewVisibility(R.id.attendance_widget_progress_orange, if (showOrange) View.VISIBLE else View.GONE)
                 views.setViewVisibility(R.id.attendance_widget_progress_red, if (showRed) View.VISIBLE else View.GONE)
 
-                // Status color and background
+                // Status color for text
                 val statusColorHex = when {
                     percentage >= 75 -> "#FF4CAF50"
                     percentage >= 60 -> "#FFFF9800"
-                    else -> "#FFF44336"
+                    percentage > 0 -> "#FFF44336"
+                    else -> "#FF888888" // Grey for 0%
                 }
 
-                // Risk text ("X left" or "Can miss Y more classes")
+                // Risk text
                 views.setTextViewText(R.id.attendance_widget_status, canMissText)
                 views.setTextColor(R.id.attendance_widget_status, Color.parseColor("#FFFFFF"))
-                // Background with alpha for the pill
+                
+                // Background pill color
                 val bgColorHex = when {
                     percentage >= 75 -> "#304CAF50"
                     percentage >= 60 -> "#30FF9800"
-                    else -> "#30F44336"
+                    percentage > 0 -> "#30F44336"
+                    else -> "#30888888" // Grey for empty state
                 }
                 views.setInt(R.id.attendance_widget_status, "setBackgroundColor", Color.parseColor(bgColorHex))
 
@@ -142,7 +164,6 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        // CRITICAL FIX: Must call super.onUpdate()
         super.onUpdate(context, appWidgetManager, appWidgetIds)
         android.util.Log.i("AttendanceWidget", "onUpdate: ${appWidgetIds.size} widgets")
         for (widgetId in appWidgetIds) {
@@ -151,7 +172,6 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        // CRITICAL FIX: Must call super.onReceive() so onUpdate/onEnabled get dispatched
         super.onReceive(context, intent)
         android.util.Log.i("AttendanceWidget", "onReceive: ${intent.action}")
         when (intent.action) {
