@@ -4,7 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database_helper.dart';
-import '../services/widget_service.dart';
+import 'package:event_countdown/services/widget_service.dart';
 
 class GPACalculatorWidget extends StatefulWidget {
   const GPACalculatorWidget({super.key});
