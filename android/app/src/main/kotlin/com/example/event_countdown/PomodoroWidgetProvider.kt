@@ -24,9 +24,11 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         private const val KEY_SUBJECT = "flutter.pomodoro_subject"
         private const val KEY_STATUS = "flutter.pomodoro_status"
         private const val KEY_SESSIONS = "flutter.pomodoro_completed_sessions"
-        // NEW NEET keys
         private const val KEY_DISTRACTION_COUNT = "flutter.pomodoro_distraction_count"
         private const val KEY_TOPIC_TAG = "flutter.pomodoro_topic_tag"
+        private const val KEY_NEXT_SUBJECT = "flutter.pomodoro_next_subject"
+        private const val KEY_DAILY_MINUTES = "flutter.pomodoro_daily_minutes"
+        private const val KEY_DAILY_GOAL = "flutter.pomodoro_daily_goal_minutes"
 
         const val ACTION_POMODORO_TICK = "com.example.event_countdown.POMODORO_WIDGET_TICK"
         private const val ACTIVE_TICK_INTERVAL_MS = 1_000L
@@ -35,7 +37,6 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
         // NEET Exam Date: May 2, 2026
         private const val NEET_EXAM_MILLIS = 1751423400000L
 
-        // Flutter stores numbers unpredictably as Int or Long. These helpers try both.
         private fun getIntPref(prefs: SharedPreferences, key: String, default: Int): Int {
             return try {
                 prefs.getInt(key, default)
@@ -73,6 +74,13 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             return "$m:$s"
         }
 
+        fun formatTimeCompact(seconds: Int): String {
+            val h = seconds / 3600
+            val m = ((seconds % 3600) / 60).toString().padStart(2, '0')
+            val s = (seconds % 60).toString().padStart(2, '0')
+            return if (h > 0) "$h:$m:$s" else "$m:$s"
+        }
+
         fun calculateNeetDaysRemaining(): Int {
             val now = System.currentTimeMillis()
             val diff = NEET_EXAM_MILLIS - now
@@ -95,6 +103,9 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 val sessions = getIntPref(prefs, KEY_SESSIONS, 0)
                 val topicTag = prefs.getString(KEY_TOPIC_TAG, null)
                 val distractionCount = getIntPref(prefs, KEY_DISTRACTION_COUNT, 0)
+                val nextSubject = prefs.getString(KEY_NEXT_SUBJECT, null)
+                val dailyMinutes = getIntPref(prefs, KEY_DAILY_MINUTES, 0)
+                val dailyGoal = getIntPref(prefs, KEY_DAILY_GOAL, 360)
 
                 val remainingSeconds = calculateRemainingTime(endTime)
                 val neetDays = calculateNeetDaysRemaining()
@@ -117,28 +128,45 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     else -> 0
                 }
 
-                // Determine phase colors and background
-                val (phaseColor, bgColor, showDefaultRing, showBreakRing, showPausedRing) = when {
-                    phase.equals("shortBreak", ignoreCase = true) ||
-                    phase.equals("longBreak", ignoreCase = true) -> {
-                        Quintuple(Color.parseColor("#00C9A7"), Color.parseColor("#0A2E2A"), false, true, false)
-                    }
-                    phase.equals("paused", ignoreCase = true) -> {
-                        Quintuple(Color.parseColor("#FFA726"), Color.parseColor("#2A1F0A"), false, false, true)
-                    }
-                    phase.equals("focusing", ignoreCase = true) -> {
-                        Quintuple(Color.parseColor("#5B6EF5"), Color.parseColor("#0F0F23"), true, false, false)
-                    }
-                    else -> {
-                        Quintuple(Color.parseColor("#5B6EF5"), Color.parseColor("#0F0F23"), true, false, false)
-                    }
+                // Determine phase styling
+                val isBreak = phase.equals("shortBreak", ignoreCase = true) ||
+                        phase.equals("longBreak", ignoreCase = true)
+                val isPaused = phase.equals("paused", ignoreCase = true)
+                val isFocusing = phase.equals("focusing", ignoreCase = true)
+                val isIdle = phase.equals("idle", ignoreCase = true)
+
+                val (phaseColor, bgColor, showDefaultRing, showBreakRing, showPausedRing, phaseLabel) = when {
+                    isBreak -> Sextuple(
+                        Color.parseColor("#00C9A7"),
+                        Color.parseColor("#0A2E2A"),
+                        false, true, false,
+                        if (phase.equals("longBreak", ignoreCase = true)) "Long Break" else "Short Break"
+                    )
+                    isPaused -> Sextuple(
+                        Color.parseColor("#FFA726"),
+                        Color.parseColor("#2A1F0A"),
+                        false, false, true,
+                        "Paused"
+                    )
+                    isFocusing -> Sextuple(
+                        Color.parseColor("#5B6EF5"),
+                        Color.parseColor("#0F0F23"),
+                        true, false, false,
+                        "Deep Focus"
+                    )
+                    else -> Sextuple(
+                        Color.parseColor("#5B6EF5"),
+                        Color.parseColor("#0F0F23"),
+                        true, false, false,
+                        "Ready"
+                    )
                 }
 
                 android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, subject=$subject, timer=$timerText, remaining=$remainingSeconds, progress=$progressPercent")
 
                 val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
 
-                // ── Apply background color ──
+                // ── Background ──
                 views.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", bgColor)
 
                 // ── NEET Countdown Banner ──
@@ -146,27 +174,61 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.neet_banner, View.VISIBLE)
                     views.setTextViewText(R.id.neet_days_text, "$neetDays")
                     views.setTextViewText(R.id.neet_label_text, if (neetDays == 1) "day left" else "days left")
-                    val bannerColor = if (neetDays <= 30) Color.parseColor("#FF6B6B") else Color.parseColor("#667EEA")
+                    val bannerColor = when {
+                        neetDays <= 7 -> Color.parseColor("#FF1744")
+                        neetDays <= 30 -> Color.parseColor("#FF6B6B")
+                        neetDays <= 90 -> Color.parseColor("#FF9800")
+                        else -> Color.parseColor("#667EEA")
+                    }
                     views.setInt(R.id.neet_banner, "setBackgroundColor", bannerColor)
                 } else {
                     views.setViewVisibility(R.id.neet_banner, View.GONE)
                 }
 
-                // ── Subject & Topic ──
-                val displaySubject = if (topicTag != null) "$subject • $topicTag" else subject
-                views.setTextViewText(R.id.pomodoro_widget_subject, displaySubject)
-                views.setTextColor(R.id.pomodoro_widget_subject, Color.WHITE)
+                // ── Phase Pill ──
+                if (!isIdle) {
+                    views.setViewVisibility(R.id.pomodoro_phase_pill, View.VISIBLE)
+                    views.setTextViewText(R.id.pomodoro_phase_pill, phaseLabel)
+                    views.setTextColor(R.id.pomodoro_phase_pill, phaseColor)
+                    // Build background color with alpha using string since setInt won't work for Color with alpha
+                    val bgWithAlpha = String.format("#15%06X", phaseColor and 0xFFFFFF)
+                    try {
+                        views.setInt(R.id.pomodoro_phase_pill, "setBackgroundColor", Color.parseColor(bgWithAlpha))
+                    } catch (e: Exception) {
+                        views.setInt(R.id.pomodoro_phase_pill, "setBackgroundColor", Color.parseColor("#155B6EF5"))
+                    }
+                } else {
+                    views.setViewVisibility(R.id.pomodoro_phase_pill, View.GONE)
+                }
 
-                // ── Timer (centered in ring) ──
+                // ── Timer ──
                 views.setTextViewText(R.id.pomodoro_widget_timer, timerText)
                 views.setTextColor(R.id.pomodoro_widget_timer, Color.WHITE)
 
                 // ── Status ──
-                views.setTextViewText(R.id.pomodoro_widget_status, status)
+                val statusText = when {
+                    isIdle -> "Tap to begin"
+                    isFocusing -> "Session ${sessions + 1}"
+                    isBreak -> "${formatTime(remainingSeconds)} remaining"
+                    isPaused -> "Tap app to resume"
+                    else -> status
+                }
+                views.setTextViewText(R.id.pomodoro_widget_status, statusText)
                 views.setTextColor(R.id.pomodoro_widget_status, Color.parseColor("#B0FFFFFF"))
 
-                // ── Circular Progress Ring ──
-                // FIXED: Toggle visibility of pre-configured rings instead of setProgressDrawable
+                // ── Subject ──
+                views.setTextViewText(R.id.pomodoro_widget_subject, subject)
+                views.setTextColor(R.id.pomodoro_widget_subject, Color.WHITE)
+
+                // ── Topic ──
+                if (topicTag != null && topicTag.isNotEmpty()) {
+                    views.setViewVisibility(R.id.pomodoro_widget_topic, View.VISIBLE)
+                    views.setTextViewText(R.id.pomodoro_widget_topic, "📌 $topicTag")
+                } else {
+                    views.setViewVisibility(R.id.pomodoro_widget_topic, View.GONE)
+                }
+
+                // ── Progress Rings ──
                 views.setProgressBar(R.id.pomodoro_progress_ring_default, 100, progressPercent, false)
                 views.setProgressBar(R.id.pomodoro_progress_ring_break, 100, progressPercent, false)
                 views.setProgressBar(R.id.pomodoro_progress_ring_paused, 100, progressPercent, false)
@@ -178,18 +240,35 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 // ── Session Counter ──
                 if (sessions > 0) {
                     views.setViewVisibility(R.id.pomodoro_session_chips, View.VISIBLE)
-                    views.setTextViewText(R.id.completed_sessions, "🔥 $sessions")
-                    views.setTextColor(R.id.completed_sessions, Color.parseColor("#FFA726"))
+                    views.setTextViewText(R.id.completed_sessions, "$sessions")
                 } else {
                     views.setViewVisibility(R.id.pomodoro_session_chips, View.GONE)
                 }
 
-                // ── Distraction Counter (only during focus) ──
-                if (phase.equals("focusing", ignoreCase = true) && distractionCount > 0) {
+                // ── Distraction Counter ──
+                if (isFocusing && distractionCount > 0) {
                     views.setViewVisibility(R.id.distraction_chip, View.VISIBLE)
-                    views.setTextViewText(R.id.distraction_text, "⚡ $distractionCount")
+                    views.setTextViewText(R.id.distraction_text, "$distractionCount")
                 } else {
                     views.setViewVisibility(R.id.distraction_chip, View.GONE)
+                }
+
+                // ── Next Subject Preview (during break) ──
+                if (isBreak && nextSubject != null && nextSubject.isNotEmpty()) {
+                    views.setViewVisibility(R.id.next_subject_chip, View.VISIBLE)
+                    views.setTextViewText(R.id.next_subject_text, "Next: $nextSubject")
+                } else {
+                    views.setViewVisibility(R.id.next_subject_chip, View.GONE)
+                }
+
+                // ── Daily Goal Bar ──
+                if (dailyGoal > 0) {
+                    views.setViewVisibility(R.id.daily_goal_container, View.VISIBLE)
+                    views.setTextViewText(R.id.daily_goal_text, "$dailyMinutes / $dailyGoal min")
+                    val goalPercent = ((dailyMinutes.toFloat() / dailyGoal) * 100).toInt().coerceIn(0, 100)
+                    views.setProgressBar(R.id.daily_goal_progress, 100, goalPercent, false)
+                } else {
+                    views.setViewVisibility(R.id.daily_goal_container, View.GONE)
                 }
 
                 // ── Tap to open app ──
@@ -205,7 +284,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 appWidgetManager.updateAppWidget(widgetId, views)
                 android.util.Log.i("PomodoroWidget", "Widget $widgetId updated successfully")
 
-                val interval = if (phase == "focusing" || phase == "shortBreak" || phase == "longBreak") {
+                val interval = if (isFocusing || isBreak) {
                     ACTIVE_TICK_INTERVAL_MS
                 } else {
                     IDLE_TICK_INTERVAL_MS
@@ -218,9 +297,9 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             }
         }
 
-        // Helper data class for 5 values
-        private data class Quintuple<A, B, C, D, E>(
-            val first: A, val second: B, val third: C, val fourth: D, val fifth: E
+        private data class Sextuple<A, B, C, D, E, F>(
+            val first: A, val second: B, val third: C,
+            val fourth: D, val fifth: E, val sixth: F
         )
 
         fun scheduleTick(context: Context, intervalMillis: Long) {
@@ -298,7 +377,6 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        // CRITICAL FIX: Must call super.onReceive() so onUpdate/onEnabled/etc get dispatched
         super.onReceive(context, intent)
         android.util.Log.i("PomodoroWidget", "onReceive: ${intent.action}")
         when (intent.action) {
