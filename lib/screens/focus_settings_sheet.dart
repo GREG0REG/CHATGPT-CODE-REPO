@@ -1,7 +1,10 @@
 // FILE: lib/screens/focus_settings_sheet.dart
-// COMPLETE REPLACEMENT — NEET Edition v15
-// Added: NEET exam date picker, distraction toggle, intensity rating toggle,
-//        custom preset editor with NEET defaults
+// COMPLETE REPLACEMENT — NEET Edition v16
+// FIXED: Exam date now defaults to May 2, 2027 (user's actual date)
+// FIXED: All settings properly save and sync
+// NEW: Preset preview cards with duration breakdown
+// NEW: Daily goal visual indicator
+// NEW: Reset to defaults option
 
 import 'package:flutter/material.dart';
 import '../services/focus_settings_service.dart';
@@ -31,7 +34,7 @@ class _FocusSettingsSheetState extends State<FocusSettingsSheet> {
   bool _distractionLog = true;
   bool _intensityRating = true;
 
-  DateTime _neetExamDate = DateTime(2026, 5, 2);
+  DateTime _neetExamDate = DateTime(2027, 5, 2);
 
   bool _loading = true;
 
@@ -94,7 +97,46 @@ class _FocusSettingsSheetState extends State<FocusSettingsSheet> {
     await _fs.setNeetExamDateMillis(_neetExamDate.millisecondsSinceEpoch);
 
     if (mounted) {
-      Navigator.pop(context);
+      Navigator.pop(context, true); // Return true to signal refresh needed
+    }
+  }
+
+  Future<void> _resetToDefaults() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset to Defaults?'),
+        content: const Text('All focus settings will be reset to NEET defaults.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() {
+        _customFocus = 90;
+        _customShort = 15;
+        _customLong = 30;
+        _customSessions = 3;
+        _dailyGoalMin = 360;
+        _dailyGoalPomos = 4;
+        _autoStartBreak = false;
+        _timerSound = true;
+        _sessionNotes = false;
+        _keepAwake = true;
+        _showNeetCountdown = true;
+        _distractionLog = true;
+        _intensityRating = true;
+        _neetExamDate = DateTime(2027, 5, 2);
+      });
     }
   }
 
@@ -146,7 +188,7 @@ class _FocusSettingsSheetState extends State<FocusSettingsSheet> {
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                ),
+              ),
               // Header
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -182,6 +224,10 @@ class _FocusSettingsSheetState extends State<FocusSettingsSheet> {
                           ),
                         ],
                       ),
+                    ),
+                    TextButton(
+                      onPressed: _resetToDefaults,
+                      child: const Text('Reset'),
                     ),
                     TextButton(
                       onPressed: _save,
@@ -249,6 +295,14 @@ class _FocusSettingsSheetState extends State<FocusSettingsSheet> {
                     ),
                     const SizedBox(height: 16),
 
+                    // ── Preset Preview Cards ──
+                    _buildSectionTitle('Preset Preview', Icons.preview),
+                    const SizedBox(height: 8),
+                    _buildPresetPreviewCard('NEET Revision', '90 min focus • 15 min short • 30 min long • 3 sessions', scheme),
+                    _buildPresetPreviewCard('NEET Deep', '120 min focus • 20 min short • 45 min long • 2 sessions', scheme),
+                    _buildPresetPreviewCard('NEET Sprint', '60 min focus • 10 min short • 20 min long • 4 sessions', scheme),
+                    const SizedBox(height: 16),
+
                     // ── Custom Preset ──
                     _buildSectionTitle('Custom Preset', Icons.tune),
                     const SizedBox(height: 8),
@@ -305,6 +359,30 @@ class _FocusSettingsSheetState extends State<FocusSettingsSheet> {
                       (v) => setState(() => _dailyGoalPomos = v),
                       Icons.local_fire_department,
                     ),
+                    // Daily goal visual indicator
+                    Container(
+                      margin: const EdgeInsets.only(top: 8, bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: scheme.primary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'That\'s ${_dailyGoalMin ~/ 60}h ${_dailyGoalMin % 60}min across $_dailyGoalPomos sessions',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: scheme.onPrimaryContainer,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // ── Features ──
@@ -353,6 +431,55 @@ class _FocusSettingsSheetState extends State<FocusSettingsSheet> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildPresetPreviewCard(String title, String subtitle, ColorScheme scheme) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: title.contains('Revision') ? const Color(0xFF667EEA)
+                  : title.contains('Deep') ? const Color(0xFF764BA2)
+                  : const Color(0xFFFF6B6B),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.outline,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -466,4 +593,4 @@ class _FocusSettingsSheetState extends State<FocusSettingsSheet> {
                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return names[month];
   }
-} 
+}
