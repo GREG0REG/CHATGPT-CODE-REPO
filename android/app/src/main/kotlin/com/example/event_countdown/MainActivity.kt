@@ -5,21 +5,23 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    
+
     private val CHANNEL = "com.example.event_countdown/widget"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-            android.util.Log.i("MainActivity", "Method: ${call.method}")
+            android.util.Log.i("MainActivity", "Method called: ${call.method}")
+
             when (call.method) {
                 "updateWidget" -> {
                     try {
                         EventCountdownWidgetProvider.updateAllWidgets(this)
                         result.success("ok")
                     } catch (e: Exception) {
-                        result.error("ERR", e.message, null)
+                        android.util.Log.e("MainActivity", "EventCountdownWidget update failed", e)
+                        result.error("WIDGET_ERROR", e.message, e.stackTraceToString())
                     }
                 }
                 "updatePomodoroWidget" -> {
@@ -27,7 +29,8 @@ class MainActivity : FlutterActivity() {
                         PomodoroWidgetProvider.updateAllWidgets(this)
                         result.success("ok")
                     } catch (e: Exception) {
-                        result.error("ERR", e.message, null)
+                        android.util.Log.e("MainActivity", "PomodoroWidget update failed", e)
+                        result.error("WIDGET_ERROR", e.message, e.stackTraceToString())
                     }
                 }
                 "updateAttendanceWidget" -> {
@@ -35,7 +38,8 @@ class MainActivity : FlutterActivity() {
                         AttendanceWidgetProvider.updateAllWidgets(this)
                         result.success("ok")
                     } catch (e: Exception) {
-                        result.error("ERR", e.message, null)
+                        android.util.Log.e("MainActivity", "AttendanceWidget update failed", e)
+                        result.error("WIDGET_ERROR", e.message, e.stackTraceToString())
                     }
                 }
                 "updateTimetableWidget" -> {
@@ -43,7 +47,8 @@ class MainActivity : FlutterActivity() {
                         TimetableWidgetProvider.updateAllWidgets(this)
                         result.success("ok")
                     } catch (e: Exception) {
-                        result.error("ERR", e.message, null)
+                        android.util.Log.e("MainActivity", "TimetableWidget update failed", e)
+                        result.error("WIDGET_ERROR", e.message, e.stackTraceToString())
                     }
                 }
                 "updateHabitWidget" -> {
@@ -51,7 +56,8 @@ class MainActivity : FlutterActivity() {
                         HabitWidgetProvider.updateAllWidgets(this)
                         result.success("ok")
                     } catch (e: Exception) {
-                        result.error("ERR", e.message, null)
+                        android.util.Log.e("MainActivity", "HabitWidget update failed", e)
+                        result.error("WIDGET_ERROR", e.message, e.stackTraceToString())
                     }
                 }
                 "updateReadingWidget" -> {
@@ -59,10 +65,14 @@ class MainActivity : FlutterActivity() {
                         ReadingWidgetProvider.updateAllWidgets(this)
                         result.success("ok")
                     } catch (e: Exception) {
-                        result.error("ERR", e.message, null)
+                        android.util.Log.e("MainActivity", "ReadingWidget update failed", e)
+                        result.error("WIDGET_ERROR", e.message, e.stackTraceToString())
                     }
                 }
-                else -> result.notImplemented()
+                else -> {
+                    android.util.Log.w("MainActivity", "Unhandled method: ${call.method}")
+                    result.notImplemented()
+                }
             }
         }
     }
