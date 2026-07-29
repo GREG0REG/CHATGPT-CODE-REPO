@@ -688,7 +688,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                             Icon(Icons.local_fire_department, color: Colors.orange, size: 16),
                             const SizedBox(width: 4),
                             Text(
-                                                            '${_service.completedFocusSessions}',
+                              '${_service.completedFocusSessions}',
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                             ),
                           ],
@@ -698,8 +698,8 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                   },
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
       body: Container(
         decoration: BoxDecoration(
