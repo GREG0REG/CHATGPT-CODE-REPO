@@ -105,7 +105,7 @@
             android:layout_marginTop="6dp"
             android:paddingHorizontal="10dp"
             android:paddingVertical="3dp"
-            android:background="#40FFFFFF"
+            android:background="#40888888"
             android:maxLines="1"
             android:ellipsize="end" />
 
