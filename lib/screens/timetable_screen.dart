@@ -1,6 +1,6 @@
 // FILE: lib/screens/timetable_screen.dart
 // COMPLETE REPLACEMENT — Smart Timetable with vertical timeline, conflict detection, study suggestions
-// FIXED: All-day tasks now display, week view toggle added, conflict overlap highlighting
+// FIXED: math.max type errors (40.0, 36.0), all-day tasks display, week view toggle, conflict overlap highlighting
 // NEET-ENHANCED: 5 AM – 12 AM timeline, longer study blocks, PCB subject hints
 
 import 'dart:math' as math;
@@ -1218,7 +1218,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                             Icon(Icons.free_breakfast, size: 16, color: Colors.green.shade700),
                             const SizedBox(width: 6),
                             Text(
-                                                            '${freeSlots.length} free slot${freeSlots.length == 1 ? '' : 's'} (${freeSlots.fold<int>(0, (sum, s) => sum + (s['duration'] as int)) ~/ 60}h ${freeSlots.fold<int>(0, (sum, s) => sum + (s['duration'] as int)) % 60}m)',
+                              '${freeSlots.length} free slot${freeSlots.length == 1 ? '' : 's'} (${freeSlots.fold<int>(0, (sum, s) => sum + (s['duration'] as int)) ~/ 60}h ${freeSlots.fold<int>(0, (sum, s) => sum + (s['duration'] as int)) % 60}m)',
                               style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w500),
                             ),
                           ],
@@ -1457,7 +1457,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final start = c['startTimeMinutes'] as int;
     final end = c['endTimeMinutes'] as int;
     final top = _minutesToPixels(start);
-    final height = math.max(40, _durationToPixels(end - start)).toDouble();
+    final height = math.max(40.0, _durationToPixels(end - start));
     final color = _hexToColor(c['colorHex'] as String? ?? '#2196F3');
     final isConflict = conflicts.any((conf) =>
         conf['a']['id'] == c['id'] || conf['b']['id'] == c['id']);
@@ -1575,7 +1575,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final start = t['startTimeMinutes'] as int;
     final end = t['endTimeMinutes'] as int;
     final top = _minutesToPixels(start);
-    final height = math.max(36, _durationToPixels(end - start)).toDouble();
+    final height = math.max(36.0, _durationToPixels(end - start));
     final typeColor = _typeColor(t['taskType'] as String);
     final isDeadline = t['taskType'] == 'assignment' || t['taskType'] == 'exam';
     final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
