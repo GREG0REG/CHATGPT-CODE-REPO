@@ -3,7 +3,15 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="180dp"
     android:minHeight="110dp"
+    android:minResizeWidth="140dp"
+    android:minResizeHeight="80dp"
+    android:maxResizeWidth="400dp"
+    android:maxResizeHeight="200dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
     android:updatePeriodMillis="1800000"
     android:initialLayout="@layout/attendance_widget_layout"
-    android:resizeMode="horizontal"
-    android:widgetCategory="home_screen" />
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/attendance_widget_description"
+    android:previewImage="@drawable/widget_background_fallback" />
