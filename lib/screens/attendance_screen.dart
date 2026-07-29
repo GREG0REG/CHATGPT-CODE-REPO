@@ -772,7 +772,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final existing = await DatabaseHelper.instance.getAttendanceLogForSubjectAndDate(subject, dayStart);
 
     if (existing != null) {
-      await DatabaseHelper.instance.updateAttendanceLog(existing['id'] as int, {
+      await DatabaseHelper.instance.updateAttendanceLog((existing['id'] as int?) ?? 0, {
         'subjectName': subject,
         'dateMillis': dayStart,
         'status': status,
@@ -840,7 +840,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       final existing = await DatabaseHelper.instance.getAttendanceLogForSubjectAndDate(subject, dayStart);
 
       if (existing != null) {
-        await DatabaseHelper.instance.updateAttendanceLog(existing['id'] as int, {
+        await DatabaseHelper.instance.updateAttendanceLog((existing['id'] as int?) ?? 0, {
           'subjectName': subject,
           'dateMillis': dayStart,
           'status': result['status'],
@@ -979,7 +979,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     if (result != null) {
       final subject = result['subject'] as String;
       final status = result['status'] as String;
-      final days = result['days'] as int;
+      final days = (result['days'] as int?) ?? 0;
 
       int markedCount = 0;
       for (int i = 0; i < days; i++) {
@@ -1021,10 +1021,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           final subject = _subjects.firstWhere((s) => s['name'] == selectedSubject);
           final percentage = subject['percentage'] as double;
           final required = subject['requiredPercentage'] as double;
-          final present = subject['present'] as int;
-          final late = subject['late'] as int;
-          final total = subject['total'] as int;
-          final excused = subject['excused'] as int;
+          final present = (subject['present'] as int?) ?? 0;
+          final late = (subject['late'] as int?) ?? 0;
+          final total = (subject['total'] as int?) ?? 0;
+          final excused = (subject['excused'] as int?) ?? 0;
           final effectiveTotal = total - excused;
           final attended = present + (late * 0.5);
           final missCount = int.tryParse(missController.text) ?? 0;
@@ -1136,10 +1136,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           final subject = _subjects.firstWhere((s) => s['name'] == selectedSubject);
           final percentage = subject['percentage'] as double;
           final required = subject['requiredPercentage'] as double;
-          final present = subject['present'] as int;
-          final late = subject['late'] as int;
-          final total = subject['total'] as int;
-          final excused = subject['excused'] as int;
+          final present = (subject['present'] as int?) ?? 0;
+          final late = (subject['late'] as int?) ?? 0;
+          final total = (subject['total'] as int?) ?? 0;
+          final excused = (subject['excused'] as int?) ?? 0;
+
           final effectiveTotal = total - excused;
           final attended = present + (late * 0.5);
           final count = int.tryParse(countController.text) ?? 0;
@@ -1307,11 +1308,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       for (final log in logs) {
         await db.delete('attendance_logs', where: 'id = ?', whereArgs: [log['id']]);
       }
-      final schedules = await DatabaseHelper.instance.getAttendanceSchedulesForSubject(subject['id'] as int);
+      final schedules = await DatabaseHelper.instance.getAttendanceSchedulesForSubject((subject['id'] as int?) ?? 0);
       for (final sched in schedules) {
         await db.delete('attendance_schedules', where: 'id = ?', whereArgs: [sched['id']]);
       }
-      await DatabaseHelper.instance.deleteAttendanceSubject(subject['id'] as int);
+      await DatabaseHelper.instance.deleteAttendanceSubject((subject['id'] as int?) ?? 0);
 
       await _loadData();
       if (_selectedSubject == subject['name']) {
@@ -1350,7 +1351,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   int _calculateStreak(String subjectName) {
     final logs = _logs.where((l) => l['subjectName'] == subjectName).toList()
-      ..sort((a, b) => (b['dateMillis'] as int).compareTo(a['dateMillis'] as int));
+      ..sort((a, b) => ((b['dateMillis'] as int?) ?? 0).compareTo((a['dateMillis'] as int?) ?? 0));
 
     if (logs.isEmpty) return 0;
 
@@ -1359,7 +1360,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     var expectedDate = DateTime(now.year, now.month, now.day);
 
     for (final log in logs) {
-      final logDate = DateTime.fromMillisecondsSinceEpoch(log['dateMillis'] as int);
+      final logDate = DateTime.fromMillisecondsSinceEpoch((log['dateMillis'] as int?) ?? 0);
       final normalizedLog = DateTime(logDate.year, logDate.month, logDate.day);
 
       if (normalizedLog == expectedDate) {
@@ -1497,7 +1498,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       context,
                       MaterialPageRoute(
                         builder: (_) => AttendanceDetailScreen(
-                          subjectId: s['id'] as int,
+                          subjectId: (s['id'] as int?) ?? 0,
                           subjectName: name,
                           subjectColor: color,
                         ),
@@ -1576,7 +1577,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _riskText(percentage, s['absent'] as int, s['total'] as int, required),
+                          _riskText(percentage, (s['absent'] as int?) ?? 0, (s['total'] as int?) ?? 0, required),
                           style: TextStyle(fontSize: 11, color: cs.outline),
                           overflow: TextOverflow.ellipsis,
                         ),
