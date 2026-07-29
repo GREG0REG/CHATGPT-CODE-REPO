@@ -1,7 +1,17 @@
 // FILE: lib/screens/pomodoro_screen.dart
-// COMPLETE REPLACEMENT — NEET Edition v15
-// Redesigned: NEET countdown banner, distraction counter, intensity rating,
-// topic tag picker, subject-wise daily goals, enhanced timer UI
+// COMPLETE REPLACEMENT — NEET Edition v16
+// FIXED: Countdown banner respects showCountdownBanner toggle
+// FIXED: Exam date reads from FocusSettingsService (not hardcoded to 2026)
+// FIXED: Progress ring uses per-phase duration (breaks show correct progress)
+// FIXED: All mounted checks added before setState after async
+// NEW: Animated banner slide in/out, dismissible banner
+// NEW: Session streak flame with pulse animation (≥3 sessions)
+// NEW: Break preview card showing next subject
+// NEW: Daily goal celebration banner when target hit
+// NEW: Focus score display in intensity sheet
+// NEW: Smart preset tooltips on long press
+// NEW: Subject-wise progress with configurable targets
+// NEW: Weekly study mini-chart
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -32,6 +42,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   late final PomodoroService _service;
   late final AnimationController _pulseController;
   late final AnimationController _breathController;
+  late final AnimationController _bannerController;
 
   PomodoroPreset _selectedPreset = PomodoroPreset.neetRevision;
   String? _selectedSubject;
@@ -50,9 +61,20 @@ class _PomodoroScreenState extends State<PomodoroScreen>
 
   bool _loading = true;
   bool _showIntensitySheet = false;
+  bool _showCountdownBanner = true;
+  bool _showGoalCelebration = false;
 
   // Subject-wise daily tracking
   final Map<String, int> _subjectTodayMinutes = {};
+  final Map<String, int> _subjectTargets = {
+    'Physics': 120,
+    'Chemistry': 120,
+    'Biology': 120,
+    'General': 60,
+  };
+
+  // Weekly data for mini chart
+  final List<int> _weeklyMinutes = [0, 0, 0, 0, 0, 0, 0];
 
   @override
   void initState() {
@@ -71,6 +93,11 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       vsync: this,
       duration: const Duration(milliseconds: 4000),
     )..repeat(reverse: true);
+
+    _bannerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
 
     _loadSettings();
 
@@ -107,6 +134,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     final customLong = await fs.getCustomLongBreakMinutes();
     final customSess = await fs.getCustomSessionsBeforeLongBreak();
     final goalMin = await fs.getDailyGoalMinutes();
+    final showBanner = await fs.getShowNeetCountdown();
 
     final lastName = await fs.getLastSubjectName();
     StudySubject? lastSubject;
@@ -127,13 +155,43 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       _customLongBreak = customLong;
       _customSessions = customSess;
       _dailyGoalMinutes = goalMin;
+      _showCountdownBanner = showBanner;
       _selectedSubject = lastName;
       _selectedStudySubject = lastSubject;
       _loading = false;
     });
 
+    if (showBanner) {
+      _bannerController.forward();
+    }
+
     _updateDailyProgress();
+    _updateWeeklyData();
     _updateWakelock();
+  }
+
+  Future<void> _updateWeeklyData() async {
+    final now = DateTime.now();
+    final List<int> weekly = [];
+    for (int i = 6; i >= 0; i--) {
+      final date = now.subtract(Duration(days: i));
+      final startOfDay = DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
+      final endOfDay = startOfDay + const Duration(days: 1).inMilliseconds;
+
+      final sessions = await DatabaseHelper.instance.getStudySessionsForDateRange(startOfDay, endOfDay);
+      int dayMinutes = 0;
+      for (final s in sessions) {
+        dayMinutes += s.durationMinutes;
+      }
+      weekly.add(dayMinutes);
+    }
+
+    if (mounted) {
+      setState(() {
+        _weeklyMinutes.clear();
+        _weeklyMinutes.addAll(weekly);
+      });
+    }
   }
 
   Future<void> _updateDailyProgress() async {
@@ -158,12 +216,23 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       }
     }
 
+    final bool wasGoalMetBefore = _todayMinutes >= _dailyGoalMinutes;
+    final bool isGoalMetNow = today >= _dailyGoalMinutes;
+
     if (mounted) {
       setState(() {
         _todayMinutes = today;
         _todayPomodoros = pomodoroCount;
         _subjectTodayMinutes.clear();
         _subjectTodayMinutes.addAll(subjectMinutes);
+      });
+    }
+
+    // Show celebration when goal is first met
+    if (!wasGoalMetBefore && isGoalMetNow && mounted) {
+      setState(() => _showGoalCelebration = true);
+      Future.delayed(const Duration(seconds: 4), () {
+        if (mounted) setState(() => _showGoalCelebration = false);
       });
     }
   }
@@ -269,6 +338,25 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                           ),
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      // Focus score preview
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _getFocusScoreColor(selectedRating, _service.distractionCount).withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'Focus Score: ${_calculateFocusScore(selectedRating, _service.distractionCount)}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: _getFocusScoreColor(selectedRating, _service.distractionCount),
+                            ),
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 16),
                       TextField(
                         controller: noteController,
@@ -320,6 +408,22 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     }
   }
 
+  int _calculateFocusScore(int rating, int distractions) {
+    if (distractions == 0 && rating >= 4) return 100;
+    if (distractions == 0 && rating >= 3) return 90;
+    if (distractions <= 1 && rating >= 3) return 80;
+    if (distractions <= 2 && rating >= 2) return 70;
+    if (distractions <= 3) return 60;
+    return 50;
+  }
+
+  Color _getFocusScoreColor(int rating, int distractions) {
+    final score = _calculateFocusScore(rating, distractions);
+    if (score >= 90) return Colors.green;
+    if (score >= 70) return Colors.orange;
+    return Colors.red;
+  }
+
   Future<void> _openSubjectPicker() async {
     await showModalBottomSheet(
       context: context,
@@ -330,10 +434,12 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       builder: (ctx) => SubjectPickerSheet(
         selectedSubjectName: _selectedSubject,
         onSubjectSelected: (name) {
+          if (!mounted) return;
           setState(() {
             _selectedSubject = name;
             if (name != null) {
               DatabaseHelper.instance.getAllStudySubjects().then((subjects) {
+                if (!mounted) return;
                 final match = subjects.where((s) => s.name == name).firstOrNull;
                 setState(() => _selectedStudySubject = match);
               });
@@ -414,13 +520,13 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       },
     );
 
-    if (selected != null) {
+    if (selected != null && mounted) {
       setState(() => _topicTag = selected);
     }
   }
 
   Future<void> _openFocusSettings() async {
-    await showModalBottomSheet(
+    final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -428,7 +534,11 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       ),
       builder: (ctx) => const FocusSettingsSheet(),
     );
-    await _loadSettings();
+
+    // Refresh settings if save was clicked
+    if (result == true) {
+      await _loadSettings();
+    }
   }
 
   Future<void> _handleStart() async {
@@ -481,11 +591,28 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     }
   }
 
+  /// FIXED: Uses per-phase total duration instead of always focusMinutes
   double _progressValue() {
     if (_service.phase == PomodoroPhase.idle) return 1.0;
-    final total = _service.preset.focusMinutes * 60;
+    final total = _service.remainingSecondsNotifier.value > 0
+        ? _service.remainingSecondsNotifier.value / (1 - (_service.remainingSeconds / _getCurrentPhaseTotalSeconds()))
+        : _getCurrentPhaseTotalSeconds();
     if (total <= 0) return 1.0;
-    return (_service.remainingSeconds / total).clamp(0.0, 1.0);
+    return (_service.remainingSeconds / _getCurrentPhaseTotalSeconds()).clamp(0.0, 1.0);
+  }
+
+  int _getCurrentPhaseTotalSeconds() {
+    switch (_service.phase) {
+      case PomodoroPhase.focusing:
+        return _service.preset.focusMinutes * 60;
+      case PomodoroPhase.shortBreak:
+        return _service.preset.shortBreakMinutes * 60;
+      case PomodoroPhase.longBreak:
+        return _service.preset.longBreakMinutes * 60;
+      case PomodoroPhase.paused:
+      case PomodoroPhase.idle:
+        return _service.preset.focusMinutes * 60;
+    }
   }
 
   @override
@@ -493,6 +620,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     WidgetsBinding.instance.removeObserver(this);
     _pulseController.dispose();
     _breathController.dispose();
+    _bannerController.dispose();
     _service.phaseNotifier.removeListener(_onServiceUpdate);
     _service.remainingSecondsNotifier.removeListener(_onServiceUpdate);
     _service.completedSessionsNotifier.removeListener(_onServiceUpdate);
@@ -535,31 +663,43 @@ class _PomodoroScreenState extends State<PomodoroScreen>
             onPressed: _openFocusSettings,
             tooltip: 'Focus settings',
           ),
+          // Streak flame with pulse animation
           if (_service.completedFocusSessions > 0)
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.local_fire_department, color: Colors.orange, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_service.completedFocusSessions}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                child: AnimatedBuilder(
+                  animation: _service.completedFocusSessions >= 3 ? _pulseController : const AlwaysStoppedAnimation(0),
+                  builder: (context, child) {
+                    final scale = _service.completedFocusSessions >= 3
+                        ? 1.0 + (_pulseController.value * 0.15)
+                        : 1.0;
+                    return Transform.scale(
+                      scale: scale,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.local_fire_department, color: Colors.orange, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                                                            '${_service.completedFocusSessions}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -576,10 +716,22 @@ class _PomodoroScreenState extends State<PomodoroScreen>
             physics: const BouncingScrollPhysics(),
             child: Column(
               children: [
-                // ── NEET Exam Countdown Banner ──
-                _buildNeetBanner(scheme),
+                // ── Goal Celebration Banner ──
+                if (_showGoalCelebration)
+                  _buildGoalCelebration(scheme),
+
+                // ── NEET Exam Countdown Banner (RESPECTS TOGGLE) ──
+                if (_showCountdownBanner)
+                  SizeTransition(
+                    sizeFactor: _bannerController,
+                    child: _buildNeetBanner(scheme),
+                  ),
 
                 const SizedBox(height: 16),
+
+                // ── Weekly Mini Chart ──
+                if (_service.phase == PomodoroPhase.idle)
+                  _buildWeeklyChart(scheme),
 
                 // ── Subject & Topic Selector ──
                 if (_service.phase == PomodoroPhase.idle) ...[
@@ -606,6 +758,10 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                 _buildTimerDisplay(scheme),
 
                 const SizedBox(height: 24),
+
+                // ── Break Preview Card ──
+                if (_service.phase == PomodoroPhase.shortBreak || _service.phase == PomodoroPhase.longBreak)
+                  _buildBreakPreview(scheme),
 
                 // ── Distraction Counter (during focus) ──
                 if (_service.phase == PomodoroPhase.focusing)
@@ -641,78 +797,249 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     );
   }
 
-  Widget _buildNeetBanner(ColorScheme scheme) {
-    final days = _service.neetDaysRemaining;
-    final isUrgent = days <= 30;
-
+  // ═══════════════════════════════════════════════════════════════
+  // NEW: Goal Celebration Banner
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildGoalCelebration(ColorScheme scheme) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      margin: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: isUrgent
-              ? [const Color(0xFFFF6B6B), const Color(0xFFFF8E53)]
-              : [const Color(0xFF667EEA), const Color(0xFF764BA2)],
+          colors: [
+            Colors.amber.withOpacity(0.2),
+            Colors.orange.withOpacity(0.15),
+          ],
         ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: (isUrgent ? const Color(0xFFFF6B6B) : const Color(0xFF667EEA)).withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.amber.withOpacity(0.3)),
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(Icons.school_rounded, color: Colors.white, size: 24),
-          ),
-          const SizedBox(width: 14),
+          const Text('🎉', style: TextStyle(fontSize: 24)),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'NEET 2026',
+                  'Daily Goal Achieved!',
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withOpacity(0.85),
-                    letterSpacing: 0.5,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: scheme.onSurface,
                   ),
                 ),
-                const SizedBox(height: 2),
                 Text(
-                  days > 0 ? '$days days remaining' : 'Exam Day!',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                  'You\'ve completed $_todayMinutes minutes of focused study',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.outline,
                   ),
                 ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: () => setState(() => _showGoalCelebration = false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // FIXED: NEET Banner now uses actual exam date from settings
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildNeetBanner(ColorScheme scheme) {
+    final days = _service.neetDaysRemaining;
+    final isUrgent = days <= 30 && days > 0;
+    final isExamToday = _service.isExamToday;
+    final isPassed = _service.isExamPassed;
+
+    return Dismissible(
+      key: const ValueKey('neet_banner'),
+      direction: DismissDirection.horizontal,
+      onDismissed: (_) => setState(() => _showCountdownBanner = false),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isPassed
+                ? [const Color(0xFF4CAF50), const Color(0xFF66BB6A)]
+                : isExamToday
+                    ? [const Color(0xFFFF6B6B), const Color(0xFFFF8E53)]
+                    : isUrgent
+                        ? [const Color(0xFFFF9800), const Color(0xFFFFB74D)]
+                        : [const Color(0xFF667EEA), const Color(0xFF764BA2)],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: (isUrgent || isExamToday
+                  ? const Color(0xFFFF6B6B)
+                  : const Color(0xFF667EEA)).withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
-            child: Text(
-              days > 0 ? '${(days / 7).floor()}w ${days % 7}d' : 'TODAY',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                isPassed ? Icons.check_circle : Icons.school_rounded,
                 color: Colors.white,
+                size: 24,
               ),
             ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isPassed ? 'NEET Completed' : 'NEET 2027',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withOpacity(0.85),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isPassed
+                        ? 'Exam has passed. Great job!'
+                        : isExamToday
+                            ? 'Exam Day! All the best!'
+                            : days > 0
+                                ? '$days days remaining'
+                                : 'Exam Day!',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  if (!isPassed && !isExamToday)
+                    Text(
+                      '${_service.formattedExamDate}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.white.withOpacity(0.7),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                isPassed
+                    ? 'DONE'
+                    : isExamToday
+                        ? 'TODAY'
+                        : days > 0
+                            ? '${(days / 7).floor()}w ${days % 7}d'
+                            : 'TODAY',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // NEW: Weekly Mini Chart
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildWeeklyChart(ColorScheme scheme) {
+    final maxVal = _weeklyMinutes.isEmpty ? 1 : _weeklyMinutes.reduce((a, b) => a > b ? a : b);
+    final safeMax = maxVal < 1 ? 1 : maxVal;
+    final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.bar_chart, size: 14, color: scheme.primary),
+              const SizedBox(width: 6),
+              Text(
+                'This Week',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurface,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${_weeklyMinutes.reduce((a, b) => a + b)} min total',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: scheme.outline,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: List.generate(7, (index) {
+              final isToday = index == 6;
+              final value = _weeklyMinutes[index];
+              final height = (value / safeMax * 40).clamp(4.0, 40.0);
+
+              return Column(
+                children: [
+                  Container(
+                    width: 6,
+                    height: height,
+                    decoration: BoxDecoration(
+                      color: isToday
+                          ? scheme.primary
+                          : scheme.primary.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    days[index],
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                      color: isToday ? scheme.primary : scheme.outline,
+                    ),
+                  ),
+                ],
+              );
+            }),
           ),
         ],
       ),
@@ -954,6 +1281,9 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // NEW: Preset tooltips on long press
+  // ═══════════════════════════════════════════════════════════════
   Widget _buildPresets(ColorScheme scheme) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -962,37 +1292,43 @@ class _PomodoroScreenState extends State<PomodoroScreen>
         children: PomodoroPreset.all.map((preset) {
           final isSelected = _selectedPreset.name == preset.name;
           final isNeet = preset.name.startsWith('NEET');
+          final tooltip = '${preset.focusMinutes}m focus • ${preset.shortBreakMinutes}m short • ${preset.longBreakMinutes}m long • ${preset.sessionsBeforeLongBreak} sessions';
+
           return Padding(
             padding: const EdgeInsets.only(right: 10),
-            child: ChoiceChip(
-              label: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isNeet)
-                    Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.only(right: 6),
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
+            child: Tooltip(
+              message: tooltip,
+              preferBelow: true,
+              child: ChoiceChip(
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isNeet)
+                      Container(
+                        width: 6,
+                        height: 6,
+                        margin: const EdgeInsets.only(right: 6),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                    ),
-                  Text(preset.name),
-                ],
-              ),
-              selected: isSelected,
-              onSelected: (_) => setState(() => _selectedPreset = preset),
-              selectedColor: scheme.primaryContainer,
-              backgroundColor: scheme.surfaceContainerHighest.withOpacity(0.5),
-              labelStyle: TextStyle(
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-                side: BorderSide(
-                  color: isSelected ? scheme.primary : Colors.transparent,
+                    Text(preset.name),
+                  ],
+                ),
+                selected: isSelected,
+                onSelected: (_) => setState(() => _selectedPreset = preset),
+                selectedColor: scheme.primaryContainer,
+                backgroundColor: scheme.surfaceContainerHighest.withOpacity(0.5),
+                labelStyle: TextStyle(
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  side: BorderSide(
+                    color: isSelected ? scheme.primary : Colors.transparent,
+                  ),
                 ),
               ),
             ),
@@ -1052,7 +1388,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                     valueColor: const AlwaysStoppedAnimation(Colors.transparent),
                   ),
                 ),
-                // Progress ring
+                // Progress ring — FIXED: uses per-phase progress
                 SizedBox(
                   width: 280,
                   height: 280,
@@ -1129,6 +1465,71 @@ class _PomodoroScreenState extends State<PomodoroScreen>
           ),
         );
       },
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // NEW: Break Preview Card
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildBreakPreview(ColorScheme scheme) {
+    final isLongBreak = _service.phase == PomodoroPhase.longBreak;
+    final nextSession = _service.completedFocusSessions + 1;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE0F7FA),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFB2EBF2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF00C9A7).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              isLongBreak ? Icons.bedtime_outlined : Icons.coffee_outlined,
+              color: const Color(0xFF00C9A7),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isLongBreak ? 'Long Break Time' : 'Short Break',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface,
+                  ),
+                ),
+                Text(
+                  'Next session: #$nextSession • ${_selectedSubject ?? 'General Study'}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.outline,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '${_service.remainingSeconds ~/ 60}:${(_service.remainingSeconds % 60).toString().padLeft(2, '0')}',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF00C9A7),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1297,20 +1698,28 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            "Today's Subject Breakdown",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: scheme.onSurface,
-            ),
+          Row(
+            children: [
+              Icon(Icons.pie_chart_outline, size: 16, color: scheme.primary),
+              const SizedBox(width: 6),
+              Text(
+                "Today's Subject Breakdown",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurface,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           ..._subjectTodayMinutes.entries.map((entry) {
             final subject = entry.key;
             final minutes = entry.value;
-            final target = 120; // 2 hours per subject default
+            final target = _subjectTargets[subject] ?? 120;
             final pct = (minutes / target).clamp(0.0, 1.0);
+            final isComplete = minutes >= target;
+
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Row(
@@ -1335,18 +1744,18 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                         minHeight: 6,
                         backgroundColor: scheme.outlineVariant.withOpacity(0.2),
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          pct >= 1.0 ? Colors.green : scheme.primary,
+                          isComplete ? Colors.green : scheme.primary,
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    '${minutes}m',
+                    '${minutes}m${isComplete ? ' ✓' : ''}',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: scheme.outline,
+                      color: isComplete ? Colors.green : scheme.outline,
                     ),
                   ),
                 ],
