@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.view.View
 import android.widget.RemoteViews
 import org.json.JSONObject
 import java.io.File
@@ -27,6 +28,7 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
             var percentage = 0
             var statusColorStr = "grey"
             var canMissText = "Add subjects to track attendance"
+            var streakDays = 0
 
             try {
                 // CRITICAL FIX: Use getApplicationSupportDirectory path
@@ -46,6 +48,7 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     percentage = json.optInt("percentage", 0)
                     statusColorStr = json.optString("statusColor", "grey")
                     canMissText = json.optString("canMissText", canMissText)
+                    streakDays = json.optInt("streakDays", 0)
                 } else {
                     android.util.Log.w("AttendanceWidget", "Data file not found at: ${targetFile.absolutePath}")
                 }
@@ -65,31 +68,44 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                 // Percentage inside the ring
                 views.setTextViewText(R.id.attendance_widget_percent, "$percentage%")
 
-                // Progress ring (0-100)
-                views.setProgressBar(R.id.attendance_widget_progress, 100, percentage.coerceIn(0, 100), false)
+                // Progress ring (0-100) - FIXED: Toggle visibility instead of setProgressDrawable
+                val showGreen = percentage >= 75
+                val showOrange = percentage in 60..74
+                val showRed = percentage < 60
 
-                // Color logic: green >=75%, orange 60-74%, red <60%
-                val (progressDrawableRes, statusColorHex) = when {
-                    percentage >= 75 -> Pair(
-                        R.drawable.widget_circular_progress_green,
-                        "#FF4CAF50"
-                    )
-                    percentage >= 60 -> Pair(
-                        R.drawable.widget_circular_progress_orange,
-                        "#FFFF9800"
-                    )
-                    else -> Pair(
-                        R.drawable.widget_circular_progress_red,
-                        "#FFF44336"
-                    )
+                views.setProgressBar(R.id.attendance_widget_progress_green, 100, percentage.coerceIn(0, 100), false)
+                views.setProgressBar(R.id.attendance_widget_progress_orange, 100, percentage.coerceIn(0, 100), false)
+                views.setProgressBar(R.id.attendance_widget_progress_red, 100, percentage.coerceIn(0, 100), false)
+
+                views.setViewVisibility(R.id.attendance_widget_progress_green, if (showGreen) View.VISIBLE else View.GONE)
+                views.setViewVisibility(R.id.attendance_widget_progress_orange, if (showOrange) View.VISIBLE else View.GONE)
+                views.setViewVisibility(R.id.attendance_widget_progress_red, if (showRed) View.VISIBLE else View.GONE)
+
+                // Status color and background
+                val statusColorHex = when {
+                    percentage >= 75 -> "#FF4CAF50"
+                    percentage >= 60 -> "#FFFF9800"
+                    else -> "#FFF44336"
                 }
-
-                // Apply progress drawable
-                views.setInt(R.id.attendance_widget_progress, "setProgressDrawable", progressDrawableRes)
 
                 // Risk text ("X left" or "Can miss Y more classes")
                 views.setTextViewText(R.id.attendance_widget_status, canMissText)
-                views.setTextColor(R.id.attendance_widget_status, Color.parseColor(statusColorHex))
+                views.setTextColor(R.id.attendance_widget_status, Color.parseColor("#FFFFFF"))
+                // Background with alpha for the pill
+                val bgColorHex = when {
+                    percentage >= 75 -> "#304CAF50"
+                    percentage >= 60 -> "#30FF9800"
+                    else -> "#30F44336"
+                }
+                views.setInt(R.id.attendance_widget_status, "setBackgroundColor", Color.parseColor(bgColorHex))
+
+                // Streak chip
+                if (streakDays > 0) {
+                    views.setViewVisibility(R.id.attendance_widget_streak_chip, View.VISIBLE)
+                    views.setTextViewText(R.id.attendance_widget_streak_text, "$streakDays day streak")
+                } else {
+                    views.setViewVisibility(R.id.attendance_widget_streak_chip, View.GONE)
+                }
 
                 // Tap opens app to /attendance
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
@@ -104,6 +120,7 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
 
                 appWidgetManager.updateAppWidget(widgetId, views)
                 android.util.Log.i("AttendanceWidget", "Widget $widgetId updated: $subjectName $percentage%")
+
             } catch (e: Exception) {
                 android.util.Log.e("AttendanceWidget", "Update failed", e)
             }
@@ -125,6 +142,8 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
+        // CRITICAL FIX: Must call super.onUpdate()
+        super.onUpdate(context, appWidgetManager, appWidgetIds)
         android.util.Log.i("AttendanceWidget", "onUpdate: ${appWidgetIds.size} widgets")
         for (widgetId in appWidgetIds) {
             updateWidgetDirectly(context, appWidgetManager, widgetId)
@@ -132,6 +151,7 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // CRITICAL FIX: Must call super.onReceive() so onUpdate/onEnabled get dispatched
         super.onReceive(context, intent)
         android.util.Log.i("AttendanceWidget", "onReceive: ${intent.action}")
         when (intent.action) {
