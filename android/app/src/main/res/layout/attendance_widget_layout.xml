@@ -9,14 +9,12 @@
     android:background="#E6003830"
     android:gravity="center_vertical">
 
-    <!-- Circular progress + percentage (scales with widget size) -->
     <FrameLayout
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_weight="1"
         android:layout_marginEnd="12dp">
 
-        <!-- Progress Ring - GREEN (safe >=75%) -->
         <ProgressBar
             android:id="@+id/attendance_widget_progress_green"
             style="?android:attr/progressBarStyleHorizontal"
@@ -29,7 +27,6 @@
             android:layout_gravity="center"
             android:visibility="gone" />
 
-        <!-- Progress Ring - ORANGE (warning 60-74%) -->
         <ProgressBar
             android:id="@+id/attendance_widget_progress_orange"
             style="?android:attr/progressBarStyleHorizontal"
@@ -42,7 +39,6 @@
             android:layout_gravity="center"
             android:visibility="gone" />
 
-        <!-- Progress Ring - RED (danger <60%) -->
         <ProgressBar
             android:id="@+id/attendance_widget_progress_red"
             style="?android:attr/progressBarStyleHorizontal"
@@ -66,7 +62,6 @@
             android:textStyle="bold" />
     </FrameLayout>
 
-    <!-- Subject info (scales with widget size) -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -93,7 +88,6 @@
             android:textSize="13sp"
             android:layout_marginTop="3dp" />
 
-        <!-- Risk text with colored background pill -->
         <TextView
             android:id="@+id/attendance_widget_status"
             android:layout_width="wrap_content"
@@ -109,7 +103,6 @@
             android:maxLines="1"
             android:ellipsize="end" />
 
-        <!-- Streak chip (hidden by default) -->
         <LinearLayout
             android:id="@+id/attendance_widget_streak_chip"
             android:layout_width="wrap_content"
