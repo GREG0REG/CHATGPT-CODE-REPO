@@ -124,7 +124,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final subjectData = <Map<String, dynamic>>[];
 
     for (final row in subjectRows) {
-      final id = row['id'] as int;
+      final id = (row['id'] as int?) ?? 0;
       final name = row['name'] as String;
       final requiredPct = (row['requiredPercentage'] as num?)?.toDouble() ?? 75.0;
       final colorHex = row['colorHex'] as String? ?? '#2196F3';
@@ -203,7 +203,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     if (subject.isEmpty) return;
 
     final logs = await DatabaseHelper.instance.getAttendanceLogsForSubject(subjectName);
-    final schedules = await DatabaseHelper.instance.getAttendanceSchedulesForSubject(subject['id'] as int);
+    final schedules = await DatabaseHelper.instance.getAttendanceSchedulesForSubject((subject['id'] as int?) ?? 0);
 
     setState(() {
       _selectedSubject = subjectName;
@@ -439,10 +439,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final nameController = TextEditingController(text: subject['name'] as String);
     final reqController = TextEditingController(text: (subject['requiredPercentage'] as double).toStringAsFixed(0));
     DateTime? semesterStart = subject['semesterStartMillis'] != null
-        ? DateTime.fromMillisecondsSinceEpoch(subject['semesterStartMillis'] as int)
+        ? DateTime.fromMillisecondsSinceEpoch((subject['semesterStartMillis'] as int?) ?? 0)
         : null;
     DateTime? semesterEnd = subject['semesterEndMillis'] != null
-        ? DateTime.fromMillisecondsSinceEpoch(subject['semesterEndMillis'] as int)
+        ? DateTime.fromMillisecondsSinceEpoch((subject['semesterEndMillis'] as int?) ?? 0)
         : null;
     Color selectedColor = subject['color'] as Color;
 
@@ -600,7 +600,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     reqController.dispose();
 
     if (result != null) {
-      await DatabaseHelper.instance.updateAttendanceSubject(subject['id'] as int, {
+      await DatabaseHelper.instance.updateAttendanceSubject((subject['id'] as int?) ?? 0, {
         'name': result['name'],
         'requiredPercentage': result['requiredPercentage'],
         'semesterStartMillis': result['semesterStartMillis'],
