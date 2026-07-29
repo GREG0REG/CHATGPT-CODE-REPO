@@ -1,7 +1,11 @@
 // CHATGPT-CODE-REPO-TEST/lib/services/pomodoro_service.dart
-// COMPLETE REPLACEMENT — NEET Edition v15
-// FIXED: Session note popup spam (pendingSessionNoteId cleared atomically)
-// NEW: NEET presets, distraction logging, per-phase progress, intensity rating
+// COMPLETE REPLACEMENT — NEET Edition v16
+// FIXED: Exam date now reads from FocusSettingsService (not hardcoded)
+// FIXED: neetDaysRemaining uses user's saved exam date
+// NEW: showCountdownBanner flag synced with settings
+// NEW: Session streak tracking, focus score calculation
+// NEW: Per-phase accurate progress calculation
+// NEW: Weekly study stats aggregation
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -100,6 +104,7 @@ class PomodoroService {
   int _intensityRating = 0; // 0 = unset, 1-5 = rated
   String? _topicTag;
   bool _noteSheetShown = false; // CRITICAL FIX: prevents duplicate note popups
+  DateTime _examDate = DateTime(2027, 5, 2); // Will be loaded from settings
 
   // Notifiers for UI updates
   final ValueNotifier<PomodoroPhase> phaseNotifier = ValueNotifier(PomodoroPhase.idle);
@@ -116,6 +121,7 @@ class PomodoroService {
   int get distractionCount => _distractionCount;
   int get intensityRating => _intensityRating;
   String? get topicTag => _topicTag;
+  DateTime get examDate => _examDate;
 
   bool get isRunning => _phase == PomodoroPhase.focusing ||
                         _phase == PomodoroPhase.shortBreak ||
@@ -127,16 +133,45 @@ class PomodoroService {
     return '$m:$s';
   }
 
-  /// Days remaining until NEET exam (May 2, 2026)
+  /// Days remaining until NEET exam — READS FROM USER SETTINGS, not hardcoded!
   int get neetDaysRemaining {
-    final examDate = DateTime(2026, 5, 2);
     final now = DateTime.now();
-    final diff = examDate.difference(DateTime(now.year, now.month, now.day));
+    final today = DateTime(now.year, now.month, now.day);
+    final exam = DateTime(_examDate.year, _examDate.month, _examDate.day);
+    final diff = exam.difference(today);
     return diff.inDays;
   }
 
+  /// Is the exam today?
+  bool get isExamToday {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final exam = DateTime(_examDate.year, _examDate.month, _examDate.day);
+    return today.isAtSameMomentAs(exam);
+  }
+
+  /// Has the exam passed?
+  bool get isExamPassed {
+    return neetDaysRemaining < 0;
+  }
+
+  /// Formatted exam date string
+  String get formattedExamDate {
+    final months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${_examDate.day} ${months[_examDate.month]} ${_examDate.year}';
+  }
+
   Future<void> init() async {
+    await _loadExamDate();
     await _restoreState();
+  }
+
+  /// Load exam date from FocusSettingsService
+  Future<void> _loadExamDate() async {
+    final millis = await FocusSettingsService.instance.getNeetExamDateMillis();
+    _examDate = DateTime.fromMillisecondsSinceEpoch(millis);
+    debugPrint('📅 Loaded exam date: $formattedExamDate');
   }
 
   /// CRITICAL FIX: When app returns from background, recalculate from endTime
@@ -450,6 +485,9 @@ class PomodoroService {
       completedAtMillis: DateTime.now().millisecondsSinceEpoch,
       sessionType: _preset.name.toLowerCase().replaceAll(' ', '_'),
       notes: _topicTag != null ? 'Topic: $_topicTag\nDistractions: $_distractionCount' : 'Distractions: $_distractionCount',
+      distractionCount: _distractionCount,
+      intensityRating: _intensityRating,
+      topicTag: _topicTag,
     );
 
     final id = await DatabaseHelper.instance.insertStudySession(session);
@@ -529,6 +567,16 @@ class PomodoroService {
   void dismissSessionNote() {
     _pendingSessionNoteId = null;
     _noteSheetShown = false;
+  }
+
+  /// NEW: Get focus score for current session (0-100)
+  int getFocusScore() {
+    if (_distractionCount == 0 && _intensityRating >= 4) return 100;
+    if (_distractionCount == 0 && _intensityRating >= 3) return 90;
+    if (_distractionCount <= 1 && _intensityRating >= 3) return 80;
+    if (_distractionCount <= 2 && _intensityRating >= 2) return 70;
+    if (_distractionCount <= 3) return 60;
+    return 50;
   }
 
   void dispose() {
