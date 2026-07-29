@@ -65,9 +65,9 @@
             android:layout_above="@id/bottom_container"
             android:gravity="center">
 
-            <!-- Circular Progress Ring -->
+            <!-- Circular Progress Ring - FOCUSING (default) -->
             <ProgressBar
-                android:id="@+id/pomodoro_progress_ring"
+                android:id="@+id/pomodoro_progress_ring_default"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="120dp"
                 android:layout_height="120dp"
@@ -75,8 +75,37 @@
                 android:indeterminate="false"
                 android:max="100"
                 android:progress="0"
-                android:progressDrawable="@drawable/widget_circular_progress"
-                android:rotation="-90" />
+                android:progressDrawable="@drawable/widget_circular_progress_teal"
+                android:rotation="-90"
+                android:visibility="visible" />
+
+            <!-- Circular Progress Ring - BREAK -->
+            <ProgressBar
+                android:id="@+id/pomodoro_progress_ring_break"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:layout_centerInParent="true"
+                android:indeterminate="false"
+                android:max="100"
+                android:progress="0"
+                android:progressDrawable="@drawable/widget_circular_progress_green"
+                android:rotation="-90"
+                android:visibility="gone" />
+
+            <!-- Circular Progress Ring - PAUSED -->
+            <ProgressBar
+                android:id="@+id/pomodoro_progress_ring_paused"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:layout_centerInParent="true"
+                android:indeterminate="false"
+                android:max="100"
+                android:progress="0"
+                android:progressDrawable="@drawable/widget_circular_progress_orange"
+                android:rotation="-90"
+                android:visibility="gone" />
 
             <!-- Timer Text (centered inside ring) -->
             <TextView
@@ -87,9 +116,7 @@
                 android:text="Tap to Start"
                 android:textSize="22sp"
                 android:textStyle="bold"
-                android:textColor="#FFFFFF"
-                android:fontFamily="monospace"
-                android:letterSpacing="0.02" />
+                android:textColor="#FFFFFF" />
 
             <!-- Status Text (below timer, still centered) -->
             <TextView
@@ -119,7 +146,6 @@
             android:textSize="11sp"
             android:textStyle="bold"
             android:textColor="#FFFFFF"
-            android:alpha="0.9"
             android:maxLines="1"
             android:ellipsize="end" />
 
