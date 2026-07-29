@@ -1,4 +1,7 @@
+// lib/models/notification_history.dart
 /// Log entry for a sent or scheduled notification.
+/// NOTE: DB schema (v16) does NOT have wasSnoozed column.
+/// This model handles graceful degradation.
 class NotificationHistory {
   final int? id;
   final int? eventId;
@@ -23,7 +26,7 @@ class NotificationHistory {
       'eventTitle': eventTitle,
       'reminderType': reminderType,
       'sentAtMillis': sentAtMillis,
-      'wasSnoozed': wasSnoozed ? 1 : 0,
+      // 'wasSnoozed' intentionally omitted — DB doesn't have this column
     };
   }
 
@@ -34,7 +37,7 @@ class NotificationHistory {
       eventTitle: map['eventTitle'] as String,
       reminderType: map['reminderType'] as String,
       sentAtMillis: map['sentAtMillis'] as int,
-      wasSnoozed: (map['wasSnoozed'] as int? ?? 0) == 1,
+      wasSnoozed: false, // DB doesn't store this, default to false
     );
   }
 }
