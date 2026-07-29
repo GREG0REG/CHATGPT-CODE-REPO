@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:math'; // <-- ADD THIS LINE
 
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
@@ -42,6 +43,15 @@ class ExportResult {
     this.checksum,
     this.errorMessage,
   });
+
+  String get fileSizeReadable {
+    final bytes = fileSizeBytes;
+    if (bytes == null || bytes <= 0) return '0 B';
+    const suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    final i = (log(bytes) / log(1024)).floor().clamp(0, suffixes.length - 1);
+    final size = bytes / pow(1024, i);
+    return '${size.toStringAsFixed(i == 0 ? 0 : 1)} ${suffixes[i]}';
+  }
 }
 
 /// Preview of an import file before actual import
