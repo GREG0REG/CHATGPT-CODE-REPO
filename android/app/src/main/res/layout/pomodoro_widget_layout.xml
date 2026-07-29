@@ -1,17 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 
-  NEET Edition Pomodoro Widget Layout
-  - Responsive: ring and text scale with widget size
-  - Immersive: fills available space, no dead zones
-  - Feature-rich: NEET banner, ring, timer, status, subject, topic, sessions, distractions, phase indicator
--->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/pomodoro_widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#0F0F23">
 
-    <!-- Main content - uses weights to fill space -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -19,9 +12,7 @@
         android:gravity="center"
         android:padding="12dp">
 
-        <!-- ═══════════════════════════════════════════════ -->
-        <!-- NEET Countdown Banner (top, auto-hide if 0) -->
-        <!-- ═══════════════════════════════════════════════ -->
+        <!-- NEET Countdown Banner -->
         <LinearLayout
             android:id="@+id/neet_banner"
             android:layout_width="wrap_content"
@@ -51,22 +42,18 @@
                 android:textColor="#E0E0E0" />
         </LinearLayout>
 
-        <!-- Spacer to push ring to center -->
         <View
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1" />
 
-        <!-- ═══════════════════════════════════════════════ -->
-        <!-- Center: Ring + Timer + Status (fills space) -->
-        <!-- ═══════════════════════════════════════════════ -->
+        <!-- Center: Ring + Timer -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="4"
             android:gravity="center">
 
-            <!-- Circular Progress Ring - FOCUSING (default/indigo) -->
             <ProgressBar
                 android:id="@+id/pomodoro_progress_ring_default"
                 style="?android:attr/progressBarStyleHorizontal"
@@ -80,7 +67,6 @@
                 android:rotation="-90"
                 android:visibility="visible" />
 
-            <!-- Circular Progress Ring - BREAK (green/teal) -->
             <ProgressBar
                 android:id="@+id/pomodoro_progress_ring_break"
                 style="?android:attr/progressBarStyleHorizontal"
@@ -94,7 +80,6 @@
                 android:rotation="-90"
                 android:visibility="gone" />
 
-            <!-- Circular Progress Ring - PAUSED (orange) -->
             <ProgressBar
                 android:id="@+id/pomodoro_progress_ring_paused"
                 style="?android:attr/progressBarStyleHorizontal"
@@ -108,7 +93,6 @@
                 android:rotation="-90"
                 android:visibility="gone" />
 
-            <!-- Timer + Status centered inside ring -->
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -136,15 +120,12 @@
             </LinearLayout>
         </FrameLayout>
 
-        <!-- Spacer -->
         <View
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="0.5" />
 
-        <!-- ═══════════════════════════════════════════════ -->
-        <!-- Phase Indicator Pill -->
-        <!-- ═══════════════════════════════════════════════ -->
+        <!-- Phase Pill -->
         <TextView
             android:id="@+id/pomodoro_phase_pill"
             android:layout_width="wrap_content"
@@ -158,9 +139,7 @@
             android:background="#155B6EF5"
             android:visibility="gone" />
 
-        <!-- ═══════════════════════════════════════════════ -->
         <!-- Subject + Topic -->
-        <!-- ═══════════════════════════════════════════════ -->
         <TextView
             android:id="@+id/pomodoro_widget_subject"
             android:layout_width="match_parent"
@@ -187,15 +166,12 @@
             android:ellipsize="end"
             android:visibility="gone" />
 
-        <!-- Spacer -->
         <View
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1" />
 
-        <!-- ═══════════════════════════════════════════════ -->
         <!-- Bottom Row: Session + Distraction + Next Subject -->
-        <!-- ═══════════════════════════════════════════════ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -203,7 +179,6 @@
             android:gravity="center"
             android:layout_marginTop="4dp">
 
-            <!-- Session Counter -->
             <LinearLayout
                 android:id="@+id/pomodoro_session_chips"
                 android:layout_width="wrap_content"
@@ -232,7 +207,6 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- Distraction Counter -->
             <LinearLayout
                 android:id="@+id/distraction_chip"
                 android:layout_width="wrap_content"
@@ -262,7 +236,6 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- Next Subject Preview (shown during break) -->
             <LinearLayout
                 android:id="@+id/next_subject_chip"
                 android:layout_width="wrap_content"
@@ -296,7 +269,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Daily Goal Mini Bar (always visible when expanded) -->
+        <!-- Daily Goal Mini Bar -->
         <LinearLayout
             android:id="@+id/daily_goal_container"
             android:layout_width="match_parent"
@@ -333,6 +306,7 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
+            <!-- FIXED: Use built-in Android progress drawable instead of custom missing one -->
             <ProgressBar
                 android:id="@+id/daily_goal_progress"
                 style="?android:attr/progressBarStyleHorizontal"
@@ -341,7 +315,8 @@
                 android:layout_marginTop="4dp"
                 android:max="100"
                 android:progress="0"
-                android:progressDrawable="@drawable/widget_progress_drawable" />
+                android:progressTint="#5B6EF5"
+                android:progressBackgroundTint="#20FFFFFF" />
         </LinearLayout>
 
     </LinearLayout>
