@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:event_countdown/services/export_import_service.dart';
 import 'package:event_countdown/services/backup_service.dart';
@@ -57,12 +58,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSettings() async {
-    // Load from SettingsService if available, otherwise use defaults
     try {
-      final neetMode = await SettingsService.instance.getNeetModeEnabled();
-      final themeIndex = await SettingsService.instance.getAppThemeIndex();
-      final reminders = await SettingsService.instance.getStudyRemindersEnabled();
-      final interval = await SettingsService.instance.getReminderInterval();
+      final prefs = await SharedPreferences.getInstance();
+      final neetMode = prefs.getBool('neet_mode_enabled') ?? true;
+      final themeIndex = prefs.getInt('app_theme_index') ?? 0;
+      final reminders = prefs.getBool('study_reminders_enabled') ?? true;
+      final interval = prefs.getInt('reminder_interval') ?? 60;
       if (mounted) {
         setState(() {
           _neetModeEnabled = neetMode;
@@ -72,7 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
     } catch (e) {
-      // Use defaults if methods don't exist yet
+      // Use defaults
     }
   }
 
@@ -332,11 +333,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: _neetModeEnabled,
               onChanged: (value) async {
                 setState(() => _neetModeEnabled = value);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool('neet_mode_enabled', value);
                 try {
-                  await SettingsService.instance.setNeetModeEnabled(value);
                   await WidgetService.refreshWidget();
                 } catch (e) {
-                  // Method may not exist yet
+                  // WidgetService may not support refresh
                 }
               },
             ),
@@ -368,11 +370,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: _neetModeEnabled
                   ? (value) async {
                       setState(() => _showCountdownBanner = value);
-                      try {
-                        await SettingsService.instance.setShowCountdownBanner(value);
-                      } catch (e) {
-                        // Method may not exist yet
-                      }
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool('show_countdown_banner', value);
                     }
                   : null,
             ),
@@ -404,11 +403,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: _neetModeEnabled
                   ? (value) async {
                       setState(() => _showSubjectBreakdown = value);
-                      try {
-                        await SettingsService.instance.setShowSubjectBreakdown(value);
-                      } catch (e) {
-                        // Method may not exist yet
-                      }
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool('show_subject_breakdown', value);
                     }
                   : null,
             ),
@@ -510,11 +506,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: _studyRemindersEnabled,
               onChanged: (value) async {
                 setState(() => _studyRemindersEnabled = value);
-                try {
-                  await SettingsService.instance.setStudyRemindersEnabled(value);
-                } catch (e) {
-                  // Method may not exist yet
-                }
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setBool('study_reminders_enabled', value);
               },
             ),
             if (_studyRemindersEnabled) ...[
@@ -557,11 +550,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (value) async {
                     if (value != null) {
                       setState(() => _reminderInterval = value);
-                      try {
-                        await SettingsService.instance.setReminderInterval(value);
-                      } catch (e) {
-                        // Method may not exist yet
-                      }
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setInt('reminder_interval', value);
                     }
                   },
                 ),
@@ -811,11 +801,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: InkWell(
         onTap: () async {
           setState(() => _currentThemeOption = info.option);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt('app_theme_index', info.option.index);
           try {
-            await SettingsService.instance.setAppTheme(info.option.index);
             await WidgetService.refreshWidget();
           } catch (e) {
-            // Method may not exist yet
+            // WidgetService may not support refresh
           }
         },
         borderRadius: BorderRadius.circular(14),
