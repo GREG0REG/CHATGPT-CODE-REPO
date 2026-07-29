@@ -848,8 +848,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       });
     }
 
-    await WidgetService.refreshAttendanceWidget();
+    
+    // ── Refresh widget after marking attendance ──
+    await _loadData();
   }
+
 
   Future<void> _showMarkDialog(String subject, {DateTime? specificDate}) async {
     final date = specificDate ?? DateTime.now();
