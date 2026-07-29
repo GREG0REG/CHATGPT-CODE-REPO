@@ -4,15 +4,19 @@
 //  1. Live NEET Exam Countdown Banner (editable target date)
 //  2. Live Study Dashboard in drawer header (minutes, sessions, streak)
 //  3. Bottom Navigation Bar (5 primary tabs) + Drawer for tools
-//  4. Quick Focus Speed-Dial FAB (Physics/Chemistry/Biology presets)
-//  5. Medical-themed animated drawer header (pulse icon, teal gradient)
-//  6. Contextual red badges on drawer items (events, flashcards, timetable)
-//  7. Today's Schedule Peek card (next 2 classes/tasks)
-//  8. Subject color coding & medical iconography
-//  9. Haptic feedback + smooth transitions
-// 10. Rotating medical quotes in drawer header
-// 11. Streak celebration overlay (emoji confetti at ≥3 days)
-// 12. Adaptive tablet layout (NavigationRail when width > 600dp)
+//  4. Medical-themed animated drawer header (pulse icon, teal gradient)
+//  5. Contextual red badges on drawer items (events, flashcards, timetable)
+//  6. Today's Schedule Peek card (next 2 classes/tasks)
+//  7. Subject color coding & medical iconography
+//  8. Haptic feedback + smooth transitions
+//  9. Rotating medical quotes in drawer header
+//  10. Streak celebration overlay (emoji confetti at ≥3 days)
+//  11. Adaptive tablet layout (NavigationRail when width > 600dp)
+//  12. NEET Subject Quick-Action chips in drawer header
+//  13. Enhanced countdown with circular progress ring
+//  14. Study streak flame animation
+//  15. Today's NEET subject breakdown mini-card
+//  REMOVED: Spark FAB (was overlapping with add event button, non-functional)
 
 import 'dart:async';
 import 'dart:math';
@@ -47,12 +51,12 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   int _currentIndex = 0;
   int _bottomNavSelectedIndex = 0;
   bool _trackingExpanded = false;
-  bool _fabExpanded = false;
 
   late final AnimationController _chevronController;
   late final Animation<double> _chevronAnimation;
   late final AnimationController _pulseController;
   late final AnimationController _confettiController;
+  late final AnimationController _flameController;
 
   // ── NEET Countdown ──
   late DateTime _neetTargetDate;
@@ -63,6 +67,9 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   int _todayMinutes = 0;
   int _todaySessions = 0;
   int _streak = 0;
+
+  // ── NEET Subject Breakdown ──
+  Map<String, int> _neetSubjectMinutes = {};
 
   // ── Badges ──
   int _todayEventsCount = 0;
@@ -100,12 +107,11 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     _NavItem(index: 6, label: 'Read', icon: Icons.menu_book),
   ];
 
+  // Habit REMOVED from main drawer — now only in Tracking section
   final List<_DrawerItem> _drawerItems = const [
     _DrawerItem(index: 3, label: 'Assignments', icon: Icons.assignment),
     _DrawerItem(index: 4, label: 'Stats', icon: Icons.bar_chart),
     _DrawerItem(index: 5, label: 'Quick Notes', icon: Icons.note_alt),
-    _DrawerItem(index: 8, label: 'Attendance', icon: Icons.fact_check),
-    _DrawerItem(index: 7, label: 'Habits', icon: Icons.check_circle_outline),
   ];
 
   final List<_DrawerItem> _trackingItems = const [
@@ -148,6 +154,11 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(seconds: 3),
     );
+
+    _flameController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
 
     _neetTargetDate = _calculateNeetDate();
     _updateCountdown();
@@ -196,8 +207,9 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   Future<void> _loadLiveData() async {
     final mins = await DatabaseHelper.instance.getTodayStudyMinutes();
     final streak = await DatabaseHelper.instance.getLatestStreak();
+    final neetBreakdown = await DatabaseHelper.instance.getTodayNeetSubjectMinutes();
 
-    // Session count today (inline query to avoid missing method)
+    // Session count today
     final db = await DatabaseHelper.instance.database;
     final now = DateTime.now();
     final start = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
@@ -213,6 +225,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
         _todayMinutes = mins;
         _todaySessions = sessions;
         _streak = streak;
+        _neetSubjectMinutes = neetBreakdown;
       });
     }
   }
@@ -223,7 +236,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     final start = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
     final end = start + const Duration(days: 1).inMilliseconds;
 
-    // Today's incomplete events (proxy for assignments due)
+    // Today's incomplete events
     final events = await db.query(
       'events',
       where: 'dateMillis >= ? AND dateMillis < ? AND isCompleted = 0',
@@ -234,7 +247,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     final dueCards = await DatabaseHelper.instance.getFlashcardsDueForReview(end);
 
     // Today's timetable items
-    final dayOfWeek = now.weekday; // 1=Mon ... 7=Sun
+    final dayOfWeek = now.weekday;
     final classes = await db.query(
       'timetable_classes',
       where: 'dayOfWeek = ?',
@@ -315,6 +328,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     _chevronController.dispose();
     _pulseController.dispose();
     _confettiController.dispose();
+    _flameController.dispose();
     _countdownTimer?.cancel();
     _quoteTimer?.cancel();
     super.dispose();
@@ -340,30 +354,8 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
       setState(() {
         _bottomNavSelectedIndex = bottomIndex;
         _currentIndex = screenIndex;
-        _fabExpanded = false;
       });
     }
-  }
-
-  void _toggleFab() {
-    HapticFeedback.mediumImpact();
-    setState(() => _fabExpanded = !_fabExpanded);
-  }
-
-  void _quickFocus(String subject, int minutes) {
-    _toggleFab();
-    setState(() {
-      _bottomNavSelectedIndex = 1; // Focus tab
-      _currentIndex = 1;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('⚡ Start $subject — $minutes min block ready'),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
   }
 
   @override
@@ -417,6 +409,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
                 Column(
                   children: [
                     _buildCountdownBanner(cs),
+                    if (_neetSubjectMinutes.isNotEmpty) _buildNeetSubjectBreakdown(cs),
                     if (_nextItems.isNotEmpty) _buildSchedulePeek(cs),
                     Expanded(
                       child: IndexedStack(index: _currentIndex, children: _screens),
@@ -429,7 +422,6 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
           ),
         ],
       ),
-      floatingActionButton: _buildSpeedDial(cs),
     );
   }
 
@@ -437,6 +429,8 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   // NARROW LAYOUT (Phone)
   // ═══════════════════════════════════════════════════════════════
   Widget _buildNarrowLayout(ColorScheme cs) {
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return Scaffold(
       key: mainScaffoldKey,
       drawer: Drawer(
@@ -494,7 +488,10 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
         children: [
           Column(
             children: [
+              // SafeArea offset for countdown to avoid status bar overlap
+              SizedBox(height: topPadding > 0 ? 4 : 8),
               _buildCountdownBanner(cs),
+              if (_neetSubjectMinutes.isNotEmpty) _buildNeetSubjectBreakdown(cs),
               if (_nextItems.isNotEmpty) _buildSchedulePeek(cs),
               Expanded(
                 child: IndexedStack(index: _currentIndex, children: _screens),
@@ -515,12 +512,13 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
           );
         }).toList(),
       ),
-      floatingActionButton: _buildSpeedDial(cs),
+      // SPARK FAB REMOVED — was overlapping with HomeScreen's add event button
+      // and was non-functional per user request
     );
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // DRAWER HEADER — Medical Theme + Live Stats + Quotes
+  // DRAWER HEADER — Medical Theme + Live Stats + Quotes + NEET Chips
   // ═══════════════════════════════════════════════════════════════
   Widget _buildDrawerHeader(ColorScheme cs) {
     return Container(
@@ -528,9 +526,9 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Color(0xFF00695C), // Surgical teal
-            Color(0xFF004D40), // Deep teal
-            Color(0xFF263238), // Slate
+            Color(0xFF00695C),
+            Color(0xFF004D40),
+            Color(0xFF263238),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -603,10 +601,44 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
                   Container(width: 1, height: 30, color: Colors.white.withOpacity(0.2)),
                   _liveStat('$_todayMinutes', 'Min Today', Icons.local_fire_department, cs),
                   Container(width: 1, height: 30, color: Colors.white.withOpacity(0.2)),
-                  _liveStat('$_streak', 'Streak', Icons.whatshot, cs),
+                  _buildStreakStat(),
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+            // NEET Subject Quick Chips
+            if (_neetSubjectMinutes.isNotEmpty)
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: _neetSubjectMinutes.entries.map((entry) {
+                  final colors = {
+                    'Physics': const Color(0xFF1565C0),
+                    'Chemistry': const Color(0xFF2E7D32),
+                    'Biology': const Color(0xFFC62828),
+                    'General': const Color(0xFF6A1B9A),
+                  };
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: (colors[entry.key] ?? cs.primary).withOpacity(0.25),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: (colors[entry.key] ?? cs.primary).withOpacity(0.4),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      '${entry.key}: ${entry.value}m',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
           ],
         ),
       ),
@@ -673,86 +705,308 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildStreakStat() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedBuilder(
+              animation: _flameController,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: 1.0 + (_flameController.value * 0.15),
+                  child: Icon(
+                    Icons.whatshot,
+                    size: 14,
+                    color: _streak > 0 ? Colors.orange.shade400 : Colors.white.withOpacity(0.5),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '$_streak',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: _streak > 0 ? Colors.orange.shade300 : Colors.white.withOpacity(0.5),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Streak',
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.white.withOpacity(0.75),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
   // ═══════════════════════════════════════════════════════════════
-  // COUNTDOWN BANNER
+  // ENHANCED COUNTDOWN BANNER — Better spacing, circular progress
   // ═══════════════════════════════════════════════════════════════
   Widget _buildCountdownBanner(ColorScheme cs) {
+    final now = DateTime.now();
+    final totalDays = _neetTargetDate.difference(DateTime(now.year, now.month, now.day)).inDays;
+    final maxDays = 365;
+    final progress = (totalDays / maxDays).clamp(0.0, 1.0);
+
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFFD32F2F), Color(0xFFB71C1C), Color(0xFF7F0000)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.red.withOpacity(0.25),
-            blurRadius: 10,
+            color: Colors.red.withOpacity(0.2),
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              shape: BoxShape.circle,
+          // Circular progress ring
+          SizedBox(
+            width: 52,
+            height: 52,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CircularProgressIndicator(
+                  value: progress,
+                  strokeWidth: 4,
+                  backgroundColor: Colors.white.withOpacity(0.15),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.event_available, color: Colors.white, size: 22),
+                ),
+              ],
             ),
-            child: const Icon(Icons.event_available, color: Colors.white, size: 24),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'NEET EXAM COUNTDOWN',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'NEET EXAM',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${_neetTargetDate.day}/${_neetTargetDate.month}/${_neetTargetDate.year}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.white.withOpacity(0.6),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
                   child: Text(
                     _countdownText,
                     key: ValueKey<String>(_countdownText),
                     style: const TextStyle(
-                      fontSize: 24,
+                      fontSize: 26,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
-                      letterSpacing: 1.5,
+                      letterSpacing: 1.2,
                       height: 1,
                     ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$totalDays days until your exam',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withOpacity(0.7),
                   ),
                 ),
               ],
             ),
           ),
-          TextButton(
-            onPressed: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _neetTargetDate,
-                firstDate: DateTime.now(),
-                lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
-              );
-              if (picked != null) setState(() => _neetTargetDate = picked);
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.white70,
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(40, 30),
+          const SizedBox(width: 8),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _neetTargetDate,
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
+                  builder: (context, child) {
+                    return Theme(
+                      data: Theme.of(context).copyWith(
+                        colorScheme: Theme.of(context).colorScheme.copyWith(
+                          primary: const Color(0xFFD32F2F),
+                        ),
+                      ),
+                      child: child!,
+                    );
+                  },
+                );
+                if (picked != null) setState(() => _neetTargetDate = picked);
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white.withOpacity(0.2)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.edit_calendar, color: Colors.white70, size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      'EDIT',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            child: const Text('EDIT', style: TextStyle(fontSize: 11)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // NEET SUBJECT BREAKDOWN MINI-CARD
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildNeetSubjectBreakdown(ColorScheme cs) {
+    final subjectColors = {
+      'Physics': const Color(0xFF1565C0),
+      'Chemistry': const Color(0xFF2E7D32),
+      'Biology': const Color(0xFFC62828),
+      'General': const Color(0xFF6A1B9A),
+    };
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.pie_chart_outline, size: 14, color: cs.primary),
+              const SizedBox(width: 6),
+              Text(
+                'Today\'s Subject Breakdown',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: _neetSubjectMinutes.entries.map((entry) {
+              final color = subjectColors[entry.key] ?? cs.primary;
+              final total = _neetSubjectMinutes.values.fold(0, (a, b) => a + b);
+              final pct = total > 0 ? (entry.value / total) : 0.0;
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Column(
+                    children: [
+                      Stack(
+                        alignment: Alignment.bottomCenter,
+                        children: [
+                          Container(
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 600),
+                            curve: Curves.easeOutCubic,
+                            height: 40 * pct,
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        entry.key.substring(0, min(3, entry.key.length)),
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                        ),
+                      ),
+                      Text(
+                        '${entry.value}m',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: cs.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
           ),
         ],
       ),
@@ -829,98 +1083,25 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Text(
-                    isClass ? 'Class' : 'Task',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: cs.outline,
-                      fontWeight: FontWeight.w500,
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isClass ? cs.primary.withOpacity(0.12) : Colors.orange.shade600.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      isClass ? 'Class' : 'Task',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: isClass ? cs.primary : Colors.orange.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
               ),
             );
           }),
-        ],
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // SPEED DIAL FAB
-  // ═══════════════════════════════════════════════════════════════
-  Widget _buildSpeedDial(ColorScheme cs) {
-    return Stack(
-      alignment: Alignment.bottomRight,
-      children: [
-        if (_fabExpanded) ...[
-          Positioned(
-            bottom: 72,
-            right: 4,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _speedDialTile('Physics Block', '90 min', Icons.science, const Color(0xFF1565C0), () => _quickFocus('Physics', 90)),
-                const SizedBox(height: 10),
-                _speedDialTile('Chemistry Block', '60 min', Icons.biotech, const Color(0xFF2E7D32), () => _quickFocus('Chemistry', 60)),
-                const SizedBox(height: 10),
-                _speedDialTile('Biology Block', '60 min', Icons.eco, const Color(0xFFC62828), () => _quickFocus('Biology', 60)),
-                const SizedBox(height: 10),
-                _speedDialTile('Custom Focus', '25 min', Icons.timer, cs.tertiary, () => _quickFocus('Custom', 25)),
-              ],
-            ),
-          ),
-        ],
-        FloatingActionButton(
-          onPressed: _toggleFab,
-          elevation: 4,
-          backgroundColor: _fabExpanded ? cs.errorContainer : cs.primary,
-          child: AnimatedRotation(
-            turns: _fabExpanded ? 0.125 : 0,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutBack,
-            child: Icon(
-              _fabExpanded ? Icons.close : Icons.bolt,
-              color: _fabExpanded ? cs.onErrorContainer : Colors.white,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _speedDialTile(String title, String subtitle, IconData icon, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.75),
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 6, offset: const Offset(0, 2)),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                Text(subtitle, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          FloatingActionButton.small(
-            heroTag: title,
-            onPressed: onTap,
-            backgroundColor: color,
-            child: Icon(icon, color: Colors.white, size: 20),
-          ),
         ],
       ),
     );
@@ -966,19 +1147,29 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     if (item.label == 'Timetable') badge = _todayTimetableCount;
 
     return ListTile(
-      leading: Icon(
-        item.icon,
-        color: isSelected ? _itemColor(item.label) : cs.onSurfaceVariant,
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: isSelected ? _itemColor(item.label).withOpacity(0.12) : cs.surfaceContainerHighest.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          item.icon,
+          size: 18,
+          color: isSelected ? _itemColor(item.label) : cs.onSurfaceVariant,
+        ),
       ),
       title: Text(
         item.label,
         style: TextStyle(
           color: cs.onSurface,
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          fontSize: 14,
         ),
       ),
       selected: isSelected,
-      selectedTileColor: _itemColor(item.label).withOpacity(0.1),
+      selectedTileColor: _itemColor(item.label).withOpacity(0.08),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       trailing: badge > 0
@@ -997,7 +1188,11 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
                 ),
               ),
             )
-          : null,
+          : Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: isSelected ? _itemColor(item.label).withOpacity(0.5) : cs.outline.withOpacity(0.4),
+            ),
       onTap: () => _selectDrawerIndex(item.index),
     );
   }
@@ -1017,11 +1212,26 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
 
   Widget _buildTrackingHeader(ColorScheme cs) {
     return ListTile(
-      leading: Icon(Icons.trending_up, color: cs.primary),
-      title: const Text('Tracking', style: TextStyle(fontWeight: FontWeight.w600)),
+      leading: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: cs.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(Icons.trending_up, color: cs.primary, size: 18),
+      ),
+      title: Text(
+        'Tracking',
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: cs.onSurface,
+          fontSize: 14,
+        ),
+      ),
       trailing: RotationTransition(
         turns: _chevronAnimation,
-        child: Icon(Icons.expand_more, color: cs.onSurfaceVariant),
+        child: Icon(Icons.expand_more, color: cs.onSurfaceVariant, size: 20),
       ),
       onTap: _toggleTracking,
     );
