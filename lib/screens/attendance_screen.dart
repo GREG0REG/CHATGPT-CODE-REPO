@@ -3,6 +3,9 @@
 // FIXED: Division by zero when required=100%
 // CHANGED: "Class" → "Session" throughout for revision-era NEET prep
 // ENHANCED: NEET presets, medical theme, bunk calculator, attendance predictor, weekly report, smart suggestions
+import 'dart:convert';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 import 'dart:math';
 import 'package:flutter/material.dart';
