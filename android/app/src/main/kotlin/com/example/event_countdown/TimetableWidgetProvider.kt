@@ -50,9 +50,8 @@ class TimetableWidgetProvider : AppWidgetProvider() {
                 val classesList = mutableListOf<Map<String, String>>()
 
                 try {
-                    // CRITICAL FIX: Use getApplicationSupportDirectory path
+                    // FIXED: Removed duplicate val file declaration
                     val dir = context.getDir("flutter", Context.MODE_PRIVATE)
-                    val file = File(dir.parentFile)
                     val file = File(dir.parentFile, "app_flutter/timetable_widget_data.json")
                     
                     // Fallback to filesDir for compatibility
