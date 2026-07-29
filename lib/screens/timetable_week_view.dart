@@ -1,5 +1,6 @@
 // FILE: lib/screens/timetable_week_view.dart
 // COMPLETE REPLACEMENT — Week Grid View for Timetable
+// FIXED: max() type errors (32.0, 28.0), timeline now 5-24 to match day view, all-day tasks included
 
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -24,9 +25,9 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
   List<Map<String, dynamic>> _classes = [];
   List<Map<String, dynamic>> _tasks = [];
 
-  // Timeline constants
-  static const int _timelineStartHour = 7;
-  static const int _timelineEndHour = 21;
+  // Timeline constants — FIXED: now 5 AM to 12 AM to match day view
+  static const int _timelineStartHour = 5;
+  static const int _timelineEndHour = 24;
   static const int _timelineStartMinutes = _timelineStartHour * 60;
   static const int _timelineEndMinutes = _timelineEndHour * 60;
   static const int _totalTimelineMinutes = _timelineEndMinutes - _timelineStartMinutes;
@@ -450,6 +451,7 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
       ..sort((a, b) => (a['startTimeMinutes'] as int).compareTo(b['startTimeMinutes'] as int));
   }
 
+  // FIXED: Now includes all-day tasks (isAllDay=1) even when startTimeMinutes is null
   List<Map<String, dynamic>> _getTasksForDay(int dayIndex) {
     final now = DateTime.now();
     final targetDate = DateTime(now.year, now.month, now.day).add(Duration(days: dayIndex - (now.weekday - 1)));
@@ -459,9 +461,15 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
     return _tasks.where((t) {
       final due = t['dueDateMillis'] as int?;
       if (due == null) return false;
-      return due >= startOfDay && due < endOfDay && t['startTimeMinutes'] != null;
+      final isAllDay = (t['isAllDay'] as int? ?? 0) == 1;
+      final hasTime = t['startTimeMinutes'] != null;
+      return due >= startOfDay && due < endOfDay && (hasTime || isAllDay);
     }).toList()
-      ..sort((a, b) => (a['startTimeMinutes'] as int).compareTo(b['startTimeMinutes'] as int));
+      ..sort((a, b) {
+        final aTime = a['startTimeMinutes'] as int? ?? 0;
+        final bTime = b['startTimeMinutes'] as int? ?? 0;
+        return aTime.compareTo(bTime);
+      });
   }
 
   List<Map<String, dynamic>> _detectConflicts(List<Map<String, dynamic>> dayClasses) {
@@ -602,6 +610,8 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                                 final hour = _timelineStartHour + i;
                                 final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
                                 final ampm = hour >= 12 ? 'PM' : 'AM';
+                                final labelHour = hour == 24 ? 12 : displayHour;
+                                final labelAmpm = hour == 24 ? 'AM' : ampm;
                                 return Container(
                                   height: _hourHeight,
                                   alignment: Alignment.topCenter,
@@ -613,7 +623,7 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                                     ),
                                   ),
                                   child: Text(
-                                    '$displayHour $ampm',
+                                    '$labelHour $labelAmpm',
                                     style: TextStyle(
                                       fontSize: 10,
                                       color: cs.outline,
@@ -627,7 +637,7 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                           // Day columns
                           ...List.generate(daysToShow, (dayIndex) {
                             final dayClasses = _getClassesForDay(dayIndex);
-                            final dayTasks = _getTasksForDay(dayIndex);
+                            final dayTasks = _getTasksForDay(dayIndex).where((t) => t['startTimeMinutes'] != null).toList();
                             final conflicts = _detectConflicts(dayClasses);
                             final isToday = DateTime.now().weekday - 1 == dayIndex;
 
@@ -727,7 +737,7 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
     final start = c['startTimeMinutes'] as int;
     final end = c['endTimeMinutes'] as int;
     final top = _minutesToPixels(start);
-    final height = max(32, _durationToPixels(end - start));
+    final height = max(32.0, _durationToPixels(end - start));
     final color = _hexToColor(c['colorHex'] as String? ?? '#2196F3');
     final isConflict = conflicts.any((conf) =>
         conf['a']['id'] == c['id'] || conf['b']['id'] == c['id']);
@@ -815,7 +825,7 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
     final start = t['startTimeMinutes'] as int;
     final end = t['endTimeMinutes'] as int;
     final top = _minutesToPixels(start);
-    final height = max(28, _durationToPixels(end - start));
+    final height = max(28.0, _durationToPixels(end - start));
     final typeColor = _typeColor(t['taskType'] as String);
     final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
 
