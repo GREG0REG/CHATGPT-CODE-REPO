@@ -7,88 +7,52 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.graphics.Color
 import android.os.Build
 import android.os.SystemClock
 import android.view.View
 import android.widget.RemoteViews
+import es.antonborri.home_widget.HomeWidgetLaunchIntent
+import es.antonborri.home_widget.HomeWidgetPlugin
 
-// FIXED: Moved outside companion object — data class cannot be inside companion object
-private data class PhaseStyle(
-    val phaseColor: Int,
-    val bgColor: Int,
-    val showDefaultRing: Boolean,
-    val showBreakRing: Boolean,
-    val showPausedRing: Boolean,
-    val phaseLabel: String
-)
-
+/**
+ * Pomodoro Home Screen Widget — NEET Edition v2
+ * COMPLETE REPLACEMENT
+ *
+ * FIX: Now uses HomeWidgetPlugin.getData() to read from home_widget SharedPreferences
+ * instead of reading from "FlutterSharedPreferences" (which is the wrong prefs file).
+ *
+ * FEATURES:
+ * - Circular progress ring with phase-based colors (teal focus, green break, orange paused)
+ * - NEET countdown banner with urgency colors
+ * - Timer display with phase label
+ * - Session counter with flame
+ * - Distraction counter
+ * - Daily goal progress bar
+ * - Subject + topic display
+ * - Tap to open app
+ * - Alarm-based tick updates (1s active, 10s idle)
+ */
 class PomodoroWidgetProvider : AppWidgetProvider() {
 
     companion object {
-        private const val PREFS_NAME = "FlutterSharedPreferences"
-        private const val KEY_PHASE = "flutter.pomodoro_phase"
-        private const val KEY_END_TIME = "flutter.pomodoro_end_time_millis"
-        private const val KEY_TOTAL_DURATION = "flutter.pomodoro_total_duration_seconds"
-        private const val KEY_SUBJECT = "flutter.pomodoro_subject"
-        private const val KEY_STATUS = "flutter.pomodoro_status"
-        private const val KEY_SESSIONS = "flutter.pomodoro_completed_sessions"
-        private const val KEY_DISTRACTION_COUNT = "flutter.pomodoro_distraction_count"
-        private const val KEY_TOPIC_TAG = "flutter.pomodoro_topic_tag"
-        private const val KEY_NEXT_SUBJECT = "flutter.pomodoro_next_subject"
-        private const val KEY_DAILY_MINUTES = "flutter.pomodoro_daily_minutes"
-        private const val KEY_DAILY_GOAL = "flutter.pomodoro_daily_goal_minutes"
+        // Keys MUST match what WidgetService.saveWidgetData() uses in Dart
+        private const val KEY_PHASE = "pomodoro_phase"
+        private const val KEY_TIMER_TEXT = "pomodoro_timer_text"
+        private const val KEY_STATUS = "pomodoro_status"
+        private const val KEY_SUBJECT = "pomodoro_subject"
+        private const val KEY_TOPIC = "pomodoro_topic"
+        private const val KEY_PROGRESS = "pomodoro_progress_percent"
+        private const val KEY_SESSIONS = "pomodoro_sessions"
+        private const val KEY_DISTRACTIONS = "pomodoro_distractions"
+        private const val KEY_DAILY_MINUTES = "pomodoro_daily_minutes"
+        private const val KEY_DAILY_GOAL = "pomodoro_daily_goal"
+        private const val KEY_NEET_DAYS = "pomodoro_neet_days"
+        private const val KEY_NEXT_SUBJECT = "pomodoro_next_subject"
 
         const val ACTION_POMODORO_TICK = "com.example.event_countdown.POMODORO_WIDGET_TICK"
         private const val ACTIVE_TICK_INTERVAL_MS = 1_000L
         private const val IDLE_TICK_INTERVAL_MS = 10_000L
-
-        // NEET Exam Date: May 2, 2026
-        private const val NEET_EXAM_MILLIS = 1751423400000L
-
-        private fun getIntPref(prefs: SharedPreferences, key: String, default: Int): Int {
-            return try {
-                prefs.getInt(key, default)
-            } catch (e: ClassCastException) {
-                try {
-                    prefs.getLong(key, default.toLong()).toInt()
-                } catch (e2: ClassCastException) {
-                    default
-                }
-            }
-        }
-
-        private fun getLongPref(prefs: SharedPreferences, key: String, default: Long): Long {
-            return try {
-                prefs.getLong(key, default)
-            } catch (e: ClassCastException) {
-                try {
-                    prefs.getInt(key, default.toInt()).toLong()
-                } catch (e2: ClassCastException) {
-                    default
-                }
-            }
-        }
-
-        fun calculateRemainingTime(endTimeMillis: Long?): Int {
-            if (endTimeMillis == null || endTimeMillis <= 0) return 0
-            val now = System.currentTimeMillis()
-            val remaining = ((endTimeMillis - now) / 1000).toInt()
-            return remaining.coerceAtLeast(0)
-        }
-
-        fun formatTime(seconds: Int): String {
-            val m = (seconds / 60).toString().padStart(2, '0')
-            val s = (seconds % 60).toString().padStart(2, '0')
-            return "$m:$s"
-        }
-
-        fun calculateNeetDaysRemaining(): Int {
-            val now = System.currentTimeMillis()
-            val diff = NEET_EXAM_MILLIS - now
-            return (diff / (1000 * 60 * 60 * 24)).toInt().coerceAtLeast(0)
-        }
 
         fun updateWidgetDirectly(
             context: Context,
@@ -96,81 +60,39 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             widgetId: Int
         ) {
             try {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                // CRITICAL FIX: Use HomeWidgetPlugin.getData() instead of wrong SharedPreferences
+                val widgetData = HomeWidgetPlugin.getData(context)
 
-                val phase = prefs.getString(KEY_PHASE, "idle") ?: "idle"
-                val endTime = getLongPref(prefs, KEY_END_TIME, 0L).takeIf { it > 0 }
-                val totalDuration = getIntPref(prefs, KEY_TOTAL_DURATION, 90 * 60)
-                val subject = prefs.getString(KEY_SUBJECT, "Ready to Focus") ?: "Ready to Focus"
-                val status = prefs.getString(KEY_STATUS, "Ready") ?: "Ready"
-                val sessions = getIntPref(prefs, KEY_SESSIONS, 0)
-                val topicTag = prefs.getString(KEY_TOPIC_TAG, null)
-                val distractionCount = getIntPref(prefs, KEY_DISTRACTION_COUNT, 0)
-                val nextSubject = prefs.getString(KEY_NEXT_SUBJECT, null)
-                val dailyMinutes = getIntPref(prefs, KEY_DAILY_MINUTES, 0)
-                val dailyGoal = getIntPref(prefs, KEY_DAILY_GOAL, 360)
+                val phase = widgetData.getString(KEY_PHASE, "idle") ?: "idle"
+                val timerText = widgetData.getString(KEY_TIMER_TEXT, "Tap to Start") ?: "Tap to Start"
+                val status = widgetData.getString(KEY_STATUS, "Ready") ?: "Ready"
+                val subject = widgetData.getString(KEY_SUBJECT, "Ready to Focus") ?: "Ready to Focus"
+                val topic = widgetData.getString(KEY_TOPIC, null)
+                val progress = widgetData.getInt(KEY_PROGRESS, 0)
+                val sessions = widgetData.getInt(KEY_SESSIONS, 0)
+                val distractions = widgetData.getInt(KEY_DISTRACTIONS, 0)
+                val dailyMinutes = widgetData.getInt(KEY_DAILY_MINUTES, 0)
+                val dailyGoal = widgetData.getInt(KEY_DAILY_GOAL, 360)
+                val neetDays = widgetData.getInt(KEY_NEET_DAYS, 0)
+                val nextSubject = widgetData.getString(KEY_NEXT_SUBJECT, null)
 
-                val remainingSeconds = calculateRemainingTime(endTime)
-                val neetDays = calculateNeetDaysRemaining()
-
-                val timerText = when {
-                    phase == "idle" -> "Tap to Start"
-                    phase == "paused" -> {
-                        val savedRemaining = getIntPref(prefs, "flutter.pomodoro_remaining_seconds", 0)
-                        formatTime(savedRemaining)
-                    }
-                    remainingSeconds <= 0 && endTime != null -> "00:00"
-                    else -> formatTime(remainingSeconds)
-                }
-
-                val progressPercent = when {
-                    phase == "idle" -> 0
-                    phase == "paused" -> getIntPref(prefs, "flutter.pomodoro_progress_percent", 0)
-                    remainingSeconds <= 0 -> 100
-                    totalDuration > 0 -> ((totalDuration - remainingSeconds).toFloat() / totalDuration * 100).toInt().coerceIn(0, 100)
-                    else -> 0
-                }
-
-                // Determine phase styling
                 val isBreak = phase.equals("shortBreak", ignoreCase = true) ||
                         phase.equals("longBreak", ignoreCase = true)
                 val isPaused = phase.equals("paused", ignoreCase = true)
                 val isFocusing = phase.equals("focusing", ignoreCase = true)
                 val isIdle = phase.equals("idle", ignoreCase = true)
 
-                val style = when {
-                    isBreak -> PhaseStyle(
-                        Color.parseColor("#00C9A7"),
-                        Color.parseColor("#0A2E2A"),
-                        false, true, false,
-                        if (phase.equals("longBreak", ignoreCase = true)) "Long Break" else "Short Break"
-                    )
-                    isPaused -> PhaseStyle(
-                        Color.parseColor("#FFA726"),
-                        Color.parseColor("#2A1F0A"),
-                        false, false, true,
-                        "Paused"
-                    )
-                    isFocusing -> PhaseStyle(
-                        Color.parseColor("#5B6EF5"),
-                        Color.parseColor("#0F0F23"),
-                        true, false, false,
-                        "Deep Focus"
-                    )
-                    else -> PhaseStyle(
-                        Color.parseColor("#5B6EF5"),
-                        Color.parseColor("#0F0F23"),
-                        true, false, false,
-                        "Ready"
-                    )
-                }
-
-                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, subject=$subject, timer=$timerText, remaining=$remainingSeconds, progress=$progressPercent")
+                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, timer=$timerText, progress=$progress")
 
                 val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
 
                 // ── Background ──
-                views.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", style.bgColor)
+                val bgColor = when {
+                    isBreak -> Color.parseColor("#0A2E2A")
+                    isPaused -> Color.parseColor("#2A1F0A")
+                    else -> Color.parseColor("#0F0F23")
+                }
+                views.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", bgColor)
 
                 // ── NEET Countdown Banner ──
                 if (neetDays > 0) {
@@ -189,13 +111,23 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 }
 
                 // ── Phase Pill ──
-                // FIXED: Use setInt with safe ARGB int, not String.format + Color.parseColor
                 if (!isIdle) {
                     views.setViewVisibility(R.id.pomodoro_phase_pill, View.VISIBLE)
-                    views.setTextViewText(R.id.pomodoro_phase_pill, style.phaseLabel)
-                    views.setTextColor(R.id.pomodoro_phase_pill, style.phaseColor)
-                    // Safe alpha blend: (alpha << 24) | (rgb & 0xFFFFFF)
-                    val pillBg = (0x15 shl 24) or (style.phaseColor and 0xFFFFFF)
+                    val phaseLabel = when {
+                        isBreak -> if (phase.equals("longBreak", ignoreCase = true)) "Long Break" else "Short Break"
+                        isPaused -> "Paused"
+                        isFocusing -> "Deep Focus"
+                        else -> "Ready"
+                    }
+                    val phaseColor = when {
+                        isBreak -> Color.parseColor("#00C9A7")
+                        isPaused -> Color.parseColor("#FFA726")
+                        isFocusing -> Color.parseColor("#5B6EF5")
+                        else -> Color.parseColor("#5B6EF5")
+                    }
+                    views.setTextViewText(R.id.pomodoro_phase_pill, phaseLabel)
+                    views.setTextColor(R.id.pomodoro_phase_pill, phaseColor)
+                    val pillBg = (0x15 shl 24) or (phaseColor and 0xFFFFFF)
                     views.setInt(R.id.pomodoro_phase_pill, "setBackgroundColor", pillBg)
                 } else {
                     views.setViewVisibility(R.id.pomodoro_phase_pill, View.GONE)
@@ -209,7 +141,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 val statusText = when {
                     isIdle -> "Tap to begin"
                     isFocusing -> "Session ${sessions + 1}"
-                    isBreak -> "${formatTime(remainingSeconds)} remaining"
+                    isBreak -> timerText + " remaining"
                     isPaused -> "Tap app to resume"
                     else -> status
                 }
@@ -221,21 +153,21 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 views.setTextColor(R.id.pomodoro_widget_subject, Color.WHITE)
 
                 // ── Topic ──
-                if (topicTag != null && topicTag.isNotEmpty()) {
+                if (topic != null && topic.isNotEmpty()) {
                     views.setViewVisibility(R.id.pomodoro_widget_topic, View.VISIBLE)
-                    views.setTextViewText(R.id.pomodoro_widget_topic, "\uD83D\uDCCC $topicTag")
+                    views.setTextViewText(R.id.pomodoro_widget_topic, "\uD83D\uDCCC $topic")
                 } else {
                     views.setViewVisibility(R.id.pomodoro_widget_topic, View.GONE)
                 }
 
                 // ── Progress Rings ──
-                views.setProgressBar(R.id.pomodoro_progress_ring_default, 100, progressPercent, false)
-                views.setProgressBar(R.id.pomodoro_progress_ring_break, 100, progressPercent, false)
-                views.setProgressBar(R.id.pomodoro_progress_ring_paused, 100, progressPercent, false)
+                views.setProgressBar(R.id.pomodoro_progress_ring_default, 100, progress, false)
+                views.setProgressBar(R.id.pomodoro_progress_ring_break, 100, progress, false)
+                views.setProgressBar(R.id.pomodoro_progress_ring_paused, 100, progress, false)
 
-                views.setViewVisibility(R.id.pomodoro_progress_ring_default, if (style.showDefaultRing) View.VISIBLE else View.GONE)
-                views.setViewVisibility(R.id.pomodoro_progress_ring_break, if (style.showBreakRing) View.VISIBLE else View.GONE)
-                views.setViewVisibility(R.id.pomodoro_progress_ring_paused, if (style.showPausedRing) View.VISIBLE else View.GONE)
+                views.setViewVisibility(R.id.pomodoro_progress_ring_default, if (!isBreak && !isPaused) View.VISIBLE else View.GONE)
+                views.setViewVisibility(R.id.pomodoro_progress_ring_break, if (isBreak) View.VISIBLE else View.GONE)
+                views.setViewVisibility(R.id.pomodoro_progress_ring_paused, if (isPaused) View.VISIBLE else View.GONE)
 
                 // ── Session Counter ──
                 if (sessions > 0) {
@@ -246,9 +178,9 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 }
 
                 // ── Distraction Counter ──
-                if (isFocusing && distractionCount > 0) {
+                if (isFocusing && distractions > 0) {
                     views.setViewVisibility(R.id.distraction_chip, View.VISIBLE)
-                    views.setTextViewText(R.id.distraction_text, "$distractionCount")
+                    views.setTextViewText(R.id.distraction_text, "$distractions")
                 } else {
                     views.setViewVisibility(R.id.distraction_chip, View.GONE)
                 }
@@ -284,11 +216,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 appWidgetManager.updateAppWidget(widgetId, views)
                 android.util.Log.i("PomodoroWidget", "Widget $widgetId updated successfully")
 
-                val interval = if (isFocusing || isBreak) {
-                    ACTIVE_TICK_INTERVAL_MS
-                } else {
-                    IDLE_TICK_INTERVAL_MS
-                }
+                val interval = if (isFocusing || isBreak) ACTIVE_TICK_INTERVAL_MS else IDLE_TICK_INTERVAL_MS
                 scheduleTick(context, interval)
 
             } catch (e: Exception) {
