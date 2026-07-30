@@ -47,102 +47,109 @@
         android:gravity="center"
         android:layout_marginTop="10dp">
 
-        <!-- Day 1 (Mon) -->
+        <!-- Day 1 (Mon) — FIXED: TextView with "●" instead of View with drawable -->
         <FrameLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
-            <View
+            android:layout_weight="1">
+            <TextView
                 android:id="@+id/habit_dot_1"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:background="@drawable/widget_dot_circle" />
+                android:text="●"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp" />
         </FrameLayout>
 
-        <!-- Day 2 (Tue) -->
+        <!-- Day 2 (Tue) — FIXED: TextView with "●" instead of View with drawable -->
         <FrameLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
-            <View
+            android:layout_weight="1">
+            <TextView
                 android:id="@+id/habit_dot_2"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:background="@drawable/widget_dot_circle" />
+                android:text="●"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp" />
         </FrameLayout>
 
-        <!-- Day 3 (Wed) -->
+        <!-- Day 3 (Wed) — FIXED: TextView with "●" instead of View with drawable -->
         <FrameLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
-            <View
+            android:layout_weight="1">
+            <TextView
                 android:id="@+id/habit_dot_3"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:background="@drawable/widget_dot_circle" />
+                android:text="●"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp" />
         </FrameLayout>
 
-        <!-- Day 4 (Thu) -->
+        <!-- Day 4 (Thu) — FIXED: TextView with "●" instead of View with drawable -->
         <FrameLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
-            <View
+            android:layout_weight="1">
+            <TextView
                 android:id="@+id/habit_dot_4"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:background="@drawable/widget_dot_circle" />
+                android:text="●"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp" />
         </FrameLayout>
 
-        <!-- Day 5 (Fri) -->
+        <!-- Day 5 (Fri) — FIXED: TextView with "●" instead of View with drawable -->
         <FrameLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
-            <View
+            android:layout_weight="1">
+            <TextView
                 android:id="@+id/habit_dot_5"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:background="@drawable/widget_dot_circle" />
+                android:text="●"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp" />
         </FrameLayout>
 
-        <!-- Day 6 (Sat) -->
+        <!-- Day 6 (Sat) — FIXED: TextView with "●" instead of View with drawable -->
         <FrameLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
-            <View
+            android:layout_weight="1">
+            <TextView
                 android:id="@+id/habit_dot_6"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:background="@drawable/widget_dot_circle" />
+                android:text="●"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp" />
         </FrameLayout>
 
-        <!-- Day 7 (Sun) -->
+        <!-- Day 7 (Sun) — FIXED: TextView with "●" instead of View with drawable -->
         <FrameLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center">
-            <View
+            android:layout_weight="1">
+            <TextView
                 android:id="@+id/habit_dot_7"
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:background="@drawable/widget_dot_circle" />
+                android:text="●"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp" />
         </FrameLayout>
 
     </LinearLayout>
