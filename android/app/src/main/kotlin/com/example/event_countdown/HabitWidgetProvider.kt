@@ -43,15 +43,11 @@ class HabitWidgetProvider : AppWidgetProvider() {
 
             // ── Read JSON data written by Flutter ──
             try {
-                val dir = context.getDir("flutter", Context.MODE_PRIVATE)
-                val file = File(dir.parentFile, "app_flutter/habit_widget_data.json")
+                // CRITICAL FIX: Use context.filesDir directly — matches Event widget
+                val file = File(context.filesDir, HABIT_DATA_FILE)
 
-                // Fallback to filesDir for compatibility
-                val fallbackFile = File(context.filesDir, HABIT_DATA_FILE)
-                val targetFile = if (file.exists()) file else fallbackFile
-
-                if (targetFile.exists()) {
-                    val json = JSONObject(targetFile.readText())
+                if (file.exists()) {
+                    val json = JSONObject(file.readText())
                     habitName = json.optString("habitName", habitName)
                     weekProgress = json.optInt("weekProgress", 0)
                     weekTarget = json.optInt("weekTarget", 7)
@@ -66,7 +62,7 @@ class HabitWidgetProvider : AppWidgetProvider() {
                         }
                     }
                 } else {
-                    android.util.Log.w("HabitWidget", "Data file not found at: ${targetFile.absolutePath}")
+                    android.util.Log.w("HabitWidget", "Data file not found at: ${file.absolutePath}")
                 }
             } catch (e: Exception) {
                 android.util.Log.e("HabitWidget", "JSON read failed", e)
@@ -89,19 +85,16 @@ class HabitWidgetProvider : AppWidgetProvider() {
                 // Color the progress text
                 views.setTextColor(R.id.habit_widget_progress, accentColor)
 
-                // Optional: display message if layout supports it
-                // Remove or comment out if R.id.habit_widget_message does not exist
-                // views.setTextViewText(R.id.habit_widget_message, message)
-
-                // Set week circles (7 dots)
+                // Set week circles (7 dots) — FIXED: Use setTextColor on "●" TextViews
                 for (i in 0 until 7) {
                     val isDone = i < weekCompletion.size && weekCompletion[i]
                     val dotId = DOT_IDS[i]
 
+                    views.setTextViewText(dotId, "●")
                     if (isDone) {
-                        views.setInt(dotId, "setBackgroundColor", accentColor)
+                        views.setTextColor(dotId, accentColor)
                     } else {
-                        views.setInt(dotId, "setBackgroundColor", Color.parseColor("#33FFFFFF"))
+                        views.setTextColor(dotId, Color.parseColor("#33FFFFFF"))
                     }
                 }
 
