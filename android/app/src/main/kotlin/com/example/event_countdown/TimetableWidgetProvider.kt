@@ -50,17 +50,11 @@ class TimetableWidgetProvider : AppWidgetProvider() {
                 val classesList = mutableListOf<Map<String, String>>()
 
                 try {
-                    // FIXED: Removed duplicate val file declaration
-                    val dir = context.getDir("flutter", Context.MODE_PRIVATE)
-                    val file = File(dir.parentFile, "app_flutter/timetable_widget_data.json")
-                    
-                    // Fallback to filesDir for compatibility
-                    val fallbackFile = File(context.filesDir, TIMETABLE_DATA_FILE)
-                    
-                    val targetFile = if (file.exists()) file else fallbackFile
+                    // CRITICAL FIX: Use context.filesDir directly — matches Event widget
+                    val file = File(context.filesDir, TIMETABLE_DATA_FILE)
 
-                    if (targetFile.exists()) {
-                        val json = JSONObject(targetFile.readText())
+                    if (file.exists()) {
+                        val json = JSONObject(file.readText())
                         dayName = json.optString("dayName", dayName)
                         dateText = json.optString("dateText", dateText)
                         val classesArray = json.optJSONArray("classes")
@@ -78,7 +72,7 @@ class TimetableWidgetProvider : AppWidgetProvider() {
                             }
                         }
                     } else {
-                        android.util.Log.w("TimetableWidget", "Data file not found at: ${targetFile.absolutePath}")
+                        android.util.Log.w("TimetableWidget", "Data file not found at: ${file.absolutePath}")
                     }
                 } catch (e: Exception) {
                     android.util.Log.e("TimetableWidget", "JSON read failed", e)
@@ -120,7 +114,9 @@ class TimetableWidgetProvider : AppWidgetProvider() {
                             val infoText = "$timeSlot  •  $subject  •  $room  •  $countdownText"
 
                             views.setViewVisibility(ROW_IDS[i], View.VISIBLE)
-                            views.setInt(DOT_IDS[i], "setBackgroundColor", color)
+                            // FIXED: Use setTextColor on TextView "●" instead of setBackgroundColor on View with drawable
+                            views.setTextViewText(DOT_IDS[i], "●")
+                            views.setTextColor(DOT_IDS[i], color)
                             views.setTextViewText(SUBJECT_IDS[i], subject)
                             views.setTextViewText(INFO_IDS[i], infoText)
                             views.setTextColor(SUBJECT_IDS[i], color)
@@ -131,8 +127,7 @@ class TimetableWidgetProvider : AppWidgetProvider() {
                 }
 
                 // Tap opens app to /timetable
-                val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                if (launchIntent != null) {
+                context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { launchIntent ->
                     launchIntent.putExtra("route", "/timetable")
                     val pendingIntent = PendingIntent.getActivity(
                         context, widgetId + 2000, launchIntent,
