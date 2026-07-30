@@ -116,4 +116,25 @@ class ReadingWidgetProvider : AppWidgetProvider() {
     ) {
         android.util.Log.i("ReadingWidget", "onUpdate: ${appWidgetIds.size} widgets")
         for (widgetId in appWidgetIds) {
-           
+            updateWidgetDirectly(context, appWidgetManager, widgetId)
+        }
+    }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent)
+        android.util.Log.i("ReadingWidget", "onReceive: ${intent.action}")
+        when (intent.action) {
+            AppWidgetManager.ACTION_APPWIDGET_UPDATE -> {
+                val widgetIds = intent.getIntArrayExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS)
+                if (widgetIds != null && widgetIds.isNotEmpty()) {
+                    val manager = AppWidgetManager.getInstance(context)
+                    for (widgetId in widgetIds) {
+                        updateWidgetDirectly(context, manager, widgetId)
+                    }
+                } else {
+                    updateAllWidgets(context)
+                }
+            }
+        }
+    }
+}
