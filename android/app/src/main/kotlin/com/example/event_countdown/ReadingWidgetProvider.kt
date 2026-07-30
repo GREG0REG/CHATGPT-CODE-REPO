@@ -1,11 +1,11 @@
 package com.example.event_countdown
 
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.view.View
 import android.widget.RemoteViews
 import org.json.JSONObject
@@ -24,7 +24,7 @@ class ReadingWidgetProvider : AppWidgetProvider() {
             try {
                 val views = RemoteViews(context.packageName, R.layout.reading_widget_layout)
 
-                // Read JSON data written by Flutter
+                // Safe defaults
                 var bookTitle = "No Books"
                 var currentPage = 0
                 var totalPages = 0
@@ -34,17 +34,11 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                 var minutesReadToday = 0
 
                 try {
-                    // CRITICAL FIX: Use getApplicationSupportDirectory path
-                    val dir = context.getDir("flutter", Context.MODE_PRIVATE)
-                    val file = File(dir.parentFile, "app_flutter/reading_widget_data.json")
-                    
-                    // Fallback to filesDir for compatibility
-                    val fallbackFile = File(context.filesDir, READING_DATA_FILE)
-                    
-                    val targetFile = if (file.exists()) file else fallbackFile
+                    // CRITICAL FIX: Use context.filesDir directly — matches Event widget and Dart's getApplicationSupportDirectory()
+                    val file = File(context.filesDir, READING_DATA_FILE)
 
-                    if (targetFile.exists()) {
-                        val json = JSONObject(targetFile.readText())
+                    if (file.exists()) {
+                        val json = JSONObject(file.readText())
                         bookTitle = json.optString("bookTitle", bookTitle)
                         currentPage = json.optInt("currentPage", 0)
                         totalPages = json.optInt("totalPages", 0)
@@ -53,7 +47,7 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                         reminderText = json.optString("message", reminderText)
                         minutesReadToday = json.optInt("minutesReadToday", 0)
                     } else {
-                        android.util.Log.w("ReadingWidget", "Data file not found at: ${targetFile.absolutePath}")
+                        android.util.Log.w("ReadingWidget", "Data file not found at: ${file.absolutePath}")
                     }
                 } catch (e: Exception) {
                     android.util.Log.e("ReadingWidget", "JSON read failed", e)
@@ -68,18 +62,9 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                     "Page $currentPage/$totalPages • $progressPercent%"
                 )
 
-                // Parse accent color
-                val accentColor = try {
-                    Color.parseColor(statusColor)
-                } catch (e: Exception) {
-                    Color.parseColor("#2196F3")
-                }
-
-                // Set progress bar color and value
+                // Set progress bar value (FIXED: removed crashing setProgressTintList call)
+                // The progress bar uses widget_progress_bar.xml which already has white progress color
                 views.setProgressBar(R.id.reading_widget_progress_bar, 100, progressPercent, false)
-
-                // Apply progress tint color
-                views.setInt(R.id.reading_widget_progress_bar, "setProgressTintList", accentColor)
 
                 // Show reminder based on reading status
                 if (minutesReadToday == 0 && totalPages > 0 && currentPage < totalPages) {
@@ -93,16 +78,17 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                     views.setTextViewText(R.id.reading_widget_reminder, reminderText)
                 }
 
-                // Tap opens app
-                val openAppIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                openAppIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                val pendingIntent = android.app.PendingIntent.getActivity(
-                    context,
-                    widgetId + 4000,
-                    openAppIntent,
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-                )
-                views.setOnClickPendingIntent(R.id.reading_widget_root, pendingIntent)
+                // FIXED: Null-safe PendingIntent using ?.let (matches Event widget pattern)
+                context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { openAppIntent ->
+                    openAppIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    val pendingIntent = PendingIntent.getActivity(
+                        context,
+                        widgetId + 4000,
+                        openAppIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    views.setOnClickPendingIntent(R.id.reading_widget_root, pendingIntent)
+                }
 
                 appWidgetManager.updateAppWidget(widgetId, views)
                 android.util.Log.i("ReadingWidget", "Widget $widgetId updated: $bookTitle ($progressPercent%)")
@@ -130,25 +116,4 @@ class ReadingWidgetProvider : AppWidgetProvider() {
     ) {
         android.util.Log.i("ReadingWidget", "onUpdate: ${appWidgetIds.size} widgets")
         for (widgetId in appWidgetIds) {
-            updateWidgetDirectly(context, appWidgetManager, widgetId)
-        }
-    }
-
-    override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-        android.util.Log.i("ReadingWidget", "onReceive: ${intent.action}")
-        when (intent.action) {
-            AppWidgetManager.ACTION_APPWIDGET_UPDATE -> {
-                val widgetIds = intent.getIntArrayExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS)
-                if (widgetIds != null && widgetIds.isNotEmpty()) {
-                    val manager = AppWidgetManager.getInstance(context)
-                    for (widgetId in widgetIds) {
-                        updateWidgetDirectly(context, manager, widgetId)
-                    }
-                } else {
-                    updateAllWidgets(context)
-                }
-            }
-        }
-    }
-}
+           
