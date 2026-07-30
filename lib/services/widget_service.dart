@@ -1,527 +1,387 @@
-// FILE: lib/services/widget_service.dart
-// COMPLETE REPLACEMENT — NEET Edition v15
-// Added: Pomodoro widget writes NEET data JSON, updated refresh logic
-
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:home_widget/home_widget.dart';
-import 'package:event_countdown/database_helper.dart';
 
+import '../db/database_helper.dart';
+import '../models/event.dart';
+import '../theme/app_themes.dart';
+import 'countdown_service.dart';
+import 'settings_service.dart';
+
+/// Pushes data into home_widget SharedPreferences and triggers native updates.
+/// COMPLETE REPLACEMENT — v2 with Attendance & Pomodoro widget support
 class WidgetService {
-  static const String _eventDataFile = 'widget_data.json';
-  static const String _pomodoroDataFile = 'pomodoro_widget_data.json';
-  static const String _attendanceDataFile = 'attendance_widget_data.json';
-  static const String _timetableDataFile = 'timetable_widget_data.json';
-  static const String _habitDataFile = 'habit_widget_data.json';
-  static const String _readingDataFile = 'reading_widget_data.json';
+  WidgetService._();
 
-  static Future<Directory> _getWidgetDataDir() async {
-    return await getApplicationSupportDirectory();
-  }
+  // ── Android Provider Names ──
+  static const String eventWidgetName = 'EventCountdownWidgetProvider';
+  static const String pomodoroWidgetName = 'PomodoroWidgetProvider';
+  static const String attendanceWidgetName = 'AttendanceWidgetProvider';
 
-  static Future<void> _writeJson(String filename, Map<String, dynamic> data) async {
-    try {
-      final dir = await _getWidgetDataDir();
-      final file = File('${dir.path}/$filename');
-      await file.writeAsString(jsonEncode(data));
-      debugPrint('WidgetService: Wrote $filename');
-    } catch (e) {
-      debugPrint('WidgetService: Failed to write $filename: $e');
-    }
-  }
+  // ── Event Widget Keys ──
+  static const _kEventTitle = 'event_title';
+  static const _kEventCountdown = 'countdown_text';
+  static const _kEventBgType = 'widget_bg_type';
+  static const _kEventBgColor = 'widget_bg_color';
+  static const _kEventTextColor = 'widget_text_color';
+  static const _kEventImagePath = 'widget_image_path';
+  static const _kEventProgressPercent = 'widget_progress_percent';
+  static const _kEventPulseEnabled = 'widget_pulse_enabled';
+  static const _kEventIsUrgent = 'widget_is_urgent';
 
-  // ═══════════════════════════════════════════════════════════════
-  // GENERIC REFRESH WIDGET — called by many screens
-  // ═══════════════════════════════════════════════════════════════
+  // ── Pomodoro Widget Keys ──
+  static const _kPomPhase = 'pomodoro_phase';
+  static const _kPomTimerText = 'pomodoro_timer_text';
+  static const _kPomStatus = 'pomodoro_status';
+  static const _kPomSubject = 'pomodoro_subject';
+  static const _kPomTopic = 'pomodoro_topic';
+  static const _kPomProgress = 'pomodoro_progress_percent';
+  static const _kPomSessions = 'pomodoro_sessions';
+  static const _kPomDistractions = 'pomodoro_distractions';
+  static const _kPomDailyMinutes = 'pomodoro_daily_minutes';
+  static const _kPomDailyGoal = 'pomodoro_daily_goal';
+  static const _kPomNeetDays = 'pomodoro_neet_days';
+  static const _kPomNextSubject = 'pomodoro_next_subject';
+
+  // ── Attendance Widget Keys ──
+  static const _kAttSubjectCount = 'attendance_subject_count';
+  static const _kAttPrefixName = 'attendance_subject_name_';
+  static const _kAttPrefixPercent = 'attendance_subject_percent_';
+  static const _kAttPrefixPresent = 'attendance_subject_present_';
+  static const _kAttPrefixAbsent = 'attendance_subject_absent_';
+  static const _kAttPrefixLate = 'attendance_subject_late_';
+  static const _kAttPrefixExcused = 'attendance_subject_excused_';
+  static const _kAttPrefixTotal = 'attendance_subject_total_';
+  static const _kAttPrefixColor = 'attendance_subject_color_';
+  static const _kAttPrefixStatus = 'attendance_subject_status_';
+  static const _kAttPrefixStreak = 'attendance_subject_streak_';
+  static const _kAttPrefixCanMiss = 'attendance_subject_can_miss_';
+
+  // ═════════════════════════════════════════════════════════════════
+  // EVENT COUNTDOWN WIDGET
+  // ═════════════════════════════════════════════════════════════════
+
   static Future<void> refreshWidget() async {
-    try {
-      await refreshEventWidget();
-      await HomeWidget.updateWidget(
-        name: 'EventCountdownWidget',
-        iOSName: 'EventCountdownWidget',
-      );
-      debugPrint('WidgetService: refreshWidget() completed');
-    } catch (e) {
-      debugPrint('WidgetService: refreshWidget() error: $e');
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // EVENT WIDGET
-  // ═══════════════════════════════════════════════════════════════
-  static Future<void> refreshEventWidget() async {
     try {
       final events = await DatabaseHelper.instance.getAllEventsSorted();
       final now = DateTime.now();
-      final upcoming = events.where((e) {
-        final eventDate = DateTime.fromMillisecondsSinceEpoch(e.dateMillis);
-        return eventDate.isAfter(now.subtract(const Duration(days: 1))) && !e.isCompleted;
-      }).toList();
+      final active = CountdownService.getActiveEvent(events, now);
 
-      if (upcoming.isEmpty) {
-        await _writeJson(_eventDataFile, {
-          'title': 'No upcoming events',
-          'countdown': 'Open app to add events',
-          'progressPercent': 0,
-          'urgencyLabel': '',
-          'urgencyColor': '',
-          'deadlineMillis': 0,
-        });
+      final smart = await SettingsService.instance.getSmartFormatEnabled();
+      final theme = await SettingsService.instance.getSelectedTheme();
+      final bgType = await SettingsService.instance.getWidgetBackgroundType();
+      final imagePath = await SettingsService.instance.getWidgetImagePath();
+      final progressBarEnabled = await SettingsService.instance.getWidgetProgressBar();
+      final pulseEnabled = await SettingsService.instance.getWidgetPulseAnimation();
+
+      String title;
+      String countdownText;
+      int progressPercent = -1;
+      bool isUrgent = false;
+
+      if (active == null) {
+        title = 'No upcoming events';
+        countdownText = '';
       } else {
-        final event = upcoming.first;
-        final eventDate = DateTime.fromMillisecondsSinceEpoch(event.dateMillis);
-        final diff = eventDate.difference(now);
+        title = active.title;
+        countdownText = CountdownService.buildCountdownText(
+          active,
+          now,
+          smartFormatEnabled: smart,
+        ).text;
 
-        String countdownText;
-        String urgencyLabel = '';
-        String urgencyColor = '';
-        int progress = 0;
+        if (progressBarEnabled) {
+          final start = active.startTimeMillis ?? active.dateMillis;
+          final deadline = active.deadlineMillis ?? active.startTimeMillis ?? active.dateMillis;
 
-        if (diff.inDays > 7) {
-          countdownText = '${diff.inDays} days left';
-          urgencyLabel = 'On track';
-          urgencyColor = 'green';
-          progress = 100;
-        } else if (diff.inDays > 1) {
-          countdownText = '${diff.inDays}d ${diff.inHours % 24}h left';
-          urgencyLabel = 'Coming soon';
-          urgencyColor = 'orange';
-          progress = 70;
-        } else if (diff.inHours > 0) {
-          countdownText = '${diff.inHours}h ${diff.inMinutes % 60}m left';
-          urgencyLabel = 'Due soon!';
-          urgencyColor = 'deepOrange';
-          progress = 40;
-        } else {
-          countdownText = '${diff.inMinutes}m left';
-          urgencyLabel = 'URGENT';
-          urgencyColor = 'red';
-          progress = 15;
+          if (deadline > start) {
+            final total = deadline - start;
+            final elapsed = now.millisecondsSinceEpoch - start;
+            progressPercent = ((elapsed / total) * 100).clamp(0, 100).toInt();
+          } else if (active.dateMillis > 0) {
+            final total = active.dateMillis - now.millisecondsSinceEpoch;
+            progressPercent = total > 0 ? 0 : 100;
+          }
         }
 
-        String title = event.title;
-        if (event.subjectTag != null && event.subjectTag!.isNotEmpty) {
-          title = '[${event.subjectTag}] $title';
-        }
-
-        await _writeJson(_eventDataFile, {
-          'title': title,
-          'countdown': countdownText,
-          'progressPercent': progress,
-          'urgencyLabel': urgencyLabel,
-          'urgencyColor': urgencyColor,
-          'deadlineMillis': event.dateMillis,
-        });
+        final target = active.deadlineMillis ?? active.startTimeMillis ?? active.dateMillis;
+        final diff = Duration(milliseconds: target - now.millisecondsSinceEpoch);
+        isUrgent = diff.inHours < 24 && !diff.isNegative;
       }
+
+      final themeColor = AppThemes.colorFor(theme);
+      final textColor = AppThemes.autoContrastColor(themeColor);
+
+      await HomeWidget.saveWidgetData(_kEventTitle, title);
+      await HomeWidget.saveWidgetData(_kEventCountdown, countdownText);
+      await HomeWidget.saveWidgetData(
+        _kEventBgType,
+        bgType == WidgetBackgroundType.customImage ? 'image' : 'theme',
+      );
+      await HomeWidget.saveWidgetData(
+        _kEventBgColor,
+        themeColor.value.toString(),
+      );
+      await HomeWidget.saveWidgetData(
+        _kEventTextColor,
+        textColor.value.toString(),
+      );
+      if (imagePath != null && bgType == WidgetBackgroundType.customImage) {
+        await HomeWidget.saveWidgetData(_kEventImagePath, imagePath);
+      } else {
+        await HomeWidget.saveWidgetData(_kEventImagePath, '');
+      }
+      await HomeWidget.saveWidgetData(_kEventProgressPercent, progressPercent);
+      await HomeWidget.saveWidgetData(_kEventPulseEnabled, pulseEnabled);
+      await HomeWidget.saveWidgetData(_kEventIsUrgent, isUrgent);
+
+      await HomeWidget.updateWidget(
+        name: eventWidgetName,
+        androidName: eventWidgetName,
+      );
     } catch (e) {
-      debugPrint('WidgetService: Event widget error: $e');
+      debugPrint('WidgetService.refreshWidget error: $e');
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // POMODORO WIDGET — NEET Enhanced
-  // ═══════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════
+  // POMODORO WIDGET
+  // ═════════════════════════════════════════════════════════════════
+
   static Future<void> refreshPomodoroWidget() async {
     try {
-      // The PomodoroWidgetProvider reads directly from SharedPreferences,
-      // but we also write a JSON backup for any future JSON-based widget
-      final now = DateTime.now();
-      final neetDate = DateTime(2026, 5, 2);
-      final neetDays = neetDate.difference(DateTime(now.year, now.month, now.day)).inDays;
+      // Read pomodoro data from app's own SharedPreferences via SettingsService
+      // or compute from PomodoroService state
+      final prefs = await SettingsService.instance.prefs;
+      final phase = prefs.getString('pomodoro_phase') ?? 'idle';
+      final endTime = prefs.getInt('pomodoro_end_time_millis') ?? 0;
+      final totalDuration = prefs.getInt('pomodoro_total_duration_seconds') ?? 5400;
+      final subject = prefs.getString('pomodoro_subject') ?? 'Ready to Focus';
+      final status = prefs.getString('pomodoro_status') ?? 'Ready';
+      final sessions = prefs.getInt('pomodoro_completed_sessions') ?? 0;
+      final topicTag = prefs.getString('pomodoro_topic_tag');
+      final distractionCount = prefs.getInt('pomodoro_distraction_count') ?? 0;
+      final nextSubject = prefs.getString('pomodoro_next_subject');
+      final dailyMinutes = prefs.getInt('pomodoro_daily_minutes') ?? 0;
+      final dailyGoal = prefs.getInt('pomodoro_daily_goal_minutes') ?? 360;
 
-      await _writeJson(_pomodoroDataFile, {
-        'neetDaysRemaining': neetDays > 0 ? neetDays : 0,
-        'neetExamDate': '2026-05-02',
-        'refreshedAt': now.millisecondsSinceEpoch,
-      });
+      // Calculate remaining time
+      final remainingSeconds = _calculateRemainingTime(endTime);
+      final timerText = _formatPomodoroTimerText(phase, remainingSeconds, endTime, prefs);
 
-      debugPrint('WidgetService: Pomodoro widget refreshed (NEET: $neetDays days)');
+      // Calculate progress
+      final progress = _calculatePomodoroProgress(phase, remainingSeconds, totalDuration, prefs);
+
+      // NEET days (from FocusSettingsService or hardcoded for now)
+      final neetDays = _calculateNeetDaysRemaining();
+
+      // Save ALL data to home_widget SharedPreferences
+      await HomeWidget.saveWidgetData(_kPomPhase, phase);
+      await HomeWidget.saveWidgetData(_kPomTimerText, timerText);
+      await HomeWidget.saveWidgetData(_kPomStatus, status);
+      await HomeWidget.saveWidgetData(_kPomSubject, subject);
+      await HomeWidget.saveWidgetData(_kPomTopic, topicTag);
+      await HomeWidget.saveWidgetData(_kPomProgress, progress);
+      await HomeWidget.saveWidgetData(_kPomSessions, sessions);
+      await HomeWidget.saveWidgetData(_kPomDistractions, distractionCount);
+      await HomeWidget.saveWidgetData(_kPomDailyMinutes, dailyMinutes);
+      await HomeWidget.saveWidgetData(_kPomDailyGoal, dailyGoal);
+      await HomeWidget.saveWidgetData(_kPomNeetDays, neetDays);
+      await HomeWidget.saveWidgetData(_kPomNextSubject, nextSubject);
+
+      // Trigger widget update
+      await HomeWidget.updateWidget(
+        name: pomodoroWidgetName,
+        androidName: pomodoroWidgetName,
+      );
+
+      debugPrint('Pomodoro widget data saved: phase=$phase, timer=$timerText, progress=$progress');
     } catch (e) {
-      debugPrint('WidgetService: Pomodoro widget error: $e');
+      debugPrint('WidgetService.refreshPomodoroWidget error: $e');
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
+  static int _calculateRemainingTime(int endTimeMillis) {
+    if (endTimeMillis <= 0) return 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final remaining = ((endTimeMillis - now) / 1000).toInt();
+    return remaining.clamp(0, 999999);
+  }
+
+  static String _formatPomodoroTimerText(String phase, int remainingSeconds, int endTime, SharedPreferences prefs) {
+    if (phase == 'idle') return 'Tap to Start';
+    if (phase == 'paused') {
+      final savedRemaining = prefs.getInt('pomodoro_remaining_seconds') ?? 0;
+      return _formatTime(savedRemaining);
+    }
+    if (remainingSeconds <= 0 && endTime > 0) return '00:00';
+    return _formatTime(remainingSeconds);
+  }
+
+  static String _formatTime(int seconds) {
+    final m = (seconds ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  static int _calculatePomodoroProgress(String phase, int remainingSeconds, int totalDuration, SharedPreferences prefs) {
+    if (phase == 'idle') return 0;
+    if (phase == 'paused') return prefs.getInt('pomodoro_progress_percent') ?? 0;
+    if (remainingSeconds <= 0) return 100;
+    if (totalDuration > 0) {
+      return ((totalDuration - remainingSeconds) / totalDuration * 100).toInt().clamp(0, 100);
+    }
+    return 0;
+  }
+
+  static int _calculateNeetDaysRemaining() {
+    // NEET 2027: First Sunday of May 2027
+    final now = DateTime.now();
+    var year = now.year;
+    var date = DateTime(year, 5, 1);
+    while (date.weekday != DateTime.sunday) {
+      date = date.add(const Duration(days: 1));
+    }
+    if (date.isBefore(now)) {
+      year++;
+      date = DateTime(year, 5, 1);
+      while (date.weekday != DateTime.sunday) {
+        date = date.add(const Duration(days: 1));
+      }
+    }
+    final diff = date.difference(now).inDays;
+    return diff.clamp(0, 999);
+  }
+
+  // ═════════════════════════════════════════════════════════════════
   // ATTENDANCE WIDGET
-  // ═══════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════
+
   static Future<void> refreshAttendanceWidget() async {
     try {
       final subjects = await DatabaseHelper.instance.getAllAttendanceSubjects();
-      final logs = await DatabaseHelper.instance.getAllAttendanceLogs();
+      final subjectData = <Map<String, dynamic>>[];
 
-      if (subjects.isEmpty) {
-        await _writeJson(_attendanceDataFile, {
-          'subjectName': 'No Subjects',
-          'attended': 0,
-          'total': 0,
-          'percentage': 0,
-          'statusColor': 'grey',
-          'canMissText': 'Add subjects to track attendance',
+      for (final row in subjects) {
+        final id = (row['id'] as int?) ?? 0;
+        final name = row['name'] as String;
+        final requiredPct = (row['requiredPercentage'] as num?)?.toDouble() ?? 75.0;
+        final colorHex = row['colorHex'] as String? ?? '#4CAF50';
+
+        final stats = await DatabaseHelper.instance.getAttendanceStatsForSubject(name);
+        final present = (stats['present'] as int?) ?? 0;
+        final absent = (stats['absent'] as int?) ?? 0;
+        final late = (stats['late'] as int?) ?? 0;
+        final excused = (stats['excused'] as int?) ?? 0;
+        final total = (stats['total'] as int?) ?? 0;
+
+        final effectiveTotal = total - excused;
+        final attended = present + (late * 0.5);
+        final percentage = effectiveTotal > 0
+            ? ((attended / effectiveTotal) * 100).toInt()
+            : 0;
+
+        // Calculate status text
+        String statusText;
+        int canMiss = 0;
+        if (effectiveTotal == 0) {
+          statusText = 'No data yet';
+        } else if (requiredPct >= 100.0) {
+          statusText = percentage >= 99 ? 'Perfect attendance!' : '100% required — attend all';
+        } else if (percentage >= requiredPct) {
+          canMiss = ((effectiveTotal * (requiredPct / 100) - absent) / (1 - requiredPct / 100)).floor();
+          canMiss = canMiss.clamp(0, 999);
+          statusText = 'Can miss $canMiss more';
+        } else {
+          final needAttend = ((requiredPct / 100 * effectiveTotal - attended) / (requiredPct / 100)).ceil();
+          statusText = 'Need $needAttend more';
+        }
+
+        // Calculate streak
+        final streak = await _calculateStreakForSubject(name);
+
+        subjectData.add({
+          'name': name,
+          'percentage': percentage,
+          'present': present,
+          'absent': absent,
+          'late': late,
+          'excused': excused,
+          'total': total,
+          'effectiveTotal': effectiveTotal,
+          'color': colorHex,
+          'status': statusText,
+          'streak': streak,
+          'canMiss': canMiss,
         });
-      } else {
-        Map<String, dynamic>? criticalSubject;
-        double lowestPercentage = double.infinity;
-
-        for (final subject in subjects) {
-          final name = subject['name'] as String;
-          final stats = await DatabaseHelper.instance.getAttendanceStatsForSubject(name);
-          final total = (stats['total'] as int?) ?? 0;
-          final present = (stats['present'] as int?) ?? 0;
-          final percentage = total > 0 ? (present / total * 100) : 0.0;
-
-          if (percentage < lowestPercentage) {
-            lowestPercentage = percentage;
-            criticalSubject = {
-              'subject': subject,
-              'stats': stats,
-              'percentage': percentage,
-            };
-          }
-        }
-
-        if (criticalSubject != null) {
-          final subject = criticalSubject['subject'] as Map<String, dynamic>;
-          final stats = criticalSubject['stats'] as Map<String, dynamic>;
-          final percentage = criticalSubject['percentage'] as double;
-
-          final total = (stats['total'] as int?) ?? 0;
-          final present = (stats['present'] as int?) ?? 0;
-          final required = (subject['requiredPercentage'] as double?) ?? 75.0;
-
-          String canMissText;
-          String statusColor;
-          if (percentage >= required) {
-            final buffer = percentage - required;
-            final safeMisses = total > 0 ? (buffer / 100 * total).floor() : 0;
-            canMissText = 'Safe! Can miss $safeMisses more';
-            statusColor = 'green';
-          } else if (percentage >= required - 15) {
-            canMissText = 'Warning: ${(required - percentage).toStringAsFixed(1)}% below target';
-            statusColor = 'orange';
-          } else {
-            final needed = ((required - percentage) / 100 * total).ceil();
-            canMissText = 'CRITICAL: Need $needed more present';
-            statusColor = 'red';
-          }
-
-          String subjectName = subject['name'] as String;
-          if (subjectName.length > 18) {
-            subjectName = '${subjectName.substring(0, 15)}...';
-          }
-
-          await _writeJson(_attendanceDataFile, {
-            'subjectName': subjectName,
-            'attended': present,
-            'total': total,
-            'percentage': percentage.round(),
-            'statusColor': statusColor,
-            'canMissText': canMissText,
-            'requiredPercentage': required,
-          });
-        }
       }
-    } catch (e) {
-      debugPrint('WidgetService: Attendance widget error: $e');
-    }
-  }
 
-  // ═══════════════════════════════════════════════════════════════
-  // TIMETABLE WIDGET
-  // ═══════════════════════════════════════════════════════════════
-  static Future<void> refreshTimetableWidget() async {
-    try {
-      final now = DateTime.now();
-      final todayDayOfWeek = now.weekday;
-      final dayNames = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-      final monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      // Sort by percentage ascending (worst attendance first — most important to see)
+      subjectData.sort((a, b) => (a['percentage'] as int).compareTo(b['percentage'] as int));
 
-      final classes = await DatabaseHelper.instance.getTimetableClassesForDay(todayDayOfWeek);
-      final tasks = await DatabaseHelper.instance.getTimetableTasksForDate(
-        DateTime(now.year, now.month, now.day).millisecondsSinceEpoch,
+      // Save subject count
+      await HomeWidget.saveWidgetData(_kAttSubjectCount, subjectData.length);
+
+      // Save each subject's data with indexed keys
+      for (int i = 0; i < subjectData.length && i < 5; i++) {
+        final s = subjectData[i];
+        await HomeWidget.saveWidgetData(_kAttPrefixName + '$i', s['name'] as String);
+        await HomeWidget.saveWidgetData(_kAttPrefixPercent + '$i', s['percentage'] as int);
+        await HomeWidget.saveWidgetData(_kAttPrefixPresent + '$i', s['present'] as int);
+        await HomeWidget.saveWidgetData(_kAttPrefixAbsent + '$i', s['absent'] as int);
+        await HomeWidget.saveWidgetData(_kAttPrefixLate + '$i', s['late'] as int);
+        await HomeWidget.saveWidgetData(_kAttPrefixExcused + '$i', s['excused'] as int);
+        await HomeWidget.saveWidgetData(_kAttPrefixTotal + '$i', s['total'] as int);
+        await HomeWidget.saveWidgetData(_kAttPrefixColor + '$i', s['color'] as String);
+        await HomeWidget.saveWidgetData(_kAttPrefixStatus + '$i', s['status'] as String);
+        await HomeWidget.saveWidgetData(_kAttPrefixStreak + '$i', s['streak'] as int);
+        await HomeWidget.saveWidgetData(_kAttPrefixCanMiss + '$i', s['canMiss'] as int);
+      }
+
+      // Trigger widget update
+      await HomeWidget.updateWidget(
+        name: attendanceWidgetName,
+        androidName: attendanceWidgetName,
       );
 
-      final allItems = <Map<String, dynamic>>[];
+      debugPrint('Attendance widget data saved: ${subjectData.length} subjects');
+    } catch (e) {
+      debugPrint('WidgetService.refreshAttendanceWidget error: $e');
+    }
+  }
 
-      for (final c in classes) {
-        final startMin = c['startTimeMinutes'] as int;
-        final endMin = c['endTimeMinutes'] as int;
-        final startH = startMin ~/ 60;
-        final startM = startMin % 60;
-        final endH = endMin ~/ 60;
-        final endM = endMin % 60;
-        final timeSlot = '${startH.toString().padLeft(2, '0')}:${startM.toString().padLeft(2, '0')} - ${endH.toString().padLeft(2, '0')}:${endM.toString().padLeft(2, '0')}';
+  static Future<int> _calculateStreakForSubject(String subjectName) async {
+    final logs = await DatabaseHelper.instance.getAttendanceLogsForSubject(subjectName);
+    final sortedLogs = logs.where((l) => l['subjectName'] == subjectName).toList()
+      ..sort((a, b) => ((b['dateMillis'] as int?) ?? 0).compareTo((a['dateMillis'] as int?) ?? 0));
 
-        final currentMinutes = now.hour * 60 + now.minute;
-        String countdownText;
-        if (currentMinutes < startMin) {
-          final diff = startMin - currentMinutes;
-          countdownText = 'in ${diff ~/ 60}h ${diff % 60}m';
-        } else if (currentMinutes >= startMin && currentMinutes < endMin) {
-          countdownText = 'ONGOING';
+    if (sortedLogs.isEmpty) return 0;
+
+    int streak = 0;
+    final now = DateTime.now();
+    var expectedDate = DateTime(now.year, now.month, now.day);
+
+    for (final log in sortedLogs) {
+      final logDate = DateTime.fromMillisecondsSinceEpoch((log['dateMillis'] as int?) ?? 0);
+      final normalizedLog = DateTime(logDate.year, logDate.month, logDate.day);
+
+      if (normalizedLog == expectedDate) {
+        final status = log['status'] as String? ?? '';
+        if (status == 'present' || status == 'late') {
+          streak++;
+          expectedDate = expectedDate.subtract(const Duration(days: 1));
         } else {
-          countdownText = 'ended';
+          break;
         }
-
-        allItems.add({
-          'subject': c['subjectName'] as String,
-          'timeSlot': timeSlot,
-          'room': c['room'] as String? ?? 'TBD',
-          'countdownText': countdownText,
-          'colorHex': c['colorHex'] as String? ?? '#2196F3',
-          'isToday': true,
-          'startMinutes': startMin,
-        });
+      } else if (normalizedLog.isBefore(expectedDate)) {
+        break;
       }
-
-      for (final t in tasks) {
-        if (t['startTimeMinutes'] == null) continue;
-        final startMin = t['startTimeMinutes'] as int;
-        final endMin = t['endTimeMinutes'] as int? ?? (startMin + 60);
-        final startH = startMin ~/ 60;
-        final startM = startMin % 60;
-        final endH = endMin ~/ 60;
-        final endM = endMin % 60;
-
-        allItems.add({
-          'subject': t['title'] as String,
-          'timeSlot': '${startH.toString().padLeft(2, '0')}:${startM.toString().padLeft(2, '0')} - ${endH.toString().padLeft(2, '0')}:${endM.toString().padLeft(2, '0')}',
-          'room': t['subjectName'] as String? ?? 'Task',
-          'countdownText': t['taskType'] as String,
-          'colorHex': t['colorHex'] as String? ?? '#FF9800',
-          'isToday': true,
-          'startMinutes': startMin,
-        });
-      }
-
-      allItems.sort((a, b) => (a['startMinutes'] as int).compareTo(b['startMinutes'] as int));
-
-      final currentMinutes = now.hour * 60 + now.minute;
-      var upcomingItems = allItems.where((i) {
-        final itemStart = i['startMinutes'] as int;
-        return itemStart >= currentMinutes - 30;
-      }).take(3).toList();
-
-      if (upcomingItems.isEmpty && allItems.isNotEmpty) {
-        upcomingItems = [allItems.first];
-      }
-
-      await _writeJson(_timetableDataFile, {
-        'dayName': dayNames[todayDayOfWeek],
-        'dateText': '${monthNames[now.month]} ${now.day}',
-        'classes': upcomingItems.map((c) => {
-          'subject': c['subject'],
-          'timeSlot': c['timeSlot'],
-          'room': c['room'],
-          'countdownText': c['countdownText'],
-          'colorHex': c['colorHex'],
-          'isToday': c['isToday'],
-        }).toList(),
-      });
-    } catch (e) {
-      debugPrint('WidgetService: Timetable widget error: $e');
     }
+
+    return streak;
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // HABIT WIDGET
-  // ═══════════════════════════════════════════════════════════════
-  static Future<void> refreshHabitWidget() async {
-    try {
-      final habits = await DatabaseHelper.instance.getAllHabits(includeArchived: false);
-
-      if (habits.isEmpty) {
-        await _writeJson(_habitDataFile, {
-          'habitName': 'No Habits',
-          'weekProgress': 0,
-          'weekTarget': 7,
-          'colorHex': '#4CAF50',
-          'message': 'Add habits to start tracking',
-          'weekCircles': [],
-        });
-      } else {
-        final now = DateTime.now();
-        final weekStart = DateTime(now.year, now.month, now.day)
-            .subtract(Duration(days: now.weekday - 1))
-            .millisecondsSinceEpoch;
-
-        Map<String, dynamic>? criticalHabit;
-        double lowestRatio = double.infinity;
-
-        for (final habit in habits) {
-          final id = habit['id'] as int;
-          final target = (habit['targetPerWeek'] as int?) ?? 7;
-          final completed = await DatabaseHelper.instance.getHabitCompletionCountForWeek(id, weekStart);
-          final ratio = target > 0 ? completed / target : 0.0;
-
-          if (ratio < lowestRatio) {
-            lowestRatio = ratio;
-            criticalHabit = {
-              'habit': habit,
-              'completed': completed,
-              'target': target,
-            };
-          }
-        }
-
-        if (criticalHabit != null) {
-          final habit = criticalHabit['habit'] as Map<String, dynamic>;
-          final completed = criticalHabit['completed'] as int;
-          final target = criticalHabit['target'] as int;
-
-          final weekCircles = <bool>[];
-          for (int i = 0; i < 7; i++) {
-            final dayStart = weekStart + i * const Duration(days: 1).inMilliseconds;
-            final dayEnd = dayStart + const Duration(days: 1).inMilliseconds;
-            final logs = await DatabaseHelper.instance.getHabitLogsForDateRange(
-              habit['id'] as int,
-              dayStart,
-              dayEnd,
-            );
-            weekCircles.add(logs.any((l) => (l['completed'] as int? ?? 0) == 1));
-          }
-
-          String message;
-          if (completed == 0) {
-            message = 'Start today! Every session counts';
-          } else if (completed < target * 0.5) {
-            message = 'Keep going! Build the momentum';
-          } else if (completed < target) {
-            message = 'Almost there! Stay consistent';
-          } else {
-            message = 'Excellent! You\'re on fire';
-          }
-
-          String habitName = habit['name'] as String;
-          if (habitName.length > 20) {
-            habitName = '${habitName.substring(0, 17)}...';
-          }
-
-          await _writeJson(_habitDataFile, {
-            'habitName': habitName,
-            'weekProgress': completed,
-            'weekTarget': target,
-            'colorHex': habit['colorHex'] as String? ?? '#4CAF50',
-            'message': message,
-            'weekCircles': weekCircles,
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('WidgetService: Habit widget error: $e');
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // READING WIDGET
-  // ═══════════════════════════════════════════════════════════════
-  static Future<void> refreshReadingWidget() async {
-    try {
-      final books = await DatabaseHelper.instance.getAllReadingBooks(includeCompleted: false);
-
-      if (books.isEmpty) {
-        await _writeJson(_readingDataFile, {
-          'bookTitle': 'No Books',
-          'currentPage': 0,
-          'totalPages': 0,
-          'progressPercent': 0,
-          'statusColor': '#2196F3',
-          'message': 'Add a book to start tracking',
-          'minutesReadToday': 0,
-        });
-      } else {
-        final now = DateTime.now();
-
-        Map<String, dynamic>? targetBook;
-        double highestUrgency = -1;
-
-        for (final book in books) {
-          final totalPages = (book['totalPages'] as int?) ?? 1;
-          final currentPage = (book['currentPage'] as int?) ?? 0;
-          final targetEndMillis = book['targetEndDateMillis'] as int?;
-          final dailyGoal = (book['dailyPageGoal'] as int?) ?? 20;
-
-          double urgency = 0;
-          if (targetEndMillis != null) {
-            final targetDate = DateTime.fromMillisecondsSinceEpoch(targetEndMillis);
-            final daysLeft = targetDate.difference(now).inDays;
-            final pagesLeft = totalPages - currentPage;
-            if (daysLeft > 0) {
-              urgency = pagesLeft / daysLeft / dailyGoal;
-            } else {
-              urgency = double.infinity;
-            }
-          } else {
-            urgency = (totalPages - currentPage) / totalPages.toDouble();
-          }
-
-          if (urgency > highestUrgency) {
-            highestUrgency = urgency;
-            targetBook = book;
-          }
-        }
-
-        if (targetBook != null) {
-          final totalPages = (targetBook['totalPages'] as int?) ?? 1;
-          final currentPage = (targetBook['currentPage'] as int?) ?? 0;
-          final progressPercent = totalPages > 0 ? (currentPage / totalPages * 100).round() : 0;
-          final minutesReadToday = (targetBook['minutesReadToday'] as int?) ?? 0;
-          final dailyGoal = (targetBook['dailyPageGoal'] as int?) ?? 20;
-
-          String statusColor;
-          String message;
-          if (progressPercent >= 90) {
-            statusColor = '#4CAF50';
-            message = 'Almost done! Final push';
-          } else if (progressPercent >= 50) {
-            statusColor = '#2196F3';
-            message = 'Halfway there! Keep reading';
-          } else if (progressPercent >= 25) {
-            statusColor = '#FF9800';
-            message = 'Building momentum';
-          } else {
-            statusColor = '#F44336';
-            message = 'Start strong! $dailyGoal pages/day goal';
-          }
-
-          if (minutesReadToday == 0) {
-            message = 'Read today! Goal: $dailyGoal pages';
-          } else {
-            message = 'Read ${minutesReadToday}m today • $dailyGoal pages/day';
-          }
-
-          String bookTitle = targetBook['title'] as String;
-          if (bookTitle.length > 22) {
-            bookTitle = '${bookTitle.substring(0, 19)}...';
-          }
-
-          await _writeJson(_readingDataFile, {
-            'bookTitle': bookTitle,
-            'currentPage': currentPage,
-            'totalPages': totalPages,
-            'progressPercent': progressPercent,
-            'statusColor': statusColor,
-            'message': message,
-            'minutesReadToday': minutesReadToday,
-            'dailyPageGoal': dailyGoal,
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('WidgetService: Reading widget error: $e');
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // REFRESH ALL WIDGETS AT ONCE
-  // ═══════════════════════════════════════════════════════════════
-  static Future<void> refreshAllWidgets() async {
-    await refreshEventWidget();
-    await refreshPomodoroWidget();
-    await refreshAttendanceWidget();
-    await refreshTimetableWidget();
-    await refreshHabitWidget();
-    await refreshReadingWidget();
+  static Future registerInteractivityCallback() async {
+    // No-op: tap-to-open is handled natively. Kept for clarity.
   }
 }
