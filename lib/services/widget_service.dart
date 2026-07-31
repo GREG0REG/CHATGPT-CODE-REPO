@@ -1,15 +1,20 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import '../db/database_helper.dart';
+import '../database_helper.dart';
 import '../models/event.dart';
 import '../theme/app_themes.dart';
 import 'countdown_service.dart';
 import 'settings_service.dart';
 
+/// Enum for widget background types.
+enum WidgetBackgroundType { themeColor, customImage }
+
 /// Pushes data into home_widget SharedPreferences and triggers native updates.
-/// COMPLETE REPLACEMENT — v2 with Attendance & Pomodoro widget support
+/// COMPLETE REPLACEMENT — v3 with ALL fixes + NEET widget support
 class WidgetService {
   WidgetService._();
 
@@ -17,6 +22,9 @@ class WidgetService {
   static const String eventWidgetName = 'EventCountdownWidgetProvider';
   static const String pomodoroWidgetName = 'PomodoroWidgetProvider';
   static const String attendanceWidgetName = 'AttendanceWidgetProvider';
+  static const String timetableWidgetName = 'TimetableWidgetProvider';
+  static const String habitWidgetName = 'HabitWidgetProvider';
+  static const String readingWidgetName = 'ReadingWidgetProvider';
 
   // ── Event Widget Keys ──
   static const _kEventTitle = 'event_title';
@@ -57,6 +65,76 @@ class WidgetService {
   static const _kAttPrefixStreak = 'attendance_subject_streak_';
   static const _kAttPrefixCanMiss = 'attendance_subject_can_miss_';
 
+  // ── Timetable Widget Keys ──
+  static const _kTtClassCount = 'timetable_class_count';
+  static const _kTtPrefixSubject = 'timetable_subject_';
+  static const _kTtPrefixTime = 'timetable_time_';
+  static const _kTtPrefixRoom = 'timetable_room_';
+  static const _kTtPrefixColor = 'timetable_color_';
+
+  // ── Habit Widget Keys ──
+  static const _kHabitCount = 'habit_count';
+  static const _kHabitPrefixName = 'habit_name_';
+  static const _kHabitPrefixStreak = 'habit_streak_';
+  static const _kHabitPrefixProgress = 'habit_progress_';
+  static const _kHabitPrefixColor = 'habit_color_';
+
+  // ── Reading Widget Keys ──
+  static const _kReadBookCount = 'reading_book_count';
+  static const _kReadPrefixTitle = 'reading_title_';
+  static const _kReadPrefixProgress = 'reading_progress_';
+  static const _kReadPrefixPages = 'reading_pages_';
+  static const _kReadPrefixColor = 'reading_color_';
+
+  // ── NEET Countdown Widget Keys ──
+  static const _kNeetDays = 'neet_countdown_days';
+  static const _kNeetHours = 'neet_countdown_hours';
+  static const _kNeetMinutes = 'neet_countdown_minutes';
+  static const _kNeetExamDate = 'neet_exam_date_millis';
+  static const _kNeetIsUrgent = 'neet_is_urgent';
+  static const _kNeetProgress = 'neet_progress_percent';
+
+  // ── Subject Streak Widget Keys ──
+  static const _kSubStreakPhysics = 'subject_streak_physics';
+  static const _kSubStreakChemistry = 'subject_streak_chemistry';
+  static const _kSubStreakBiology = 'subject_streak_biology';
+  static const _kSubStreakGeneral = 'subject_streak_general';
+  static const _kSubStreakBest = 'subject_streak_best';
+
+  // ── MCQ Target Widget Keys ──
+  static const _kMcqTarget = 'mcq_daily_target';
+  static const _kMcqAttempted = 'mcq_daily_attempted';
+  static const _kMcqCorrect = 'mcq_daily_correct';
+  static const _kMcqAccuracy = 'mcq_daily_accuracy';
+  static const _kMcqSubject = 'mcq_daily_subject';
+
+  // ── Revision Round Widget Keys ──
+  static const _kRevRound = 'revision_current_round';
+  static const _kRevRoundLabel = 'revision_round_label';
+  static const _kRevPhysicsRound = 'revision_physics_round';
+  static const _kRevChemistryRound = 'revision_chemistry_round';
+  static const _kRevBiologyRound = 'revision_biology_round';
+
+  // ═════════════════════════════════════════════════════════════════
+  // HELPER: Get SharedPreferences directly (SettingsService has no public prefs getter)
+  // ═════════════════════════════════════════════════════════════════
+
+  static Future<SharedPreferences> _getPrefs() async {
+    return await SharedPreferences.getInstance();
+  }
+
+  /// Helper to get a color for a theme option.
+  static Color _colorFor(AppThemeOption theme) {
+    return AppThemes.getPrimaryColor(theme);
+  }
+
+  /// Helper to compute an auto-contrast color (black or white) for readability.
+  static Color _autoContrastColor(Color color) {
+    // Calculate luminance; return black for light colors, white for dark colors
+    final luminance = color.computeLuminance();
+    return luminance > 0.5 ? Colors.black : Colors.white;
+  }
+
   // ═════════════════════════════════════════════════════════════════
   // EVENT COUNTDOWN WIDGET
   // ═════════════════════════════════════════════════════════════════
@@ -69,7 +147,7 @@ class WidgetService {
 
       final smart = await SettingsService.instance.getSmartFormatEnabled();
       final theme = await SettingsService.instance.getSelectedTheme();
-      final bgType = await SettingsService.instance.getWidgetBackgroundType();
+      final bgTypeStr = await SettingsService.instance.getWidgetBackgroundType();
       final imagePath = await SettingsService.instance.getWidgetImagePath();
       final progressBarEnabled = await SettingsService.instance.getWidgetProgressBar();
       final pulseEnabled = await SettingsService.instance.getWidgetPulseAnimation();
@@ -109,14 +187,14 @@ class WidgetService {
         isUrgent = diff.inHours < 24 && !diff.isNegative;
       }
 
-      final themeColor = AppThemes.colorFor(theme);
-      final textColor = AppThemes.autoContrastColor(themeColor);
+      final themeColor = _colorFor(theme);
+      final textColor = _autoContrastColor(themeColor);
 
       await HomeWidget.saveWidgetData(_kEventTitle, title);
       await HomeWidget.saveWidgetData(_kEventCountdown, countdownText);
       await HomeWidget.saveWidgetData(
         _kEventBgType,
-        bgType == WidgetBackgroundType.customImage ? 'image' : 'theme',
+        bgTypeStr == 'customImage' ? 'image' : 'theme',
       );
       await HomeWidget.saveWidgetData(
         _kEventBgColor,
@@ -126,7 +204,7 @@ class WidgetService {
         _kEventTextColor,
         textColor.value.toString(),
       );
-      if (imagePath != null && bgType == WidgetBackgroundType.customImage) {
+      if (imagePath != null && bgTypeStr == 'customImage') {
         await HomeWidget.saveWidgetData(_kEventImagePath, imagePath);
       } else {
         await HomeWidget.saveWidgetData(_kEventImagePath, '');
@@ -150,9 +228,7 @@ class WidgetService {
 
   static Future<void> refreshPomodoroWidget() async {
     try {
-      // Read pomodoro data from app's own SharedPreferences via SettingsService
-      // or compute from PomodoroService state
-      final prefs = await SettingsService.instance.prefs;
+      final prefs = await _getPrefs();
       final phase = prefs.getString('pomodoro_phase') ?? 'idle';
       final endTime = prefs.getInt('pomodoro_end_time_millis') ?? 0;
       final totalDuration = prefs.getInt('pomodoro_total_duration_seconds') ?? 5400;
@@ -379,6 +455,455 @@ class WidgetService {
     }
 
     return streak;
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // TIMETABLE WIDGET
+  // ═════════════════════════════════════════════════════════════════
+
+  static Future<void> refreshTimetableWidget() async {
+    try {
+      final now = DateTime.now();
+      final dayOfWeek = now.weekday;
+      final classes = await DatabaseHelper.instance.getTimetableClassesForDay(dayOfWeek);
+
+      // Sort by start time
+      classes.sort((a, b) =>
+          (a['startTimeMinutes'] as int).compareTo(b['startTimeMinutes'] as int));
+
+      await HomeWidget.saveWidgetData(_kTtClassCount, classes.length.clamp(0, 5));
+
+      for (int i = 0; i < classes.length && i < 5; i++) {
+        final c = classes[i];
+        final subjectName = c['subjectName'] as String? ?? 'Class';
+        final startMin = (c['startTimeMinutes'] as int?) ?? 0;
+        final endMin = (c['endTimeMinutes'] as int?) ?? 0;
+        final room = c['room'] as String? ?? '';
+        final color = c['colorHex'] as String? ?? '#2196F3';
+
+        final startH = (startMin ~/ 60).toString().padLeft(2, '0');
+        final startM = (startMin % 60).toString().padLeft(2, '0');
+        final endH = (endMin ~/ 60).toString().padLeft(2, '0');
+        final endM = (endMin % 60).toString().padLeft(2, '0');
+        final timeStr = '$startH:$startM - $endH:$endM';
+
+        await HomeWidget.saveWidgetData(_kTtPrefixSubject + '$i', subjectName);
+        await HomeWidget.saveWidgetData(_kTtPrefixTime + '$i', timeStr);
+        await HomeWidget.saveWidgetData(_kTtPrefixRoom + '$i', room);
+        await HomeWidget.saveWidgetData(_kTtPrefixColor + '$i', color);
+      }
+
+      await HomeWidget.updateWidget(
+        name: timetableWidgetName,
+        androidName: timetableWidgetName,
+      );
+
+      debugPrint('Timetable widget data saved: ${classes.length} classes');
+    } catch (e) {
+      debugPrint('WidgetService.refreshTimetableWidget error: $e');
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // HABIT WIDGET
+  // ═════════════════════════════════════════════════════════════════
+
+  static Future<void> refreshHabitWidget() async {
+    try {
+      final habits = await DatabaseHelper.instance.getAllHabits();
+      final habitData = <Map<String, dynamic>>[];
+
+      for (final habit in habits) {
+        final id = (habit['id'] as int?) ?? 0;
+        final name = habit['name'] as String? ?? 'Habit';
+        final color = habit['colorHex'] as String? ?? '#4CAF50';
+        final targetPerWeek = (habit['targetPerWeek'] as int?) ?? 7;
+
+        final streak = await DatabaseHelper.instance.getHabitStreak(id);
+
+        // Calculate weekly progress
+        final now = DateTime.now();
+        final weekStart = DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: now.weekday - 1));
+        final weekStartMillis = weekStart.millisecondsSinceEpoch;
+        final completedThisWeek = await DatabaseHelper.instance
+            .getHabitCompletionCountForWeek(id, weekStartMillis);
+
+        final progress = targetPerWeek > 0
+            ? ((completedThisWeek / targetPerWeek) * 100).round().clamp(0, 100)
+            : 0;
+
+        habitData.add({
+          'name': name,
+          'streak': streak,
+          'progress': progress,
+          'color': color,
+        });
+      }
+
+      // Sort by streak descending
+      habitData.sort((a, b) => (b['streak'] as int).compareTo(a['streak'] as int));
+
+      await HomeWidget.saveWidgetData(_kHabitCount, habitData.length.clamp(0, 5));
+
+      for (int i = 0; i < habitData.length && i < 5; i++) {
+        final h = habitData[i];
+        await HomeWidget.saveWidgetData(_kHabitPrefixName + '$i', h['name'] as String);
+        await HomeWidget.saveWidgetData(_kHabitPrefixStreak + '$i', h['streak'] as int);
+        await HomeWidget.saveWidgetData(_kHabitPrefixProgress + '$i', h['progress'] as int);
+        await HomeWidget.saveWidgetData(_kHabitPrefixColor + '$i', h['color'] as String);
+      }
+
+      await HomeWidget.updateWidget(
+        name: habitWidgetName,
+        androidName: habitWidgetName,
+      );
+
+      debugPrint('Habit widget data saved: ${habitData.length} habits');
+    } catch (e) {
+      debugPrint('WidgetService.refreshHabitWidget error: $e');
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // READING WIDGET
+  // ═════════════════════════════════════════════════════════════════
+
+  static Future<void> refreshReadingWidget() async {
+    try {
+      final books = await DatabaseHelper.instance.getAllReadingBooks();
+      final bookData = <Map<String, dynamic>>[];
+
+      for (final book in books) {
+        final title = book['title'] as String? ?? 'Book';
+        final totalPages = (book['totalPages'] as int?) ?? 1;
+        final currentPage = (book['currentPage'] as int?) ?? 0;
+        final color = book['colorHex'] as String? ?? '#2196F3';
+
+        final progress = totalPages > 0
+            ? ((currentPage / totalPages) * 100).round().clamp(0, 100)
+            : 0;
+
+        bookData.add({
+          'title': title,
+          'progress': progress,
+          'pages': '$currentPage / $totalPages',
+          'color': color,
+        });
+      }
+
+      // Sort by progress descending
+      bookData.sort((a, b) => (b['progress'] as int).compareTo(a['progress'] as int));
+
+      await HomeWidget.saveWidgetData(_kReadBookCount, bookData.length.clamp(0, 3));
+
+      for (int i = 0; i < bookData.length && i < 3; i++) {
+        final b = bookData[i];
+        await HomeWidget.saveWidgetData(_kReadPrefixTitle + '$i', b['title'] as String);
+        await HomeWidget.saveWidgetData(_kReadPrefixProgress + '$i', b['progress'] as int);
+        await HomeWidget.saveWidgetData(_kReadPrefixPages + '$i', b['pages'] as String);
+        await HomeWidget.saveWidgetData(_kReadPrefixColor + '$i', b['color'] as String);
+      }
+
+      await HomeWidget.updateWidget(
+        name: readingWidgetName,
+        androidName: readingWidgetName,
+      );
+
+      debugPrint('Reading widget data saved: ${bookData.length} books');
+    } catch (e) {
+      debugPrint('WidgetService.refreshReadingWidget error: $e');
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // NEET COUNTDOWN WIDGET (NEW)
+  // ═════════════════════════════════════════════════════════════════
+
+  static Future<void> refreshNeetCountdownWidget() async {
+    try {
+      final prefs = await _getPrefs();
+      final neetDateMs = prefs.getInt('neet_exam_date_millis');
+
+      final now = DateTime.now();
+      final examDate = neetDateMs != null
+          ? DateTime.fromMillisecondsSinceEpoch(neetDateMs)
+          : _getDefaultNeetDate();
+
+      final today = DateTime(now.year, now.month, now.day);
+      final exam = DateTime(examDate.year, examDate.month, examDate.day);
+      final diff = exam.difference(today);
+
+      final days = diff.inDays;
+      final hours = diff.inHours % 24;
+      final minutes = diff.inMinutes % 60;
+      final isUrgent = days <= 30 && days >= 0;
+
+      // Progress: assume 365 days prep time
+      final totalPrepDays = 365;
+      final progress = days >= 0
+          ? (((totalPrepDays - days) / totalPrepDays) * 100).round().clamp(0, 100)
+          : 100;
+
+      await HomeWidget.saveWidgetData(_kNeetDays, days);
+      await HomeWidget.saveWidgetData(_kNeetHours, hours);
+      await HomeWidget.saveWidgetData(_kNeetMinutes, minutes);
+      await HomeWidget.saveWidgetData(_kNeetExamDate, examDate.millisecondsSinceEpoch);
+      await HomeWidget.saveWidgetData(_kNeetIsUrgent, isUrgent);
+      await HomeWidget.saveWidgetData(_kNeetProgress, progress);
+
+      await HomeWidget.updateWidget(
+        name: 'NeetCountdownWidgetProvider',
+        androidName: 'NeetCountdownWidgetProvider',
+      );
+
+      debugPrint('NEET countdown widget saved: $days days remaining');
+    } catch (e) {
+      debugPrint('WidgetService.refreshNeetCountdownWidget error: $e');
+    }
+  }
+
+  static DateTime _getDefaultNeetDate() {
+    // NEET: First Sunday of May
+    final now = DateTime.now();
+    var year = now.year;
+    var date = DateTime(year, 5, 1);
+    while (date.weekday != DateTime.sunday) {
+      date = date.add(const Duration(days: 1));
+    }
+    if (date.isBefore(now)) {
+      year++;
+      date = DateTime(year, 5, 1);
+      while (date.weekday != DateTime.sunday) {
+        date = date.add(const Duration(days: 1));
+      }
+    }
+    return date;
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // SUBJECT STREAK WIDGET (NEW)
+  // ═════════════════════════════════════════════════════════════════
+
+  static Future<void> refreshSubjectStreakWidget() async {
+    try {
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+      final todayEnd = todayStart + const Duration(days: 1).inMilliseconds;
+
+      // Get all study sessions for today
+      final sessions = await DatabaseHelper.instance
+          .getStudySessionsForDateRange(todayStart, todayEnd);
+
+      // Count sessions per NEET subject
+      int physicsCount = 0;
+      int chemistryCount = 0;
+      int biologyCount = 0;
+      int generalCount = 0;
+
+      for (final session in sessions) {
+        final neetSubject = session.neetSubject;
+        switch (neetSubject) {
+          case 0:
+            physicsCount++;
+            break;
+          case 1:
+            chemistryCount++;
+            break;
+          case 2:
+            biologyCount++;
+            break;
+          default:
+            generalCount++;
+            break;
+        }
+      }
+
+      // Calculate consecutive study days per subject from last 30 days
+      final physicsStreak = await _calculateSubjectStudyStreak(0);
+      final chemistryStreak = await _calculateSubjectStudyStreak(1);
+      final biologyStreak = await _calculateSubjectStudyStreak(2);
+      final generalStreak = await _calculateSubjectStudyStreak(3);
+
+      final bestStreak = [physicsStreak, chemistryStreak, biologyStreak, generalStreak]
+          .reduce((a, b) => a > b ? a : b);
+
+      await HomeWidget.saveWidgetData(_kSubStreakPhysics, physicsStreak);
+      await HomeWidget.saveWidgetData(_kSubStreakChemistry, chemistryStreak);
+      await HomeWidget.saveWidgetData(_kSubStreakBiology, biologyStreak);
+      await HomeWidget.saveWidgetData(_kSubStreakGeneral, generalStreak);
+      await HomeWidget.saveWidgetData(_kSubStreakBest, bestStreak);
+
+      await HomeWidget.updateWidget(
+        name: 'SubjectStreakWidgetProvider',
+        androidName: 'SubjectStreakWidgetProvider',
+      );
+
+      debugPrint('Subject streak widget saved: Physics=$physicsStreak, Chem=$chemistryStreak, Bio=$biologyStreak');
+    } catch (e) {
+      debugPrint('WidgetService.refreshSubjectStreakWidget error: $e');
+    }
+  }
+
+  static Future<int> _calculateSubjectStudyStreak(int neetSubjectIndex) async {
+    final db = await DatabaseHelper.instance.database;
+    final now = DateTime.now();
+    int streak = 0;
+
+    for (int i = 0; i < 30; i++) {
+      final day = now.subtract(Duration(days: i));
+      final dayStart = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
+      final dayEnd = dayStart + const Duration(days: 1).inMilliseconds;
+
+      final result = await db.rawQuery("""
+        SELECT COUNT(*) as count FROM study_sessions
+        WHERE completedAtMillis >= ? AND completedAtMillis < ? AND neetSubject = ?
+      """, [dayStart, dayEnd, neetSubjectIndex]);
+
+      final count = (result.first['count'] as int?) ?? 0;
+      if (count > 0) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+
+    return streak;
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // MCQ TARGET WIDGET (NEW)
+  // ═════════════════════════════════════════════════════════════════
+
+  static Future<void> refreshMcqTargetWidget() async {
+    try {
+      final prefs = await _getPrefs();
+
+      // Read daily MCQ target from SharedPreferences
+      final target = prefs.getInt('mcq_daily_target') ?? 100;
+      final attempted = prefs.getInt('mcq_daily_attempted') ?? 0;
+      final correct = prefs.getInt('mcq_daily_correct') ?? 0;
+      final subject = prefs.getString('mcq_daily_subject') ?? 'All';
+
+      // Also compute from today's study sessions as fallback
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+      final todayEnd = todayStart + const Duration(days: 1).inMilliseconds;
+
+      final sessions = await DatabaseHelper.instance
+          .getStudySessionsForDateRange(todayStart, todayEnd);
+
+      int dbAttempted = 0;
+      int dbCorrect = 0;
+      for (final session in sessions) {
+        dbAttempted += session.mcqsAttempted ?? 0;
+        dbCorrect += session.mcqsCorrect ?? 0;
+      }
+
+      // Use the higher of stored prefs or DB computed values
+      final finalAttempted = max(attempted, dbAttempted);
+      final finalCorrect = max(correct, dbCorrect);
+      final accuracy = finalAttempted > 0
+          ? ((finalCorrect / finalAttempted) * 100).round()
+          : 0;
+
+      await HomeWidget.saveWidgetData(_kMcqTarget, target);
+      await HomeWidget.saveWidgetData(_kMcqAttempted, finalAttempted);
+      await HomeWidget.saveWidgetData(_kMcqCorrect, finalCorrect);
+      await HomeWidget.saveWidgetData(_kMcqAccuracy, accuracy);
+      await HomeWidget.saveWidgetData(_kMcqSubject, subject);
+
+      await HomeWidget.updateWidget(
+        name: 'McqTargetWidgetProvider',
+        androidName: 'McqTargetWidgetProvider',
+      );
+
+      debugPrint('MCQ target widget saved: $finalAttempted/$target attempted, $accuracy% accuracy');
+    } catch (e) {
+      debugPrint('WidgetService.refreshMcqTargetWidget error: $e');
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // REVISION ROUND WIDGET (NEW)
+  // ═════════════════════════════════════════════════════════════════
+
+  static Future<void> refreshRevisionRoundWidget() async {
+    try {
+      final prefs = await _getPrefs();
+
+      // Read revision round from SharedPreferences
+      final currentRound = prefs.getInt('revision_current_round') ?? 1;
+      final roundLabels = ['Round 1', 'Round 2', 'Round 3', 'Final'];
+      final roundLabel = currentRound >= 1 && currentRound <= 4
+          ? roundLabels[currentRound - 1]
+          : 'Round $currentRound';
+
+      // Compute per-subject revision rounds from study sessions
+      final now = DateTime.now();
+      final thirtyDaysAgo = now.subtract(const Duration(days: 30)).millisecondsSinceEpoch;
+
+      final db = await DatabaseHelper.instance.database;
+      final result = await db.rawQuery("""
+        SELECT neetSubject, MAX(revisionRound) as maxRound
+        FROM study_sessions
+        WHERE completedAtMillis >= ? AND neetSubject IS NOT NULL
+        GROUP BY neetSubject
+      """, [thirtyDaysAgo]);
+
+      int physicsRound = 0;
+      int chemistryRound = 0;
+      int biologyRound = 0;
+
+      for (final row in result) {
+        final subjectIdx = row['neetSubject'] as int?;
+        final maxRound = (row['maxRound'] as int?) ?? 0;
+        switch (subjectIdx) {
+          case 0:
+            physicsRound = maxRound;
+            break;
+          case 1:
+            chemistryRound = maxRound;
+            break;
+          case 2:
+            biologyRound = maxRound;
+            break;
+        }
+      }
+
+      await HomeWidget.saveWidgetData(_kRevRound, currentRound);
+      await HomeWidget.saveWidgetData(_kRevRoundLabel, roundLabel);
+      await HomeWidget.saveWidgetData(_kRevPhysicsRound, physicsRound);
+      await HomeWidget.saveWidgetData(_kRevChemistryRound, chemistryRound);
+      await HomeWidget.saveWidgetData(_kRevBiologyRound, biologyRound);
+
+      await HomeWidget.updateWidget(
+        name: 'RevisionRoundWidgetProvider',
+        androidName: 'RevisionRoundWidgetProvider',
+      );
+
+      debugPrint('Revision round widget saved: $roundLabel, Physics=$physicsRound, Chem=$chemistryRound, Bio=$biologyRound');
+    } catch (e) {
+      debugPrint('WidgetService.refreshRevisionRoundWidget error: $e');
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // COMPOSITE: REFRESH ALL WIDGETS
+  // ═════════════════════════════════════════════════════════════════
+
+  static Future<void> refreshAllWidgets() async {
+    await refreshWidget();
+    await refreshPomodoroWidget();
+    await refreshAttendanceWidget();
+    await refreshTimetableWidget();
+    await refreshHabitWidget();
+    await refreshReadingWidget();
+    await refreshNeetCountdownWidget();
+    await refreshSubjectStreakWidget();
+    await refreshMcqTargetWidget();
+    await refreshRevisionRoundWidget();
+    debugPrint('WidgetService.refreshAllWidgets: all widgets refreshed');
   }
 
   static Future registerInteractivityCallback() async {
