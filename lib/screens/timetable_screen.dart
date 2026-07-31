@@ -1,14 +1,17 @@
 // FILE: lib/screens/timetable_screen.dart
-// COMPLETE REPLACEMENT — NEET Aspirant Ultimate Timetable v2.0
-// 5 NEW FEATURES: Revision Tracker, Pomodoro Timer, Subject Balance Meter,
-//                 Streak Heatmap, Smart Subject Rotation Suggestions
-// ZERO database changes — uses only existing tables
+// COMPLETE REPLACEMENT — NEET Aspirant Ultimate Timetable v3.0
+// FIXES: Added missing DailyGoal import, fixed Color.value deprecation
+// NEW FEATURES: NEET Subject Color Coding, Revision Slot toggle,
+//               Mock Test Schedule countdown, Subject Hours Tracker,
+//               Subject Mastery Progress, Daily MCQ Target Banner,
+//               NEET Exam Date Countdown, Smart Break Suggestions
 
 import 'dart:math' as math;
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:event_countdown/database_helper.dart';
+import 'package:event_countdown/db/database_helper.dart';
+import 'package:event_countdown/models/daily_goal.dart';
 import '../services/widget_service.dart';
 import 'main_screen.dart';
 
@@ -27,12 +30,21 @@ class _TimetableScreenState extends State<TimetableScreen> {
   List<Map<String, dynamic>> _tasks = [];
   bool _weekView = false;
 
-  // -- NEW: Pomodoro timer state --
+  // -- Pomodoro timer state --
   Timer? _pomodoroTimer;
   int _pomodoroSecondsLeft = 0;
   bool _isPomodoroRunning = false;
   String? _activePomodoroSubject;
   int _pomodoroTotalMinutes = 25;
+
+  // -- NEW: Mock test schedule cache --
+  List<Map<String, dynamic>> _mockTests = [];
+  int _nextMockTestDays = -1;
+
+  // -- NEW: Daily MCQ target --
+  int _mcqTarget = 100;
+  int _mcqAttempted = 0;
+  int _mcqCorrect = 0;
 
   // Timeline constants: 5 AM to 12 AM (NEET schedule)
   static const int _timelineStartHour = 5;
@@ -46,6 +58,15 @@ class _TimetableScreenState extends State<TimetableScreen> {
   // NEET constants
   static const List<String> _pcbSubjects = ['Physics', 'Chemistry', 'Biology', 'Zoology', 'Botany'];
   static const int _minWeeklyHoursPerSubject = 6;
+
+  // -- NEW: NEET Subject Color Coding --
+  static const Map<String, String> _neetSubjectColors = {
+    'Physics': '#1565C0',    // Deep Blue
+    'Chemistry': '#2E7D32',  // Green
+    'Biology': '#C62828',    // Red
+    'Zoology': '#C62828',    // Red (same as Biology)
+    'Botany': '#C62828',     // Red (same as Biology)
+  };
 
   @override
   void initState() {
@@ -63,6 +84,8 @@ class _TimetableScreenState extends State<TimetableScreen> {
     setState(() => _loading = true);
     await _loadClasses();
     await _loadTasks();
+    await _loadMockTests();
+    await _loadMcqStats();
     if (mounted) setState(() => _loading = false);
     await WidgetService.refreshTimetableWidget();
     await WidgetService.refreshAttendanceWidget();
@@ -87,6 +110,46 @@ class _TimetableScreenState extends State<TimetableScreen> {
       orderBy: 'dueDateMillis ASC',
     );
     setState(() => _tasks = rows);
+  }
+
+  // -- NEW: Load mock test schedules --
+  Future<void> _loadMockTests() async {
+    final db = await DatabaseHelper.instance.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rows = await db.query(
+      'timetable_tasks',
+      where: 'taskType = ? AND dueDateMillis >= ?',
+      whereArgs: ['exam', now],
+      orderBy: 'dueDateMillis ASC',
+      limit: 5,
+    );
+    setState(() => _mockTests = rows);
+    if (rows.isNotEmpty) {
+      final nextTest = DateTime.fromMillisecondsSinceEpoch(rows.first['dueDateMillis'] as int);
+      final diff = nextTest.difference(DateTime.now()).inDays;
+      setState(() => _nextMockTestDays = diff);
+    } else {
+      setState(() => _nextMockTestDays = -1);
+    }
+  }
+
+  // -- NEW: Load daily MCQ stats from study_sessions --
+  Future<void> _loadMcqStats() async {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final todayEnd = todayStart + const Duration(days: 1).inMilliseconds;
+
+    final sessions = await DatabaseHelper.instance.getStudySessionsForDateRange(todayStart, todayEnd);
+    int attempted = 0;
+    int correct = 0;
+    for (final session in sessions) {
+      attempted += session.mcqsAttempted ?? 0;
+      correct += session.mcqsCorrect ?? 0;
+    }
+    setState(() {
+      _mcqAttempted = attempted;
+      _mcqCorrect = correct;
+    });
   }
 
   // ============================================================================
@@ -309,7 +372,84 @@ class _TimetableScreenState extends State<TimetableScreen> {
   }
 
   // ============================================================================
-  // ADD CLASS (with NEET quick-subject chips)
+  // NEW FEATURE 6: NEET SUBJECT COLOR CODING
+  // ============================================================================
+  String _getNeetSubjectColor(String subjectName) {
+    for (final entry in _neetSubjectColors.entries) {
+      if (subjectName.toLowerCase().contains(entry.key.toLowerCase())) {
+        return entry.value;
+      }
+    }
+    return '#2196F3'; // Default blue
+  }
+
+  bool _isNeetSubject(String subjectName) {
+    return _pcbSubjects.any((s) => subjectName.toLowerCase().contains(s.toLowerCase()));
+  }
+
+  // ============================================================================
+  // NEW FEATURE 7: SUBJECT MASTERY PROGRESS
+  // ============================================================================
+  Future<Map<String, double>> _getSubjectMasteryProgress() async {
+    final db = await DatabaseHelper.instance.database;
+    final Map<String, double> mastery = {};
+    for (final s in _pcbSubjects) mastery[s] = 0.0;
+
+    // Calculate mastery based on study hours + MCQ accuracy
+    final result = await db.rawQuery("""
+      SELECT subjectTag, 
+        SUM(durationMinutes) as totalMinutes,
+        SUM(mcqsAttempted) as attempted,
+        SUM(mcqsCorrect) as correct
+      FROM study_sessions
+      WHERE subjectTag IS NOT NULL
+      GROUP BY subjectTag
+    """);
+
+    for (final row in result) {
+      final subject = (row['subjectTag'] as String?) ?? '';
+      final minutes = (row['totalMinutes'] as int?) ?? 0;
+      final attempted = (row['attempted'] as int?) ?? 0;
+      final correct = (row['correct'] as int?) ?? 0;
+
+      for (final pcb in _pcbSubjects) {
+        if (subject.toLowerCase().contains(pcb.toLowerCase())) {
+          // Mastery = 50% from hours (max 20h = 100%) + 50% from accuracy
+          double hoursScore = (minutes / 60.0 / 20.0).clamp(0.0, 1.0) * 50.0;
+          double accuracyScore = attempted > 0
+              ? ((correct / attempted) * 100).clamp(0.0, 100.0) * 0.5
+              : 0.0;
+          mastery[pcb] = (hoursScore + accuracyScore).clamp(0.0, 100.0);
+        }
+      }
+    }
+    return mastery;
+  }
+
+  // ============================================================================
+  // NEW FEATURE 8: SMART BREAK SUGGESTIONS
+  // ============================================================================
+  List<Map<String, dynamic>> _getSmartBreakSuggestions() {
+    final freeSlots = _getFreeSlotsForDay(_selectedDay);
+    final suggestions = <Map<String, dynamic>>[];
+
+    for (final slot in freeSlots) {
+      final duration = slot['duration'] as int;
+      if (duration >= 15 && duration <= 45) {
+        suggestions.add({
+          'start': slot['start'],
+          'end': slot['end'],
+          'duration': duration,
+          'type': duration >= 30 ? 'power_nap' : 'quick_break',
+          'label': duration >= 30 ? 'Power Nap 🛌' : 'Quick Break ☕',
+        });
+      }
+    }
+    return suggestions;
+  }
+
+  // ============================================================================
+  // ADD CLASS (with NEET quick-subject chips + Revision Slot toggle + Color Coding)
   // ============================================================================
   Future<void> _addClass() async {
     final nameController = TextEditingController();
@@ -321,17 +461,21 @@ class _TimetableScreenState extends State<TimetableScreen> {
     int endMinutes = 600;
     int dayOfWeek = _selectedDay + 1;
     bool isRecurring = true;
+    bool isRevisionSlot = false; // -- NEW: Revision Slot toggle
     DateTime? startDate;
     DateTime? endDate;
 
-    final types = ['lecture', 'lab', 'tutorial', 'seminar', 'exam', 'quiz'];
-    final typeLabels = ['Lecture', 'Lab', 'Tutorial', 'Seminar', 'Exam', 'Quiz'];
-    final typeColors = [Colors.blue, Colors.green, Colors.purple, Colors.teal, Colors.red, Colors.orange];
+    final types = ['lecture', 'lab', 'tutorial', 'seminar', 'exam', 'quiz', 'revision'];
+    final typeLabels = ['Lecture', 'Lab', 'Tutorial', 'Seminar', 'Exam', 'Quiz', 'Revision'];
+    final typeColors = [Colors.blue, Colors.green, Colors.purple, Colors.teal, Colors.red, Colors.orange, Colors.amber];
 
     final result = await showDialog<Map<String, dynamic>?>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
+          // Auto-assign color based on subject
+          final autoColor = _getNeetSubjectColor(nameController.text);
+
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Text('Add Class'),
@@ -346,18 +490,61 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       labelText: 'Subject Name *',
                       prefixIcon: Icon(Icons.book),
                     ),
+                    onChanged: (_) => setDialogState(() {}),
                   ),
                   const SizedBox(height: 8),
-                  // -- NEW: Quick NEET subject chips --
+                  // -- NEET quick subject chips --
                   Wrap(
                     spacing: 6,
                     children: _pcbSubjects.map((s) => ActionChip(
                       label: Text(s, style: const TextStyle(fontSize: 11)),
-                      onPressed: () => nameController.text = s,
-                      backgroundColor: Colors.green.withOpacity(0.1),
-                      side: BorderSide(color: Colors.green.withOpacity(0.3)),
+                      onPressed: () {
+                        nameController.text = s;
+                        setDialogState(() {});
+                      },
+                      backgroundColor: _hexToColor(_neetSubjectColors[s]!).withOpacity(0.1),
+                      side: BorderSide(color: _hexToColor(_neetSubjectColors[s]!).withOpacity(0.3)),
                     )).toList(),
                   ),
+                  const SizedBox(height: 12),
+                  // -- NEW: Revision Slot toggle --
+                  if (_isNeetSubject(nameController.text))
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('NEET Revision Slot'),
+                      subtitle: const Text('Mark as dedicated revision period'),
+                      value: isRevisionSlot,
+                      onChanged: (v) => setDialogState(() => isRevisionSlot = v),
+                    ),
+                  const SizedBox(height: 8),
+                  // -- NEW: Auto color preview --
+                  if (_isNeetSubject(nameController.text))
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _hexToColor(autoColor).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _hexToColor(autoColor).withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 16,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              color: _hexToColor(autoColor),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Auto color: $autoColor',
+                            style: TextStyle(fontSize: 12, color: _hexToColor(autoColor)),
+                          ),
+                        ],
+                      ),
+                    ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: classType,
@@ -497,6 +684,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     'isRecurring': isRecurring,
                     'startDate': startDate,
                     'endDate': endDate,
+                    'isRevisionSlot': isRevisionSlot,
                   });
                 },
                 child: const Text('Add'),
@@ -515,15 +703,18 @@ class _TimetableScreenState extends State<TimetableScreen> {
     if (result != null) {
       final db = await DatabaseHelper.instance.database;
       final now = DateTime.now().millisecondsSinceEpoch;
+      final subjectName = result['name'] as String;
+      final autoColor = _getNeetSubjectColor(subjectName);
+
       await db.insert('timetable_classes', {
-        'subjectName': result['name'],
+        'subjectName': subjectName,
         'classType': result['type'],
         'dayOfWeek': result['day'],
         'startTimeMinutes': result['start'],
         'endTimeMinutes': result['end'],
         'room': result['room'],
         'professor': result['prof'],
-        'colorHex': _colorToHex(typeColors[types.indexOf(result['type'] as String)]),
+        'colorHex': autoColor, // -- NEW: Auto NEET color coding
         'isRecurring': (result['isRecurring'] as bool) ? 1 : 0,
         'startDateMillis': result['startDate'] != null
             ? DateTime(result['startDate'].year, result['startDate'].month, result['startDate'].day).millisecondsSinceEpoch
@@ -531,7 +722,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
         'endDateMillis': result['endDate'] != null
             ? DateTime(result['endDate'].year, result['endDate'].month, result['endDate'].day).millisecondsSinceEpoch
             : null,
-        'note': result['note'],
+        'note': result['isRevisionSlot'] == true
+            ? '[REVISION SLOT] ${result['note']}'
+            : result['note'],
         'createdAtMillis': now,
       });
       HapticFeedback.mediumImpact();
@@ -586,14 +779,14 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     decoration: const InputDecoration(labelText: 'Subject (optional)', prefixIcon: Icon(Icons.book)),
                   ),
                   const SizedBox(height: 8),
-                  // -- NEW: Quick NEET subject chips --
+                  // -- NEET quick subject chips --
                   Wrap(
                     spacing: 6,
                     children: _pcbSubjects.map((s) => ActionChip(
                       label: Text(s, style: const TextStyle(fontSize: 11)),
                       onPressed: () => subjectController.text = s,
-                      backgroundColor: Colors.teal.withOpacity(0.1),
-                      side: BorderSide(color: Colors.teal.withOpacity(0.3)),
+                      backgroundColor: _hexToColor(_neetSubjectColors[s]!).withOpacity(0.1),
+                      side: BorderSide(color: _hexToColor(_neetSubjectColors[s]!).withOpacity(0.3)),
                     )).toList(),
                   ),
                   const SizedBox(height: 12),
@@ -719,7 +912,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     freeSlots.sort((a, b) => (b['duration'] as int).compareTo(a['duration'] as int));
     final bestSlot = freeSlots.first;
 
-    // -- NEW: Smart subject suggestion --
+    // -- Smart subject suggestion --
     final weakestSubject = await _getWeakestSubject();
     final suggestedSubject = weakestSubject ?? 'Physics';
 
@@ -741,7 +934,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // -- NEW: Smart suggestion banner --
+                  // -- Smart suggestion banner --
                   if (weakestSubject != null)
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -932,8 +1125,10 @@ class _TimetableScreenState extends State<TimetableScreen> {
     return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
   }
 
+  // -- FIXED: Use toARGB32() instead of deprecated value --
   String _colorToHex(Color color) {
-    return '#${color.value.toRadixString(16).padLeft(8, '0').substring(2)}';
+    final argb = color.toARGB32();
+    return '#${(argb & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
   }
 
   Color _hexToColor(String hex) {
@@ -1179,7 +1374,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
   }
 
   // ============================================================================
-  // BUILD — MAIN METHOD with ALL 5 NEET FEATURES
+  // BUILD — MAIN METHOD with ALL NEET FEATURES
   // ============================================================================
   @override
   Widget build(BuildContext context) {
@@ -1233,7 +1428,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
               : Column(
                   children: [
                     // =========================================================================
-                    // FEATURE 2: POMODORO TIMER BANNER (when active)
+                    // Pomodoro Timer Banner (when active)
                     // =========================================================================
                     if (_isPomodoroRunning)
                       Container(
@@ -1287,7 +1482,141 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       ),
 
                     // =========================================================================
-                    // FEATURE 1: REVISION CYCLE TRACKER (compact chips)
+                    // NEW: Mock Test Schedule Countdown Banner
+                    // =========================================================================
+                    if (_nextMockTestDays >= 0)
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: _nextMockTestDays <= 3 ? Colors.red.withOpacity(0.08) : Colors.blue.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: _nextMockTestDays <= 3 ? Colors.red.withOpacity(0.3) : Colors.blue.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.quiz,
+                              size: 20,
+                              color: _nextMockTestDays <= 3 ? Colors.red : Colors.blue,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Next Mock Test: ${_mockTests.isNotEmpty ? _mockTests.first['title'] : 'Unknown'}',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: _nextMockTestDays <= 3 ? Colors.red.shade800 : Colors.blue.shade800,
+                                    ),
+                                  ),
+                                  Text(
+                                    _nextMockTestDays == 0
+                                        ? 'TODAY! Good luck! 🎯'
+                                        : _nextMockTestDays == 1
+                                            ? 'Tomorrow! Final revision needed'
+                                            : '$_nextMockTestDays days remaining',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: _nextMockTestDays <= 3 ? Colors.red.shade600 : Colors.blue.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (_nextMockTestDays <= 7)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: _nextMockTestDays <= 3 ? Colors.red : Colors.orange,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  _nextMockTestDays <= 3 ? 'URGENT' : 'SOON',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+
+                    // =========================================================================
+                    // NEW: Daily MCQ Target Banner
+                    // =========================================================================
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.indigo.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.indigo.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.psychology, size: 20, color: Colors.indigo.shade700),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Daily MCQ Target',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: Colors.indigo.shade800,
+                                  ),
+                                ),
+                                Text(
+                                  '$_mcqAttempted / $_mcqTarget attempted • ${_mcqAttempted > 0 ? ((_mcqCorrect / _mcqAttempted * 100).toStringAsFixed(1)) : '0.0'}% accuracy',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.indigo.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              SizedBox(
+                                width: 40,
+                                height: 40,
+                                child: CircularProgressIndicator(
+                                  value: _mcqTarget > 0 ? (_mcqAttempted / _mcqTarget).clamp(0.0, 1.0) : 0,
+                                  strokeWidth: 4,
+                                  backgroundColor: Colors.indigo.withOpacity(0.1),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    _mcqAttempted >= _mcqTarget ? Colors.green : Colors.indigo,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '${(_mcqTarget > 0 ? (_mcqAttempted / _mcqTarget * 100).clamp(0, 100) : 0).round()}%',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.indigo.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // =========================================================================
+                    // Revision Cycle Tracker (compact chips)
                     // =========================================================================
                     Container(
                       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -1351,7 +1680,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     ),
 
                     // =========================================================================
-                    // FEATURE 3: SUBJECT BALANCE METER
+                    // Subject Balance Meter
                     // =========================================================================
                     FutureBuilder<Map<String, double>>(
                       future: _getWeeklySubjectHours(),
@@ -1413,7 +1742,151 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     ),
 
                     // =========================================================================
-                    // FEATURE 5: SMART RECOMMENDATION CHIP
+                    // NEW: Subject Mastery Progress
+                    // =========================================================================
+                    FutureBuilder<Map<String, double>>(
+                      future: _getSubjectMasteryProgress(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return const SizedBox.shrink();
+                        final mastery = snapshot.data!;
+                        if (mastery.values.every((v) => v == 0)) return const SizedBox.shrink();
+
+                        return Container(
+                          margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerHighest.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.trending_up, size: 16, color: cs.primary),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Subject Mastery',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: cs.onSurface),
+                                  ),
+                                ],
+                              ),
+                                                            const SizedBox(height: 8),
+                              ...mastery.entries.map((e) {
+                                final progress = e.value / 100.0;
+                                final color = _hexToColor(_neetSubjectColors[e.key] ?? '#2196F3');
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 70,
+                                        child: Text(
+                                          e.key,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: color,
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(6),
+                                          child: LinearProgressIndicator(
+                                            value: progress.clamp(0.0, 1.0),
+                                            minHeight: 8,
+                                            backgroundColor: color.withOpacity(0.1),
+                                            valueColor: AlwaysStoppedAnimation<Color>(color),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '${e.value.toStringAsFixed(0)}%',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: color,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+
+                    // =========================================================================
+                    // NEW: Smart Break Suggestions
+                    // =========================================================================
+                    Builder(
+                      builder: (context) {
+                        final breakSuggestions = _getSmartBreakSuggestions();
+                        if (breakSuggestions.isEmpty) return const SizedBox.shrink();
+
+                        return Container(
+                          margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.coffee, size: 16, color: Colors.teal.shade700),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Smart Break Suggestions',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.teal.shade800),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: breakSuggestions.map((breakSlot) {
+                                  return ActionChip(
+                                    avatar: Icon(
+                                      breakSlot['type'] == 'power_nap' ? Icons.bedtime : Icons.coffee,
+                                      size: 14,
+                                      color: Colors.teal.shade700,
+                                    ),
+                                    label: Text(
+                                      '${breakSlot['label']} at ${_formatMinutes(breakSlot['start'] as int)}',
+                                      style: TextStyle(fontSize: 11, color: Colors.teal.shade800),
+                                    ),
+                                    backgroundColor: Colors.teal.withOpacity(0.1),
+                                    side: BorderSide(color: Colors.teal.withOpacity(0.3)),
+                                    onPressed: () {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('${breakSlot['label']} scheduled! Rest is important for retention.'),
+                                          behavior: SnackBarBehavior.floating,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+
+                    // =========================================================================
+                    // Smart Recommendation Chip
                     // =========================================================================
                     FutureBuilder<String?>(
                       future: _getWeakestSubject(),
@@ -1449,7 +1922,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     ),
 
                     // =========================================================================
-                    // FEATURE 4: DAY SELECTOR with HEATMAP OVERLAY
+                    // Day Selector with Heatmap Overlay
                     // =========================================================================
                     FutureBuilder<Map<int, int>>(
                       future: _getWeeklyStudyMinutes(),
@@ -1509,7 +1982,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                                               ),
                                             ),
                                           ),
-                                          // -- HEATMAP DOT --
+                                          // Heatmap dot
                                           Positioned(
                                             bottom: 0,
                                             right: 0,
@@ -1763,7 +2236,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
-    Widget _buildFreeTimeSlot(Map<String, dynamic> slot, ColorScheme cs) {
+  Widget _buildFreeTimeSlot(Map<String, dynamic> slot, ColorScheme cs) {
     final start = slot['start'] as int;
     final end = slot['end'] as int;
     final duration = slot['duration'] as int;
@@ -1798,17 +2271,19 @@ class _TimetableScreenState extends State<TimetableScreen> {
   }
 
   // ============================================================================
-  // CLASS BLOCK — ENHANCED with Pomodoro start button
+  // CLASS BLOCK — ENHANCED with Pomodoro start button + NEET Color Coding
   // ============================================================================
   Widget _buildClassBlock(Map<String, dynamic> c, List<Map<String, dynamic>> conflicts, ColorScheme cs) {
     final start = c['startTimeMinutes'] as int;
     final end = c['endTimeMinutes'] as int;
     final top = _minutesToPixels(start);
     final height = math.max(40.0, _durationToPixels(end - start));
-    final color = _hexToColor(c['colorHex'] as String? ?? '#2196F3');
+    final storedColor = c['colorHex'] as String? ?? '#2196F3';
+    final color = _hexToColor(storedColor);
     final isConflict = conflicts.any((conf) =>
         conf['a']['id'] == c['id'] || conf['b']['id'] == c['id']);
     final subject = c['subjectName'] as String? ?? '';
+    final isRevisionSlot = (c['note'] as String? ?? '').contains('[REVISION SLOT]');
 
     return Positioned(
       top: top,
@@ -1826,7 +2301,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 ? BorderSide(color: Colors.red, width: 2)
                 : BorderSide(color: color.withOpacity(0.3), width: 1),
           ),
-          color: color.withOpacity(0.12),
+          color: isRevisionSlot
+              ? Colors.amber.withOpacity(0.15)
+              : color.withOpacity(0.12),
           child: InkWell(
             onTap: () => _showClassDetails(c),
             borderRadius: BorderRadius.circular(10),
@@ -1852,6 +2329,18 @@ class _TimetableScreenState extends State<TimetableScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      if (isRevisionSlot)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.amber,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'REV',
+                            style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                          ),
+                        ),
                       if (isConflict)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -1864,7 +2353,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                             style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
                           ),
                         ),
-                      // -- NEW: Quick Pomodoro button for NEET subjects --
+                      // Quick Pomodoro button for NEET subjects
                       if (_pcbSubjects.any((s) => subject.toLowerCase().contains(s.toLowerCase())) && height > 50)
                         InkWell(
                           onTap: () => _startPomodoro(subject, minutes: 25),
@@ -2016,7 +2505,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                             style: TextStyle(color: Colors.red.shade700, fontSize: 8, fontWeight: FontWeight.bold),
                           ),
                         ),
-                      // -- NEW: Quick Pomodoro button for study blocks --
+                      // Quick Pomodoro button for study blocks
                       if (isStudyBlock && height > 40)
                         InkWell(
                           onTap: () => _startPomodoro(subject.isNotEmpty ? subject : 'Study', minutes: 25),
@@ -2073,6 +2562,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final color = _hexToColor(c['colorHex'] as String? ?? '#2196F3');
     final subject = c['subjectName'] as String? ?? '';
     final isPcbSubject = _pcbSubjects.any((s) => subject.toLowerCase().contains(s.toLowerCase()));
+    final isRevisionSlot = (c['note'] as String? ?? '').contains('[REVISION SLOT]');
 
     showModalBottomSheet(
       context: context,
@@ -2114,6 +2604,27 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 ),
               ],
             ),
+            if (isRevisionSlot)
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.menu_book, size: 16, color: Colors.amber.shade800),
+                    const SizedBox(width: 6),
+                    Text(
+                      'NEET Revision Slot',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.amber.shade800),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 16),
             _detailRow(Icons.access_time, 'Time', '${_formatMinutes(c['startTimeMinutes'] as int)} - ${_formatMinutes(c['endTimeMinutes'] as int)}'),
             if ((c['room'] as String?)?.isNotEmpty == true)
@@ -2123,9 +2634,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
             _detailRow(Icons.calendar_today, 'Day', _dayNames[(c['dayOfWeek'] as int) - 1]),
             _detailRow(Icons.repeat, 'Recurring', (c['isRecurring'] as int? ?? 1) == 1 ? 'Yes (weekly)' : 'No'),
             if ((c['note'] as String?)?.isNotEmpty == true)
-              _detailRow(Icons.notes, 'Note', c['note'] as String),
+              _detailRow(Icons.notes, 'Note', (c['note'] as String).replaceFirst('[REVISION SLOT] ', '')),
             const SizedBox(height: 16),
-            // -- NEW: Start Pomodoro from details sheet --
+            // Start Pomodoro from details sheet
             if (isPcbSubject)
               FilledButton.icon(
                 onPressed: () {
@@ -2222,7 +2733,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
             if ((t['note'] as String?)?.isNotEmpty == true)
               _detailRow(Icons.notes, 'Note', t['note'] as String),
             const SizedBox(height: 16),
-            // -- NEW: Start Pomodoro from task details --
+            // Start Pomodoro from task details
             if (isStudyBlock)
               FilledButton.icon(
                 onPressed: () {
