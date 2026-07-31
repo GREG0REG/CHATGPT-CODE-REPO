@@ -23,6 +23,12 @@ const String kBackupTaskName = 'event_countdown_weekly_backup';
 const String kAttendanceWidgetRefreshTaskName = 'event_countdown_attendance_widget_refresh';
 const String kTimetableWidgetRefreshTaskName = 'event_countdown_timetable_widget_refresh';
 
+// ── NEW: NEET Countdown Widget periodic refresh ──
+const String kNeetCountdownTaskName = 'event_countdown_neet_widget_refresh';
+
+// ── NEW: NEET Motivational Notification daily at 6 AM ──
+const String kNeetMotivationTaskName = 'event_countdown_neet_motivation';
+
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
@@ -76,6 +82,29 @@ void callbackDispatcher() {
       }
     } else if (task == kBackupTaskName) {
       return Future.value(await BackupService.executeBackup());
+    }
+    // ── NEW: NEET Countdown Widget Refresh ──
+    else if (task == kNeetCountdownTaskName) {
+      try {
+        await WidgetService.refreshNeetCountdownWidget();
+        await WidgetService.refreshSubjectStreakWidget();
+        await WidgetService.refreshMcqTargetWidget();
+        await WidgetService.refreshRevisionRoundWidget();
+        return true;
+      } catch (e) {
+        debugPrint('NEET widget refresh error: $e');
+        return false;
+      }
+    }
+    // ── NEW: NEET Motivational Notification ──
+    else if (task == kNeetMotivationTaskName) {
+      try {
+        await NotificationService.instance.showNeetMotivationNotification();
+        return true;
+      } catch (e) {
+        debugPrint('NEET motivation notification error: $e');
+        return false;
+      }
     }
     return Future.value(true);
   });
@@ -134,6 +163,30 @@ Future<void> main() async {
     existingWorkPolicy: ExistingWorkPolicy.keep,
   );
 
+  // ── NEW: Register NEET Countdown Widget periodic refresh (hourly) ──
+  await Workmanager().registerPeriodicTask(
+    kNeetCountdownTaskName,
+    kNeetCountdownTaskName,
+    frequency: const Duration(hours: 1),
+    constraints: Constraints(networkType: NetworkType.not_required),
+    existingWorkPolicy: ExistingWorkPolicy.keep,
+  );
+
+  // ── NEW: Register NEET Motivational Notification daily at 6 AM ──
+  final now = DateTime.now();
+  var next6AM = DateTime(now.year, now.month, now.day, 6, 0, 0);
+  if (next6AM.isBefore(now)) {
+    next6AM = next6AM.add(const Duration(days: 1));
+  }
+  await Workmanager().registerPeriodicTask(
+    kNeetMotivationTaskName,
+    kNeetMotivationTaskName,
+    frequency: const Duration(hours: 24),
+    initialDelay: next6AM.difference(now),
+    constraints: Constraints(networkType: NetworkType.not_required),
+    existingWorkPolicy: ExistingWorkPolicy.replace,
+  );
+
   await BackupService.registerWeeklyBackup();
 
   try {
@@ -141,6 +194,11 @@ Future<void> main() async {
     await WidgetService.refreshPomodoroWidget();
     await WidgetService.refreshAttendanceWidget();
     await WidgetService.refreshTimetableWidget();
+    // ── NEW: Initial refresh of NEET widgets ──
+    await WidgetService.refreshNeetCountdownWidget();
+    await WidgetService.refreshSubjectStreakWidget();
+    await WidgetService.refreshMcqTargetWidget();
+    await WidgetService.refreshRevisionRoundWidget();
   } catch (e) {
     debugPrint('Widget refresh error: $e');
   }
@@ -178,6 +236,11 @@ class EventCountdownAppState extends State<EventCountdownApp>
       WidgetService.refreshPomodoroWidget();
       WidgetService.refreshAttendanceWidget();
       WidgetService.refreshTimetableWidget();
+      // ── NEW: Refresh NEET widgets on app resume ──
+      WidgetService.refreshNeetCountdownWidget();
+      WidgetService.refreshSubjectStreakWidget();
+      WidgetService.refreshMcqTargetWidget();
+      WidgetService.refreshRevisionRoundWidget();
       PomodoroService.instance.recalculateFromEndTime();
     }
   }
@@ -224,6 +287,11 @@ class EventCountdownAppState extends State<EventCountdownApp>
         await WidgetService.refreshPomodoroWidget();
         await WidgetService.refreshAttendanceWidget();
         await WidgetService.refreshTimetableWidget();
+        // ── NEW: Refresh NEET widgets after restore ──
+        await WidgetService.refreshNeetCountdownWidget();
+        await WidgetService.refreshSubjectStreakWidget();
+        await WidgetService.refreshMcqTargetWidget();
+        await WidgetService.refreshRevisionRoundWidget();
 
         if (mounted) {
           ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
