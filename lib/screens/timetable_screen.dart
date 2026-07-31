@@ -10,7 +10,7 @@ import 'dart:math' as math;
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:event_countdown/db/database_helper.dart';
+import 'package:event_countdown/database_helper.dart';
 import 'package:event_countdown/models/daily_goal.dart';
 import '../services/widget_service.dart';
 import 'main_screen.dart';
