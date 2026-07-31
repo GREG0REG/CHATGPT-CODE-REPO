@@ -1,15 +1,17 @@
 // FILE: lib/screens/home_screen.dart
-// COMPLETE REPLACEMENT — NEET-Focused Home Screen v2
+// COMPLETE REPLACEMENT — NEET-Focused Home Screen v3
 // FIXES:
-//  1. Reads NEET prefs and conditionally shows/hides countdown + filter chips
-//  2. Countdown banner redesigned: moved below AppBar, sleek card style
-//  3. Countdown uses theme-aware colors instead of hardcoded red
-//  4. Added subject count badges on filter chips
-//  5. Added 7-day study streak calendar strip
-//  6. Added daily study goal progress ring
-//  7. Added subject-wise time breakdown (computed from events)
-//  8. Enhanced empty state with rotating quotes
-//  9. Quick-add chips now pre-fill subject tag
+//  1. Fixed import path: event_card.dart is at lib/ root, not lib/widgets/
+//  2. Fixed ALL single-quote escaping in string literals
+//  3. Removed prefillSubject (AddEditEventScreen doesn't support it)
+//  4. Added share_plus import for quote sharing
+//  5. Added grade_calculator_screen.dart import
+// NEW FEATURES:
+//  1. Pomodoro Quick Start — 90-min NEET revision timer
+//  2. Daily NEET Quote Card — Shareable with dismiss/next buttons
+//  3. Last Session Summary — From SharedPreferences
+//  4. Grade Calculator Shortcut — Accessible from home screen
+//  5. Enhanced Countdown — Circular progress, compact, moved lower
 // PRESERVED: All original CRUD, recurrence, edit/delete, completion
 
 import 'dart:async';
@@ -18,6 +20,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:share_plus/share_plus.dart';
 import '../database_helper.dart';
 import '../models/event.dart';
 import '../services/notification_service.dart';
@@ -25,10 +28,11 @@ import '../services/recurrence_service.dart';
 import '../services/settings_service.dart';
 import 'package:event_countdown/services/widget_service.dart';
 import '../theme/app_themes.dart';
-import '../widgets/event_card.dart';
+import '../event_card.dart';
 import 'add_edit_event_screen.dart';
 import 'settings_screen.dart';
 import 'main_screen.dart';
+import 'grade_calculator_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -73,13 +77,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _quoteIndex = 0;
   Timer? _quoteTimer;
 
+  // Pomodoro timer state
+  bool _pomodoroActive = false;
+  int _pomodoroSeconds = 0;
+  Timer? _pomodoroTimer;
+  final int _pomodoroTargetMinutes = 90;
+
+  // Last session summary
+  Map<String, dynamic> _lastSession = {'date': '', 'minutes': 0, 'subject': ''};
+
+  // Daily quote share
+  bool _showQuoteCard = true;
+
   final _neetQuotes = const [
     'Every MCQ you solve brings you closer to AIIMS.',
     'Physics today, doctor tomorrow.',
     'Chemistry is the bridge to your medical dream.',
-    'Biology is not just a subject, it's your future.',
+    "Biology is not just a subject, it's your future.",
     'Stethoscope dreams start with desk lamp hours.',
-    'One correct answer at a time. That's the NEET way.',
+    "One correct answer at a time. That's the NEET way.",
     'The white coat is earned, not given.',
     'Your competition is sleeping. Are you?',
   ];
@@ -88,6 +104,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _loadAll();
+    _loadLastSession();
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 60),
       (_) { if (mounted) setState(() {}); },
@@ -106,6 +123,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     _refreshTimer?.cancel();
     _quoteTimer?.cancel();
+    _pomodoroTimer?.cancel();
     super.dispose();
   }
 
@@ -232,7 +250,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _openAddEdit({Event? existing, String? prefillSubject}) async {
+  Future<void> _openAddEdit({Event? existing}) async {
     Event? eventToEdit = existing;
     if (existing != null && existing.id != null && existing.id! < 0) {
       final parentId = -existing.id!;
@@ -274,7 +292,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       MaterialPageRoute(
         builder: (_) => AddEditEventScreen(
           existing: eventToEdit,
-          prefillSubject: prefillSubject,
         ),
       ),
     );
@@ -424,7 +441,75 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return counts;
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // POMODORO TIMER METHODS
+  // ═══════════════════════════════════════════════════════════════
+  void _startPomodoro() {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _pomodoroActive = true;
+      _pomodoroSeconds = _pomodoroTargetMinutes * 60;
+    });
+    _pomodoroTimer?.cancel();
+    _pomodoroTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        if (_pomodoroSeconds > 0) {
+          _pomodoroSeconds--;
+        } else {
+          _pomodoroActive = false;
+          _pomodoroTimer?.cancel();
+          _saveSessionToPrefs();
+        }
+      });
+    });
+  }
 
+  void _pausePomodoro() {
+    HapticFeedback.lightImpact();
+    _pomodoroTimer?.cancel();
+    setState(() => _pomodoroActive = false);
+  }
+
+  void _resetPomodoro() {
+    HapticFeedback.lightImpact();
+    _pomodoroTimer?.cancel();
+    setState(() {
+      _pomodoroActive = false;
+      _pomodoroSeconds = 0;
+    });
+  }
+
+  Future<void> _saveSessionToPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+    await prefs.setString('last_session_date', now.toIso8601String());
+    await prefs.setInt('last_session_minutes', _pomodoroTargetMinutes);
+    await prefs.setString('last_session_subject', _activeFilter);
+  }
+
+  Future<void> _loadLastSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final dateStr = prefs.getString('last_session_date') ?? '';
+    final mins = prefs.getInt('last_session_minutes') ?? 0;
+    final subj = prefs.getString('last_session_subject') ?? 'General';
+    if (mounted) {
+      setState(() {
+        _lastSession = {'date': dateStr, 'minutes': mins, 'subject': subj};
+      });
+    }
+  }
+
+  void _shareQuote() {
+    final quote = _neetQuotes[_quoteIndex];
+    Share.share('$quote \n\n— NEET StudyFlow');
+  }
+
+  void _navigateToGradeCalculator() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const GradeCalculatorScreen()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -450,6 +535,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         actions: [
+          // Grade Calculator quick access
+          if (_neetModeEnabled)
+            IconButton(
+              icon: const Icon(Icons.calculate_outlined),
+              tooltip: 'Grade Calculator',
+              onPressed: _navigateToGradeCalculator,
+            ),
           // Streak indicator
           if (_streak > 0)
             Container(
@@ -496,7 +588,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               child: CustomScrollView(
                 slivers: [
                   // ═══════════════════════════════════════════════════════
-                  // NEET COUNTDOWN BANNER (conditionally shown, redesigned)
+                  // DAILY NEET QUOTE CARD WITH SHARE
+                  // ═══════════════════════════════════════════════════════
+                  if (_neetModeEnabled && _showQuoteCard)
+                    SliverToBoxAdapter(
+                      child: _buildDailyQuoteCard(cs),
+                    ),
+
+                  // ═══════════════════════════════════════════════════════
+                  // POMODORO QUICK START (90-min NEET revision timer)
+                  // ═══════════════════════════════════════════════════════
+                  if (_neetModeEnabled)
+                    SliverToBoxAdapter(
+                      child: _buildPomodoroCard(cs),
+                    ),
+
+                  // ═══════════════════════════════════════════════════════
+                  // NEET COUNTDOWN BANNER (compact, with circular progress)
                   // ═══════════════════════════════════════════════════════
                   if (_neetModeEnabled && _showCountdownBanner)
                     SliverToBoxAdapter(
@@ -517,6 +625,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   if (_neetModeEnabled && _showSubjectBreakdown)
                     SliverToBoxAdapter(
                       child: _buildSubjectBreakdown(cs, subjectTimes),
+                    ),
+
+                  // ═══════════════════════════════════════════════════════
+                  // LAST SESSION SUMMARY (from SharedPreferences)
+                  // ═══════════════════════════════════════════════════════
+                  if (_neetModeEnabled && _lastSession['minutes'] > 0)
+                    SliverToBoxAdapter(
+                      child: _buildLastSessionCard(cs),
+                    ),
+
+                  // ═══════════════════════════════════════════════════════
+                  // GRADE CALCULATOR QUICK ACCESS
+                  // ═══════════════════════════════════════════════════════
+                  if (_neetModeEnabled)
+                    SliverToBoxAdapter(
+                      child: _buildGradeCalculatorShortcut(cs),
                     ),
 
                   // ═══════════════════════════════════════════════════════
@@ -616,6 +740,421 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // DAILY NEET QUOTE CARD — Motivational quote with share button
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildDailyQuoteCard(ColorScheme cs) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            cs.primaryContainer.withOpacity(0.4),
+            cs.secondaryContainer.withOpacity(0.25),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.primary.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.format_quote, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Daily NEET Motivation',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: Icon(Icons.share, size: 18, color: cs.primary),
+                onPressed: _shareQuote,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: 'Share quote',
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: Icon(Icons.close, size: 18, color: cs.onSurfaceVariant),
+                onPressed: () => setState(() => _showQuoteCard = false),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: 'Dismiss',
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            child: Text(
+              _neetQuotes[_quoteIndex],
+              key: ValueKey<int>(_quoteIndex),
+              style: TextStyle(
+                fontSize: 14,
+                fontStyle: FontStyle.italic,
+                color: cs.onSurface.withOpacity(0.8),
+                height: 1.6,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 6,
+                  children: List.generate(_neetQuotes.length, (i) {
+                    return Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: i == _quoteIndex
+                            ? cs.primary
+                            : cs.onSurfaceVariant.withOpacity(0.2),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  setState(() => _quoteIndex = (_quoteIndex + 1) % _neetQuotes.length);
+                },
+                icon: Icon(Icons.refresh, size: 14, color: cs.primary),
+                label: Text(
+                  'Next',
+                  style: TextStyle(fontSize: 12, color: cs.primary),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // POMODORO QUICK START — 90-minute NEET revision timer
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildPomodoroCard(ColorScheme cs) {
+    final progress = _pomodoroActive
+        ? (_pomodoroTargetMinutes * 60 - _pomodoroSeconds) / (_pomodoroTargetMinutes * 60)
+        : 0.0;
+    final minutes = _pomodoroSeconds ~/ 60;
+    final seconds = _pomodoroSeconds % 60;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _pomodoroActive
+            ? cs.primaryContainer.withOpacity(0.4)
+            : cs.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: _pomodoroActive
+              ? cs.primary.withOpacity(0.4)
+              : cs.outlineVariant.withOpacity(0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                _pomodoroActive ? Icons.timer : Icons.timer_outlined,
+                size: 18,
+                color: _pomodoroActive ? cs.primary : cs.onSurface,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _pomodoroActive ? 'NEET Revision Timer' : 'Quick Pomodoro',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
+                ),
+              ),
+              const Spacer(),
+              if (_pomodoroActive)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: cs.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: cs.primary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'LIVE',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: cs.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              SizedBox(
+                width: 64,
+                height: 64,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CircularProgressIndicator(
+                      value: progress,
+                      strokeWidth: 5,
+                      backgroundColor: cs.surfaceContainerHighest,
+                      valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
+                    ),
+                    Center(
+                      child: Icon(
+                        _pomodoroActive ? Icons.pause : Icons.play_arrow,
+                        color: cs.primary,
+                        size: 28,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _pomodoroActive
+                          ? '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}'
+                          : '90 min session',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _pomodoroActive
+                          ? 'Focus on your ${_activeFilter == 'All' ? 'NEET' : _activeFilter} prep'
+                          : 'Tap start for focused NEET revision',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _pomodoroActive ? _pausePomodoro : _startPomodoro,
+                  icon: Icon(_pomodoroActive ? Icons.pause : Icons.play_arrow, size: 16),
+                  label: Text(_pomodoroActive ? 'Pause' : 'Start 90-min Timer'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              if (_pomodoroActive) ...[
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _resetPomodoro,
+                  icon: const Icon(Icons.stop, size: 16),
+                  label: const Text('Stop'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // NEET COUNTDOWN CARD — Compact with circular progress, lower position
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildNeetCountdownCard(ColorScheme cs) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final exam = DateTime(_neetExamDate.year, _neetExamDate.month, _neetExamDate.day);
+    final diff = exam.difference(today);
+    final days = diff.inDays;
+    final totalDays = 365;
+    final progress = days > totalDays ? 0.0 : (totalDays - days) / totalDays;
+
+    final primary = cs.primary;
+    final isUrgent = days <= 30;
+    final cardColor = isUrgent
+        ? Color.lerp(cs.errorContainer, cs.surface, 0.7)!
+        : cs.primaryContainer.withOpacity(0.3);
+    final accentColor = isUrgent ? cs.error : primary;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            cardColor,
+            cs.surfaceContainerHighest.withOpacity(0.3),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: accentColor.withOpacity(0.2),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () async {
+              await Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+              await _loadAll();
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  // Circular progress
+                  SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        CircularProgressIndicator(
+                          value: progress.clamp(0.0, 1.0),
+                          strokeWidth: 4,
+                          backgroundColor: cs.surfaceContainerHighest,
+                          valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                        ),
+                        Center(
+                          child: Text(
+                            '$days',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: accentColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: accentColor.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'NEET EXAM',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: accentColor,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          days >= 0
+                              ? '$days days until your exam'
+                              : '${-days} days since exam',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${diff.inHours % 24}h ${diff.inMinutes % 60}m remaining',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.edit_calendar,
+                    size: 18,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   // ═══════════════════════════════════════════════════════════════
   // TODAY'S ATTENDANCE DASHBOARD — Quick glance at class attendance
@@ -903,205 +1442,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // NEET COUNTDOWN CARD — Redesigned, below AppBar, theme-aware
-  // ═══════════════════════════════════════════════════════════════  // ═══════════════════════════════════════════════════════════════
-  // NEET COUNTDOWN CARD — Redesigned, below AppBar, theme-aware
-  // ═══════════════════════════════════════════════════════════════
-  Widget _buildNeetCountdownCard(ColorScheme cs) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final exam = DateTime(_neetExamDate.year, _neetExamDate.month, _neetExamDate.day);
-    final diff = exam.difference(today);
-    final days = diff.inDays;
-
-    final primary = cs.primary;
-    final isUrgent = days <= 30;
-    final cardColor = isUrgent
-        ? Color.lerp(cs.errorContainer, cs.surface, 0.7)!
-        : cs.primaryContainer.withOpacity(0.3);
-    final accentColor = isUrgent ? cs.error : primary;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            cardColor,
-            cs.surfaceContainerHighest.withOpacity(0.3),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: accentColor.withOpacity(0.2),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: accentColor.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () async {
-              await Navigator.of(context)
-                  .push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
-              await _loadAll();
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: accentColor.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'NEET EXAM',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: accentColor,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.edit_calendar, size: 12, color: cs.onSurfaceVariant),
-                            const SizedBox(width: 4),
-                            Text(
-                              'EDIT',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Icon(
-                        Icons.calendar_month,
-                        size: 40,
-                        color: accentColor.withOpacity(0.8),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (days > 0)
-                              RichText(
-                                text: TextSpan(
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w800,
-                                    color: cs.onSurface,
-                                    height: 1.1,
-                                  ),
-                                  children: [
-                                    TextSpan(text: '$days'),
-                                    TextSpan(
-                                      text: 'd ',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: cs.onSurfaceVariant,
-                                      ),
-                                    ),
-                                    TextSpan(text: '${diff.inHours % 24}'),
-                                    TextSpan(
-                                      text: 'h ',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: cs.onSurfaceVariant,
-                                      ),
-                                    ),
-                                    TextSpan(text: '${diff.inMinutes % 60}'),
-                                    TextSpan(
-                                      text: 'm',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: cs.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            else
-                              Text(
-                                days == 0 ? 'Today!' : 'Exam passed',
-                                style: TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w800,
-                                  color: accentColor,
-                                ),
-                              ),
-                            const SizedBox(height: 4),
-                            Text(
-                              days >= 0
-                                  ? '$days days until your exam'
-                                  : '${-days} days since exam',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  // Progress bar to exam
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: days > 365 ? 0.05 : (365 - days) / 365,
-                      minHeight: 4,
-                      backgroundColor: cs.surfaceContainerHighest,
-                      valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════
   // STUDY PROGRESS + STREAK CALENDAR
   // ═══════════════════════════════════════════════════════════════
   Widget _buildStudyProgressSection(ColorScheme cs, int todayMins, List<_DayStreak> streak) {
@@ -1155,7 +1495,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Today's Study Goal',
+                      "Today's Study Goal",
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -1256,7 +1596,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Today's Subject Split',
+            "Today's Subject Split",
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -1319,6 +1659,153 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // LAST SESSION SUMMARY — Yesterday's study stats from SharedPreferences
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildLastSessionCard(ColorScheme cs) {
+    final dateStr = _lastSession['date'] as String;
+    final mins = _lastSession['minutes'] as int;
+    final subj = _lastSession['subject'] as String;
+    final date = dateStr.isNotEmpty ? DateTime.tryParse(dateStr) : null;
+    final dateLabel = date != null
+        ? '${date.day}/${date.month}/${date.year}'
+        : 'Recently';
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.tertiaryContainer.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.tertiary.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: cs.tertiary.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.history,
+              color: cs.tertiary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Last Session',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$dateLabel \u2022 ${mins ~/ 60}h ${mins % 60}m \u2022 $subj',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.arrow_forward_ios, size: 14, color: cs.tertiary),
+            onPressed: () {},
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // GRADE CALCULATOR SHORTCUT — Quick access from home screen
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildGradeCalculatorShortcut(ColorScheme cs) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Material(
+        color: cs.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: _navigateToGradeCalculator,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        cs.primary.withOpacity(0.2),
+                        cs.secondary.withOpacity(0.15),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.calculate_outlined,
+                    color: cs.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Grade Calculator',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Calculate NEET scores, percentiles & predicted rank',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 14,
+                  color: cs.primary,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1428,8 +1915,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
             const SizedBox(height: 8),
             Text(
-              'Start your NEET preparation journey.
-Tap below to add your first milestone.',
+              "Start your NEET preparation journey.\nTap below to add your first milestone.",
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: cs.outline,
@@ -1498,15 +1984,15 @@ Tap below to add your first milestone.',
               ),
             ),
             const SizedBox(height: 24),
-            // Quick-add NEET events with prefill
+            // Quick-add NEET events
             Wrap(
               spacing: 8,
               runSpacing: 8,
               alignment: WrapAlignment.center,
               children: [
-                _buildQuickAddChip('Physics Test', Icons.science, const Color(0xFF1565C0), 'Physics'),
-                _buildQuickAddChip('Chemistry Test', Icons.biotech, const Color(0xFF2E7D32), 'Chemistry'),
-                _buildQuickAddChip('Biology Test', Icons.eco, const Color(0xFFC62828), 'Biology'),
+                _buildQuickAddChip('Physics Test', Icons.science, const Color(0xFF1565C0)),
+                _buildQuickAddChip('Chemistry Test', Icons.biotech, const Color(0xFF2E7D32)),
+                _buildQuickAddChip('Biology Test', Icons.eco, const Color(0xFFC62828)),
               ],
             ),
           ],
@@ -1515,7 +2001,7 @@ Tap below to add your first milestone.',
     );
   }
 
-  Widget _buildQuickAddChip(String label, IconData icon, Color color, String subject) {
+  Widget _buildQuickAddChip(String label, IconData icon, Color color) {
     return ActionChip(
       avatar: Icon(icon, size: 16, color: color),
       label: Text(
@@ -1528,7 +2014,7 @@ Tap below to add your first milestone.',
       ),
       backgroundColor: color.withOpacity(0.08),
       side: BorderSide(color: color.withOpacity(0.2)),
-      onPressed: () => _openAddEdit(prefillSubject: subject),
+      onPressed: () => _openAddEdit(),
     );
   }
 }
