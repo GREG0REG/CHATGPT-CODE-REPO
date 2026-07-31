@@ -1,9 +1,11 @@
 // FILE: lib/screens/timetable_screen.dart
-// COMPLETE REPLACEMENT — Smart Timetable with vertical timeline, conflict detection, study suggestions
-// FIXED: math.max type errors (40.0, 36.0), all-day tasks display, week view toggle, conflict overlap highlighting
-// NEET-ENHANCED: 5 AM – 12 AM timeline, longer study blocks, PCB subject hints
+// COMPLETE REPLACEMENT — NEET Aspirant Ultimate Timetable v2.0
+// 5 NEW FEATURES: Revision Tracker, Pomodoro Timer, Subject Balance Meter,
+//                 Streak Heatmap, Smart Subject Rotation Suggestions
+// ZERO database changes — uses only existing tables
 
 import 'dart:math' as math;
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:event_countdown/database_helper.dart';
@@ -19,25 +21,42 @@ class TimetableScreen extends StatefulWidget {
 
 class _TimetableScreenState extends State<TimetableScreen> {
   bool _loading = true;
-  int _selectedDay = DateTime.now().weekday - 1; // 0=Mon
+  int _selectedDay = DateTime.now().weekday - 1;
   final List<String> _dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   List<Map<String, dynamic>> _classes = [];
   List<Map<String, dynamic>> _tasks = [];
   bool _weekView = false;
 
-  // Timeline constants — NEET aspirant schedule: 5 AM to 12 AM
+  // -- NEW: Pomodoro timer state --
+  Timer? _pomodoroTimer;
+  int _pomodoroSecondsLeft = 0;
+  bool _isPomodoroRunning = false;
+  String? _activePomodoroSubject;
+  int _pomodoroTotalMinutes = 25;
+
+  // Timeline constants: 5 AM to 12 AM (NEET schedule)
   static const int _timelineStartHour = 5;
   static const int _timelineEndHour = 24;
-  static const int _timelineStartMinutes = _timelineStartHour * 60; // 300
-  static const int _timelineEndMinutes = _timelineEndHour * 60;     // 1440
-  static const int _totalTimelineMinutes = _timelineEndMinutes - _timelineStartMinutes; // 1140
-  static const double _hourHeight = 64.0; // pixels per hour
-  static const double _timelineWidth = 60.0; // width of time labels column
+  static const int _timelineStartMinutes = _timelineStartHour * 60;
+  static const int _timelineEndMinutes = _timelineEndHour * 60;
+  static const int _totalTimelineMinutes = _timelineEndMinutes - _timelineStartMinutes;
+  static const double _hourHeight = 64.0;
+  static const double _timelineWidth = 60.0;
+
+  // NEET constants
+  static const List<String> _pcbSubjects = ['Physics', 'Chemistry', 'Biology', 'Zoology', 'Botany'];
+  static const int _minWeeklyHoursPerSubject = 6;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _pomodoroTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -52,10 +71,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
   Future<void> _loadClasses() async {
     final db = await DatabaseHelper.instance.database;
-    final rows = await db.query(
-      'timetable_classes',
-      orderBy: 'startTimeMinutes ASC',
-    );
+    final rows = await db.query('timetable_classes', orderBy: 'startTimeMinutes ASC');
     setState(() => _classes = rows);
   }
 
@@ -73,17 +89,236 @@ class _TimetableScreenState extends State<TimetableScreen> {
     setState(() => _tasks = rows);
   }
 
-  // ============================================
-  // ADD CLASS
-  // ============================================
+  // ============================================================================
+  // FEATURE 1: REVISION CYCLE TRACKER
+  // ============================================================================
+  Map<String, int> _getTodayRevisionCount() {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final todayEnd = todayStart + const Duration(days: 1).inMilliseconds;
+    final Map<String, int> revisionCount = {};
+    for (final s in _pcbSubjects) revisionCount[s] = 0;
+
+    for (final task in _tasks) {
+      final due = task['dueDateMillis'] as int?;
+      final type = task['taskType'] as String?;
+      final subject = task['subjectName'] as String?;
+      if (due != null && due >= todayStart && due < todayEnd &&
+          type == 'study_block' && subject != null) {
+        for (final pcb in _pcbSubjects) {
+          if (subject.toLowerCase().contains(pcb.toLowerCase())) {
+            revisionCount[pcb] = (revisionCount[pcb] ?? 0) + 1;
+          }
+        }
+      }
+    }
+    return revisionCount;
+  }
+
+  Color _revisionStatusColor(int count) {
+    if (count >= 3) return Colors.green;
+    if (count >= 1) return Colors.orange;
+    return Colors.red;
+  }
+
+  String _revisionStatusLabel(int count) {
+    if (count >= 3) return 'On Track';
+    if (count >= 1) return 'Needs More';
+    return 'Not Started';
+  }
+
+  // ============================================================================
+  // FEATURE 2: POMODORO TIMER
+  // ============================================================================
+  void _startPomodoro(String subject, {int minutes = 25}) {
+    setState(() {
+      _isPomodoroRunning = true;
+      _pomodoroTotalMinutes = minutes;
+      _pomodoroSecondsLeft = minutes * 60;
+      _activePomodoroSubject = subject;
+    });
+    _pomodoroTimer?.cancel();
+    _pomodoroTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) { timer.cancel(); return; }
+      setState(() {
+        if (_pomodoroSecondsLeft > 0) {
+          _pomodoroSecondsLeft--;
+        } else {
+          _onPomodoroComplete();
+        }
+      });
+    });
+  }
+
+  void _pausePomodoro() {
+    _pomodoroTimer?.cancel();
+    setState(() => _isPomodoroRunning = false);
+  }
+
+  void _cancelPomodoro() {
+    _pomodoroTimer?.cancel();
+    setState(() {
+      _isPomodoroRunning = false;
+      _pomodoroSecondsLeft = 0;
+      _activePomodoroSubject = null;
+    });
+  }
+
+  Future<void> _onPomodoroComplete() async {
+    _pomodoroTimer?.cancel();
+    HapticFeedback.heavyImpact();
+    final subject = _activePomodoroSubject ?? 'General';
+    final minutes = _pomodoroTotalMinutes;
+
+    final db = await DatabaseHelper.instance.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert('study_sessions', {
+      'eventId': null,
+      'subjectTag': subject,
+      'durationMinutes': minutes,
+      'completedAtMillis': now,
+      'sessionType': 'pomodoro',
+      'notes': 'Pomodoro from timetable',
+      'distractionCount': 0,
+      'intensityRating': 3,
+      'topicTag': subject,
+    });
+
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day).millisecondsSinceEpoch;
+    final goal = await DatabaseHelper.instance.getDailyGoalForDate(todayStart);
+    if (goal != null) {
+      await DatabaseHelper.instance.addAchievedMinutes(todayStart, minutes);
+      await DatabaseHelper.instance.addAchievedPomodoro(todayStart);
+    } else {
+      await DatabaseHelper.instance.insertOrUpdateDailyGoal(
+        DailyGoal(dateMillis: todayStart, achievedMinutes: minutes, achievedPomodoros: 1),
+      );
+    }
+
+    setState(() {
+      _isPomodoroRunning = false;
+      _pomodoroSecondsLeft = 0;
+      _activePomodoroSubject = null;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Pomodoro complete! $minutes min of $subject logged.'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
+  String _formatPomodoroTime(int totalSeconds) {
+    final m = totalSeconds ~/ 60;
+    final s = totalSeconds % 60;
+    return '${m.toString().padLeft(2, "0")}:${s.toString().padLeft(2, "0")}';
+  }
+
+  // ============================================================================
+  // FEATURE 3: SUBJECT BALANCE METER
+  // ============================================================================
+  Future<Map<String, double>> _getWeeklySubjectHours() async {
+    final now = DateTime.now();
+    final weekStart = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday - 1)).millisecondsSinceEpoch;
+    final weekEnd = weekStart + const Duration(days: 7).inMilliseconds;
+    final db = await DatabaseHelper.instance.database;
+
+    final Map<String, double> subjectHours = {};
+    for (final s in _pcbSubjects) subjectHours[s] = 0;
+
+    final classRows = await db.query('timetable_classes');
+    for (final c in classRows) {
+      final subject = c['subjectName'] as String? ?? '';
+      final start = (c['startTimeMinutes'] as int?) ?? 0;
+      final end = (c['endTimeMinutes'] as int?) ?? 0;
+      final duration = (end - start) / 60.0;
+      for (final pcb in _pcbSubjects) {
+        if (subject.toLowerCase().contains(pcb.toLowerCase())) {
+          subjectHours[pcb] = (subjectHours[pcb] ?? 0) + duration;
+        }
+      }
+    }
+
+    final sessionRows = await db.rawQuery(
+      "SELECT subjectTag, SUM(durationMinutes) as total FROM study_sessions"
+      " WHERE completedAtMillis >= ? AND completedAtMillis < ? GROUP BY subjectTag",
+      [weekStart, weekEnd]);
+    for (final row in sessionRows) {
+      final subject = (row['subjectTag'] as String?) ?? '';
+      final minutes = (row['total'] as int?) ?? 0;
+      for (final pcb in _pcbSubjects) {
+        if (subject.toLowerCase().contains(pcb.toLowerCase())) {
+          subjectHours[pcb] = (subjectHours[pcb] ?? 0) + (minutes / 60.0);
+        }
+      }
+    }
+    return subjectHours;
+  }
+
+  // ============================================================================
+  // FEATURE 4: STREAK HEATMAP
+  // ============================================================================
+  Future<Map<int, int>> _getWeeklyStudyMinutes() async {
+    final now = DateTime.now();
+    final weekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+    final db = await DatabaseHelper.instance.database;
+    final Map<int, int> dayMinutes = {};
+
+    for (int i = 0; i < 7; i++) {
+      final dayStart = weekStart.add(Duration(days: i));
+      final startMillis = DateTime(dayStart.year, dayStart.month, dayStart.day).millisecondsSinceEpoch;
+      final endMillis = startMillis + const Duration(days: 1).inMilliseconds;
+      final result = await db.rawQuery(
+        "SELECT COALESCE(SUM(durationMinutes), 0) as total FROM study_sessions"
+        " WHERE completedAtMillis >= ? AND completedAtMillis < ?",
+        [startMillis, endMillis]);
+      dayMinutes[i] = (result.first['total'] as int?) ?? 0;
+    }
+    return dayMinutes;
+  }
+
+  Color _heatmapColor(int minutes) {
+    if (minutes >= 300) return Colors.green;
+    if (minutes >= 180) return Colors.lightGreen;
+    if (minutes >= 60) return Colors.yellow;
+    if (minutes > 0) return Colors.orange;
+    return Colors.grey.shade300;
+  }
+
+  // ============================================================================
+  // FEATURE 5: SMART SUBJECT ROTATION
+  // ============================================================================
+  Future<String?> _getWeakestSubject() async {
+    final weeklyHours = await _getWeeklySubjectHours();
+    String? weakest;
+    double minHours = double.infinity;
+    for (final entry in weeklyHours.entries) {
+      if (entry.value < minHours) {
+        minHours = entry.value;
+        weakest = entry.key;
+      }
+    }
+    return (minHours < _minWeeklyHoursPerSubject) ? weakest : null;
+  }
+
+  // ============================================================================
+  // ADD CLASS (with NEET quick-subject chips)
+  // ============================================================================
   Future<void> _addClass() async {
     final nameController = TextEditingController();
     final roomController = TextEditingController();
     final profController = TextEditingController();
     final noteController = TextEditingController();
     String classType = 'lecture';
-    int startMinutes = 540; // 9:00 AM
-    int endMinutes = 600;   // 10:00 AM
+    int startMinutes = 540;
+    int endMinutes = 600;
     int dayOfWeek = _selectedDay + 1;
     bool isRecurring = true;
     DateTime? startDate;
@@ -112,22 +347,30 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       prefixIcon: Icon(Icons.book),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  // -- NEW: Quick NEET subject chips --
+                  Wrap(
+                    spacing: 6,
+                    children: _pcbSubjects.map((s) => ActionChip(
+                      label: Text(s, style: const TextStyle(fontSize: 11)),
+                      onPressed: () => nameController.text = s,
+                      backgroundColor: Colors.green.withOpacity(0.1),
+                      side: BorderSide(color: Colors.green.withOpacity(0.3)),
+                    )).toList(),
+                  ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: classType,
                     decoration: const InputDecoration(
-                      labelText: 'Class Type',
-                      prefixIcon: Icon(Icons.category),
+                      labelText: 'Class Type', prefixIcon: Icon(Icons.category),
                     ),
                     items: List.generate(types.length, (i) => DropdownMenuItem(
                       value: types[i],
-                      child: Row(
-                        children: [
-                          Icon(Icons.circle, color: typeColors[i], size: 12),
-                          const SizedBox(width: 8),
-                          Text(typeLabels[i]),
-                        ],
-                      ),
+                      child: Row(children: [
+                        Icon(Icons.circle, color: typeColors[i], size: 12),
+                        const SizedBox(width: 8),
+                        Text(typeLabels[i]),
+                      ]),
                     )),
                     onChanged: (v) => setDialogState(() => classType = v!),
                   ),
@@ -135,72 +378,60 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   DropdownButtonFormField<int>(
                     value: dayOfWeek,
                     decoration: const InputDecoration(
-                      labelText: 'Day',
-                      prefixIcon: Icon(Icons.calendar_today),
+                      labelText: 'Day', prefixIcon: Icon(Icons.calendar_today),
                     ),
                     items: List.generate(7, (i) => DropdownMenuItem(
-                      value: i + 1,
-                      child: Text(_dayNames[i]),
+                      value: i + 1, child: Text(_dayNames[i]),
                     )),
                     onChanged: (v) => setDialogState(() => dayOfWeek = v!),
                   ),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Start Time', style: TextStyle(fontSize: 12)),
-                          subtitle: Text(_formatMinutes(startMinutes), style: const TextStyle(fontWeight: FontWeight.bold)),
-                          trailing: const Icon(Icons.access_time, size: 20),
-                          onTap: () async {
-                            final time = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay(hour: startMinutes ~/ 60, minute: startMinutes % 60),
-                            );
-                            if (time != null) {
-                              setDialogState(() => startMinutes = time.hour * 60 + time.minute);
-                              if (endMinutes <= startMinutes) {
-                                setDialogState(() => endMinutes = startMinutes + 60);
-                              }
+                  Row(children: [
+                    Expanded(
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Start Time', style: TextStyle(fontSize: 12)),
+                        subtitle: Text(_formatMinutes(startMinutes), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        trailing: const Icon(Icons.access_time, size: 20),
+                        onTap: () async {
+                          final time = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay(hour: startMinutes ~/ 60, minute: startMinutes % 60),
+                          );
+                          if (time != null) {
+                            setDialogState(() => startMinutes = time.hour * 60 + time.minute);
+                            if (endMinutes <= startMinutes) {
+                              setDialogState(() => endMinutes = startMinutes + 60);
                             }
-                          },
-                        ),
+                          }
+                        },
                       ),
-                      Expanded(
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('End Time', style: TextStyle(fontSize: 12)),
-                          subtitle: Text(_formatMinutes(endMinutes), style: const TextStyle(fontWeight: FontWeight.bold)),
-                          trailing: const Icon(Icons.access_time, size: 20),
-                          onTap: () async {
-                            final time = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay(hour: endMinutes ~/ 60, minute: endMinutes % 60),
-                            );
-                            if (time != null) {
-                              setDialogState(() => endMinutes = time.hour * 60 + time.minute);
-                            }
-                          },
-                        ),
+                    ),
+                    Expanded(
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('End Time', style: TextStyle(fontSize: 12)),
+                        subtitle: Text(_formatMinutes(endMinutes), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        trailing: const Icon(Icons.access_time, size: 20),
+                        onTap: () async {
+                          final time = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay(hour: endMinutes ~/ 60, minute: endMinutes % 60),
+                          );
+                          if (time != null) setDialogState(() => endMinutes = time.hour * 60 + time.minute);
+                        },
                       ),
-                    ],
-                  ),
+                    ),
+                  ]),
                   const SizedBox(height: 8),
                   TextField(
                     controller: roomController,
-                    decoration: const InputDecoration(
-                      labelText: 'Room / Location',
-                      prefixIcon: Icon(Icons.place),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Room / Location', prefixIcon: Icon(Icons.place)),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: profController,
-                    decoration: const InputDecoration(
-                      labelText: 'Professor',
-                      prefixIcon: Icon(Icons.person),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Professor', prefixIcon: Icon(Icons.person)),
                   ),
                   const SizedBox(height: 12),
                   SwitchListTile(
@@ -215,36 +446,20 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Start Date', style: TextStyle(fontSize: 12)),
-                      subtitle: Text(
-                        startDate != null ? '${startDate!.day}/${startDate!.month}/${startDate!.year}' : 'Not set',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      subtitle: Text(startDate != null ? '${startDate!.day}/${startDate!.month}/${startDate!.year}' : 'Not set', style: const TextStyle(fontWeight: FontWeight.bold)),
                       trailing: const Icon(Icons.date_range, size: 20),
                       onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: DateTime.now(),
-                          firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                          lastDate: DateTime.now().add(const Duration(days: 365)),
-                        );
+                        final picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime.now().subtract(const Duration(days: 365)), lastDate: DateTime.now().add(const Duration(days: 365)));
                         if (picked != null) setDialogState(() => startDate = picked);
                       },
                     ),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('End Date', style: TextStyle(fontSize: 12)),
-                      subtitle: Text(
-                        endDate != null ? '${endDate!.day}/${endDate!.month}/${endDate!.year}' : 'Not set',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      subtitle: Text(endDate != null ? '${endDate!.day}/${endDate!.month}/${endDate!.year}' : 'Not set', style: const TextStyle(fontWeight: FontWeight.bold)),
                       trailing: const Icon(Icons.date_range, size: 20),
                       onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: DateTime.now().add(const Duration(days: 90)),
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime.now().add(const Duration(days: 730)),
-                        );
+                        final picked = await showDatePicker(context: context, initialDate: DateTime.now().add(const Duration(days: 90)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 730)));
                         if (picked != null) setDialogState(() => endDate = picked);
                       },
                     ),
@@ -252,10 +467,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   const SizedBox(height: 8),
                   TextField(
                     controller: noteController,
-                    decoration: const InputDecoration(
-                      labelText: 'Note (optional)',
-                      prefixIcon: Icon(Icons.notes),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Note (optional)', prefixIcon: Icon(Icons.notes)),
                     maxLines: 2,
                   ),
                 ],
@@ -266,15 +478,11 @@ class _TimetableScreenState extends State<TimetableScreen> {
               FilledButton(
                 onPressed: () {
                   if (nameController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('Subject name is required')),
-                    );
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Subject name is required')));
                     return;
                   }
                   if (endMinutes <= startMinutes) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('End time must be after start time')),
-                    );
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('End time must be after start time')));
                     return;
                   }
                   Navigator.pop(ctx, {
@@ -331,9 +539,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     }
   }
 
-  // ============================================
-  // ADD TASK
-  // ============================================
+  // ============================================================================
+  // ADD TASK (with NEET quick-subject chips)
+  // ============================================================================
   Future<void> _addTask() async {
     final titleController = TextEditingController();
     final subjectController = TextEditingController();
@@ -361,48 +569,41 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 children: [
                   TextField(
                     controller: titleController,
-                    decoration: const InputDecoration(
-                      labelText: 'Title *',
-                      prefixIcon: Icon(Icons.title),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Title *', prefixIcon: Icon(Icons.title)),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: taskType,
-                    decoration: const InputDecoration(
-                      labelText: 'Type',
-                      prefixIcon: Icon(Icons.category),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Type', prefixIcon: Icon(Icons.category)),
                     items: List.generate(types.length, (i) => DropdownMenuItem(
-                      value: types[i],
-                      child: Text(typeLabels[i]),
+                      value: types[i], child: Text(typeLabels[i]),
                     )),
                     onChanged: (v) => setDialogState(() => taskType = v!),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: subjectController,
-                    decoration: const InputDecoration(
-                      labelText: 'Subject (optional)',
-                      prefixIcon: Icon(Icons.book),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Subject (optional)', prefixIcon: Icon(Icons.book)),
+                  ),
+                  const SizedBox(height: 8),
+                  // -- NEW: Quick NEET subject chips --
+                  Wrap(
+                    spacing: 6,
+                    children: _pcbSubjects.map((s) => ActionChip(
+                      label: Text(s, style: const TextStyle(fontSize: 11)),
+                      onPressed: () => subjectController.text = s,
+                      backgroundColor: Colors.teal.withOpacity(0.1),
+                      side: BorderSide(color: Colors.teal.withOpacity(0.3)),
+                    )).toList(),
                   ),
                   const SizedBox(height: 12),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Due Date', style: TextStyle(fontSize: 12)),
-                    subtitle: Text(
-                      '${dueDate.day}/${dueDate.month}/${dueDate.year}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    subtitle: Text('${dueDate.day}/${dueDate.month}/${dueDate.year}', style: const TextStyle(fontWeight: FontWeight.bold)),
                     trailing: const Icon(Icons.calendar_today, size: 20),
                     onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: dueDate,
-                        firstDate: DateTime.now().subtract(const Duration(days: 1)),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
+                      final picked = await showDatePicker(context: context, initialDate: dueDate, firstDate: DateTime.now().subtract(const Duration(days: 1)), lastDate: DateTime.now().add(const Duration(days: 365)));
                       if (picked != null) setDialogState(() => dueDate = picked);
                     },
                   ),
@@ -414,54 +615,37 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     onChanged: (v) => setDialogState(() => hasTime = v),
                   ),
                   if (hasTime) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Start', style: TextStyle(fontSize: 12)),
-                            subtitle: Text(
-                              startTimeMinutes != null ? _formatMinutes(startTimeMinutes!) : 'Not set',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            trailing: const Icon(Icons.access_time, size: 20),
-                            onTap: () async {
-                              final time = await showTimePicker(
-                                context: context,
-                                initialTime: const TimeOfDay(hour: 9, minute: 0),
-                              );
-                              if (time != null) setDialogState(() => startTimeMinutes = time.hour * 60 + time.minute);
-                            },
-                          ),
+                    Row(children: [
+                      Expanded(
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Start', style: TextStyle(fontSize: 12)),
+                          subtitle: Text(startTimeMinutes != null ? _formatMinutes(startTimeMinutes!) : 'Not set', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          trailing: const Icon(Icons.access_time, size: 20),
+                          onTap: () async {
+                            final time = await showTimePicker(context: context, initialTime: const TimeOfDay(hour: 9, minute: 0));
+                            if (time != null) setDialogState(() => startTimeMinutes = time.hour * 60 + time.minute);
+                          },
                         ),
-                        Expanded(
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('End', style: TextStyle(fontSize: 12)),
-                            subtitle: Text(
-                              endTimeMinutes != null ? _formatMinutes(endTimeMinutes!) : 'Not set',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            trailing: const Icon(Icons.access_time, size: 20),
-                            onTap: () async {
-                              final time = await showTimePicker(
-                                context: context,
-                                initialTime: const TimeOfDay(hour: 10, minute: 0),
-                              );
-                              if (time != null) setDialogState(() => endTimeMinutes = time.hour * 60 + time.minute);
-                            },
-                          ),
+                      ),
+                      Expanded(
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('End', style: TextStyle(fontSize: 12)),
+                          subtitle: Text(endTimeMinutes != null ? _formatMinutes(endTimeMinutes!) : 'Not set', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          trailing: const Icon(Icons.access_time, size: 20),
+                          onTap: () async {
+                            final time = await showTimePicker(context: context, initialTime: const TimeOfDay(hour: 10, minute: 0));
+                            if (time != null) setDialogState(() => endTimeMinutes = time.hour * 60 + time.minute);
+                          },
                         ),
-                      ],
-                    ),
+                      ),
+                    ]),
                   ],
                   const SizedBox(height: 8),
                   TextField(
                     controller: noteController,
-                    decoration: const InputDecoration(
-                      labelText: 'Note (optional)',
-                      prefixIcon: Icon(Icons.notes),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Note (optional)', prefixIcon: Icon(Icons.notes)),
                     maxLines: 2,
                   ),
                 ],
@@ -472,15 +656,11 @@ class _TimetableScreenState extends State<TimetableScreen> {
               FilledButton(
                 onPressed: () {
                   if (titleController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('Title is required')),
-                    );
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Title is required')));
                     return;
                   }
                   if (hasTime && startTimeMinutes != null && endTimeMinutes != null && endTimeMinutes! <= startTimeMinutes!) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('End time must be after start time')),
-                    );
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('End time must be after start time')));
                     return;
                   }
                   Navigator.pop(ctx, {
@@ -526,23 +706,24 @@ class _TimetableScreenState extends State<TimetableScreen> {
     }
   }
 
-  // ============================================
-  // SUGGEST STUDY BLOCK
-  // ============================================
+  // ============================================================================
+  // SUGGEST STUDY BLOCK — ENHANCED with Smart Subject Rotation
+  // ============================================================================
   Future<void> _suggestStudyBlock() async {
     final freeSlots = _getFreeSlotsForDay(_selectedDay);
     if (freeSlots.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No free slots available today')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No free slots available today')));
       return;
     }
 
-    // Pick the longest free slot
     freeSlots.sort((a, b) => (b['duration'] as int).compareTo(a['duration'] as int));
     final bestSlot = freeSlots.first;
 
-    final subjectController = TextEditingController();
+    // -- NEW: Smart subject suggestion --
+    final weakestSubject = await _getWeakestSubject();
+    final suggestedSubject = weakestSubject ?? 'Physics';
+
+    final subjectController = TextEditingController(text: suggestedSubject);
     int durationMinutes = (bestSlot['duration'] as int).clamp(30, 120);
     int startMinutes = bestSlot['start'] as int;
 
@@ -560,6 +741,29 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // -- NEW: Smart suggestion banner --
+                  if (weakestSubject != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.lightbulb, color: Colors.orange.shade700, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'You are falling behind in $weakestSubject! Prioritize it.',
+                              style: TextStyle(fontSize: 12, color: Colors.orange.shade800, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -570,15 +774,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Best free slot found:',
-                          style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w600),
-                        ),
+                        Text('Best free slot found:', style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
-                        Text(
-                          '${_formatMinutes(bestSlot['start'] as int)} - ${_formatMinutes(bestSlot['end'] as int)} (${bestSlot['duration']} min)',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
+                        Text('${_formatMinutes(bestSlot['start'] as int)} - ${_formatMinutes(bestSlot['end'] as int)} (${bestSlot['duration']} min)', style: const TextStyle(fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
@@ -591,10 +789,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       hintText: 'e.g. Physics, Organic Chemistry',
                       suffixIcon: PopupMenuButton<String>(
                         icon: const Icon(Icons.arrow_drop_down),
-                        onSelected: (val) {
-                          subjectController.text = val;
-                          setDialogState(() {});
-                        },
+                        onSelected: (val) { subjectController.text = val; setDialogState(() {}); },
                         itemBuilder: (context) => neetSubjects.map((s) => PopupMenuItem(value: s, child: Text(s))).toList(),
                       ),
                     ),
@@ -602,13 +797,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   const SizedBox(height: 12),
                   DropdownButtonFormField<int>(
                     value: durationMinutes,
-                    decoration: const InputDecoration(
-                      labelText: 'Duration',
-                      prefixIcon: Icon(Icons.timer),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Duration', prefixIcon: Icon(Icons.timer)),
                     items: [30, 45, 60, 90, 120, 150, 180].map((m) => DropdownMenuItem(
-                      value: m,
-                      child: Text('$m minutes'),
+                      value: m, child: Text('$m minutes'),
                     )).toList(),
                     onChanged: (v) => setDialogState(() => durationMinutes = v!),
                   ),
@@ -634,23 +825,15 @@ class _TimetableScreenState extends State<TimetableScreen> {
               FilledButton(
                 onPressed: () {
                   if (subjectController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('Subject is required')),
-                    );
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Subject is required')));
                     return;
                   }
                   final endMin = startMinutes + durationMinutes;
                   if (endMin > _timelineEndMinutes) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('Study block extends beyond timeline')),
-                    );
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Study block extends beyond timeline')));
                     return;
                   }
-                  Navigator.pop(ctx, {
-                    'subject': subjectController.text.trim(),
-                    'start': startMinutes,
-                    'end': endMin,
-                  });
+                  Navigator.pop(ctx, {'subject': subjectController.text.trim(), 'start': startMinutes, 'end': endMin});
                 },
                 child: const Text('Add Study Block'),
               ),
@@ -679,15 +862,13 @@ class _TimetableScreenState extends State<TimetableScreen> {
       });
       HapticFeedback.mediumImpact();
       await _loadData();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Study block added!')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Study block added!')));
     }
   }
 
-  // ============================================
-  // DELETE
-  // ============================================
+  // ============================================================================
+  // DELETE / TOGGLE
+  // ============================================================================
   Future<void> _deleteClass(int id) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -697,11 +878,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
         content: const Text('This will permanently remove this class from your timetable.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), style: FilledButton.styleFrom(backgroundColor: Colors.red), child: const Text('Delete')),
         ],
       ),
     );
@@ -721,11 +898,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
         content: const Text('This will permanently remove this task.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), style: FilledButton.styleFrom(backgroundColor: Colors.red), child: const Text('Delete')),
         ],
       ),
     );
@@ -738,18 +911,13 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
   Future<void> _toggleTaskComplete(int id, bool current) async {
     final db = await DatabaseHelper.instance.database;
-    await db.update(
-      'timetable_tasks',
-      {'isCompleted': current ? 0 : 1},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.update('timetable_tasks', {'isCompleted': current ? 0 : 1}, where: 'id = ?', whereArgs: [id]);
     await _loadData();
   }
 
-  // ============================================
+  // ============================================================================
   // HELPERS
-  // ============================================
+  // ============================================================================
   String _formatMinutes(int minutes) {
     final h = minutes ~/ 60;
     final m = minutes % 60;
@@ -778,48 +946,30 @@ class _TimetableScreenState extends State<TimetableScreen> {
 
   Color _typeColor(String type) {
     final map = {
-      'lecture': Colors.blue,
-      'lab': Colors.green,
-      'tutorial': Colors.purple,
-      'seminar': Colors.teal,
-      'exam': Colors.red,
-      'quiz': Colors.orange,
-      'assignment': Colors.indigo,
-      'revision': Colors.amber,
-      'personal': Colors.pink,
-      'study_block': Colors.cyan,
+      'lecture': Colors.blue, 'lab': Colors.green, 'tutorial': Colors.purple,
+      'seminar': Colors.teal, 'exam': Colors.red, 'quiz': Colors.orange,
+      'assignment': Colors.indigo, 'revision': Colors.amber,
+      'personal': Colors.pink, 'study_block': Colors.cyan,
     };
     return map[type] ?? Colors.blue;
   }
 
   IconData _typeIcon(String type) {
     final map = {
-      'lecture': Icons.school,
-      'lab': Icons.science,
-      'tutorial': Icons.group,
-      'seminar': Icons.record_voice_over,
-      'exam': Icons.quiz,
-      'quiz': Icons.help,
-      'assignment': Icons.assignment,
-      'revision': Icons.menu_book,
-      'personal': Icons.person,
-      'study_block': Icons.timer,
+      'lecture': Icons.school, 'lab': Icons.science, 'tutorial': Icons.group,
+      'seminar': Icons.record_voice_over, 'exam': Icons.quiz, 'quiz': Icons.help,
+      'assignment': Icons.assignment, 'revision': Icons.menu_book,
+      'personal': Icons.person, 'study_block': Icons.timer,
     };
     return map[type] ?? Icons.event;
   }
 
   String _typeLabel(String type) {
     final map = {
-      'lecture': 'Lecture',
-      'lab': 'Lab',
-      'tutorial': 'Tutorial',
-      'seminar': 'Seminar',
-      'exam': 'Exam',
-      'quiz': 'Quiz',
-      'assignment': 'Assignment',
-      'revision': 'Revision',
-      'personal': 'Personal',
-      'study_block': 'Study Block',
+      'lecture': 'Lecture', 'lab': 'Lab', 'tutorial': 'Tutorial',
+      'seminar': 'Seminar', 'exam': 'Exam', 'quiz': 'Quiz',
+      'assignment': 'Assignment', 'revision': 'Revision',
+      'personal': 'Personal', 'study_block': 'Study Block',
     };
     return map[type] ?? type;
   }
@@ -829,7 +979,6 @@ class _TimetableScreenState extends State<TimetableScreen> {
       ..sort((a, b) => (a['startTimeMinutes'] as int).compareTo(b['startTimeMinutes'] as int));
   }
 
-  // FIXED: Now includes all-day tasks (isAllDay=1) even when startTimeMinutes is null
   List<Map<String, dynamic>> _getTasksForDay(int dayIndex) {
     final now = DateTime.now();
     final targetDate = DateTime(now.year, now.month, now.day).add(Duration(days: dayIndex - (now.weekday - 1)));
@@ -841,7 +990,6 @@ class _TimetableScreenState extends State<TimetableScreen> {
       if (due == null) return false;
       final isAllDay = (t['isAllDay'] as int? ?? 0) == 1;
       final hasTime = t['startTimeMinutes'] != null;
-      // Include if: due date matches AND (has time slot OR is all-day)
       return due >= startOfDay && due < endOfDay && (hasTime || isAllDay);
     }).toList()
       ..sort((a, b) {
@@ -875,18 +1023,10 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final tasks = _getTasksForDay(dayIndex).where((t) => t['startTimeMinutes'] != null).toList();
 
     for (final c in classes) {
-      dayItems.add({
-        'start': c['startTimeMinutes'] as int,
-        'end': c['endTimeMinutes'] as int,
-        'type': 'class',
-      });
+      dayItems.add({'start': c['startTimeMinutes'] as int, 'end': c['endTimeMinutes'] as int, 'type': 'class'});
     }
     for (final t in tasks) {
-      dayItems.add({
-        'start': t['startTimeMinutes'] as int,
-        'end': t['endTimeMinutes'] as int,
-        'type': 'task',
-      });
+      dayItems.add({'start': t['startTimeMinutes'] as int, 'end': t['endTimeMinutes'] as int, 'type': 'task'});
     }
 
     dayItems.sort((a, b) => (a['start'] as int).compareTo(b['start'] as int));
@@ -901,11 +1041,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
       if (itemStart > currentStart) {
         final duration = itemStart - currentStart;
         if (duration >= 30) {
-          freeSlots.add({
-            'start': currentStart,
-            'end': itemStart,
-            'duration': duration,
-          });
+          freeSlots.add({'start': currentStart, 'end': itemStart, 'duration': duration});
         }
       }
       if (itemEnd > currentStart) {
@@ -916,11 +1052,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     if (currentStart < _timelineEndMinutes) {
       final duration = _timelineEndMinutes - currentStart;
       if (duration >= 30) {
-        freeSlots.add({
-          'start': currentStart,
-          'end': _timelineEndMinutes,
-          'duration': duration,
-        });
+        freeSlots.add({'start': currentStart, 'end': _timelineEndMinutes, 'duration': duration});
       }
     }
 
@@ -935,9 +1067,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     return (durationMinutes / 60.0) * _hourHeight;
   }
 
-  // ============================================
-  // WEEK VIEW BUILDER
-  // ============================================
+  // ============================================================================
+  // WEEK VIEW
+  // ============================================================================
   Widget _buildWeekView(ColorScheme cs) {
     final now = DateTime.now();
     final weekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
@@ -978,47 +1110,28 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   Row(
                     children: [
                       Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: isToday ? cs.primary : cs.outline,
-                          shape: BoxShape.circle,
-                        ),
+                        width: 10, height: 10,
+                        decoration: BoxDecoration(color: isToday ? cs.primary : cs.outline, shape: BoxShape.circle),
                       ),
                       const SizedBox(width: 8),
                       Text(
                         '${_dayNames[dayIndex]} ${dayDate.day}/${dayDate.month}',
-                        style: TextStyle(
-                          fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
-                          color: isToday ? cs.primary : cs.onSurface,
-                        ),
+                        style: TextStyle(fontWeight: isToday ? FontWeight.bold : FontWeight.w600, color: isToday ? cs.primary : cs.onSurface),
                       ),
                       const Spacer(),
                       if (conflicts.isNotEmpty)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '${conflicts.length} conflict${conflicts.length == 1 ? '' : 's'}',
-                            style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.w600),
-                          ),
+                          decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                          child: Text('${conflicts.length} conflict${conflicts.length == 1 ? '' : 's'}', style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.w600)),
                         ),
                       const SizedBox(width: 8),
-                      Text(
-                        '${dayClasses.length + dayTasks.length} items',
-                        style: TextStyle(fontSize: 12, color: cs.outline),
-                      ),
+                      Text('${dayClasses.length + dayTasks.length} items', style: TextStyle(fontSize: 12, color: cs.outline)),
                     ],
                   ),
                   const SizedBox(height: 10),
                   if (dayClasses.isEmpty && dayTasks.isEmpty)
-                    Text(
-                      'No classes or tasks',
-                      style: TextStyle(fontSize: 13, color: cs.outline.withOpacity(0.7)),
-                    )
+                    Text('No classes or tasks', style: TextStyle(fontSize: 13, color: cs.outline.withOpacity(0.7)))
                   else
                     Wrap(
                       spacing: 6,
@@ -1065,9 +1178,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
-  // ============================================
-  // BUILD
-  // ============================================
+  // ============================================================================
+  // BUILD — MAIN METHOD with ALL 5 NEET FEATURES
+  // ============================================================================
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -1076,6 +1189,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final conflicts = _detectConflicts(dayClasses);
     final freeSlots = _getFreeSlotsForDay(_selectedDay);
     final hasAnyItems = dayClasses.isNotEmpty || dayTasks.isNotEmpty;
+    final todayRevisions = _getTodayRevisionCount();
 
     return Scaffold(
       appBar: AppBar(
@@ -1085,7 +1199,6 @@ class _TimetableScreenState extends State<TimetableScreen> {
         ),
         title: const Text('Timetable'),
         actions: [
-          // Week/Day view toggle
           IconButton(
             icon: Icon(_weekView ? Icons.view_day : Icons.view_week),
             tooltip: _weekView ? 'Day View' : 'Week View',
@@ -1119,63 +1232,307 @@ class _TimetableScreenState extends State<TimetableScreen> {
               ? _buildWeekView(cs)
               : Column(
                   children: [
-                    // Day selector tabs
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest.withOpacity(0.3),
-                        border: Border(bottom: BorderSide(color: cs.outline.withOpacity(0.2))),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: List.generate(7, (i) {
-                          final isSelected = _selectedDay == i;
-                          final dayClassesCount = _getClassesForDay(i).length;
-                          return InkWell(
-                            onTap: () => setState(() => _selectedDay = i),
-                            borderRadius: BorderRadius.circular(14),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isSelected ? cs.primaryContainer : Colors.transparent,
-                                borderRadius: BorderRadius.circular(14),
-                              ),
+                    // =========================================================================
+                    // FEATURE 2: POMODORO TIMER BANNER (when active)
+                    // =========================================================================
+                    if (_isPomodoroRunning)
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: cs.primaryContainer,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: cs.primary.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(color: cs.primary.withOpacity(0.2), shape: BoxShape.circle),
+                              child: Icon(Icons.timer, color: cs.primary, size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
                               child: Column(
-                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    _dayNames[i],
-                                    style: TextStyle(
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                      color: isSelected ? cs.onPrimaryContainer : cs.onSurface,
-                                      fontSize: 13,
-                                    ),
+                                    'Pomodoro: ${_activePomodoroSubject ?? 'Study'}',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: cs.onPrimaryContainer, fontSize: 13),
                                   ),
-                                  const SizedBox(height: 2),
-                                  Container(
-                                    width: 20,
-                                    height: 20,
-                                    decoration: BoxDecoration(
-                                      color: isSelected ? cs.primary : cs.outline.withOpacity(0.2),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        '$dayClassesCount',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: isSelected ? cs.onPrimary : cs.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ),
+                                  Text(
+                                    _formatPomodoroTime(_pomodoroSecondsLeft),
+                                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: cs.primary, fontFamily: 'monospace'),
                                   ),
                                 ],
                               ),
                             ),
-                          );
-                        }),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.pause_circle_filled),
+                                  onPressed: _pausePomodoro,
+                                  color: cs.primary,
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.stop_circle),
+                                  onPressed: _cancelPomodoro,
+                                  color: Colors.red,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
+
+                    // =========================================================================
+                    // FEATURE 1: REVISION CYCLE TRACKER (compact chips)
+                    // =========================================================================
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.sync, size: 16, color: cs.primary),
+                              const SizedBox(width: 6),
+                              Text(
+                                "Today's Revisions",
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: cs.onSurface),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: _pcbSubjects.map((subject) {
+                              final count = todayRevisions[subject] ?? 0;
+                              final statusColor = _revisionStatusColor(count);
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: statusColor.withOpacity(0.4)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 8, height: 8,
+                                      decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '$subject: $count',
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: statusColor.withOpacity(0.9)),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _revisionStatusLabel(count),
+                                      style: TextStyle(fontSize: 9, color: statusColor.withOpacity(0.7)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // =========================================================================
+                    // FEATURE 3: SUBJECT BALANCE METER
+                    // =========================================================================
+                    FutureBuilder<Map<String, double>>(
+                      future: _getWeeklySubjectHours(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return const SizedBox.shrink();
+                        final hours = snapshot.data!;
+                        final hasImbalance = hours.entries.any((e) => e.value < _minWeeklyHoursPerSubject && e.value > 0);
+                        if (!hasImbalance && hours.values.every((v) => v == 0)) return const SizedBox.shrink();
+
+                        return Container(
+                          margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: hasImbalance ? Colors.orange.withOpacity(0.08) : Colors.green.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: hasImbalance ? Colors.orange.withOpacity(0.3) : Colors.green.withOpacity(0.3)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    hasImbalance ? Icons.warning_amber_rounded : Icons.check_circle,
+                                    size: 16,
+                                    color: hasImbalance ? Colors.orange : Colors.green,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    hasImbalance ? 'Subject Balance Alert' : 'Subject Balance: Good',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: hasImbalance ? Colors.orange.shade800 : Colors.green.shade800),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: hours.entries.map((e) {
+                                  final isLow = e.value < _minWeeklyHoursPerSubject && e.value > 0;
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: isLow ? Colors.red.withOpacity(0.08) : Colors.green.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: isLow ? Colors.red.withOpacity(0.3) : Colors.green.withOpacity(0.3)),
+                                    ),
+                                    child: Text(
+                                      '${e.key}: ${e.value.toStringAsFixed(1)}h${isLow ? ' ⚠️' : ' ✓'}',
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: isLow ? Colors.red : Colors.green.shade700),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+
+                    // =========================================================================
+                    // FEATURE 5: SMART RECOMMENDATION CHIP
+                    // =========================================================================
+                    FutureBuilder<String?>(
+                      future: _getWeakestSubject(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData || snapshot.data == null) return const SizedBox.shrink();
+                        final weakSubject = snapshot.data!;
+                        return Container(
+                          margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.purple.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.psychology, size: 16, color: Colors.purple.shade700),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '🎯 Focus on $weakSubject today — you\'re falling behind!',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.purple.shade800),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _suggestStudyBlock,
+                                child: Text('Fix It', style: TextStyle(fontSize: 12, color: Colors.purple.shade700, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+
+                    // =========================================================================
+                    // FEATURE 4: DAY SELECTOR with HEATMAP OVERLAY
+                    // =========================================================================
+                    FutureBuilder<Map<int, int>>(
+                      future: _getWeeklyStudyMinutes(),
+                      builder: (context, heatmapSnapshot) {
+                        final heatmap = heatmapSnapshot.data ?? {};
+                        return Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerHighest.withOpacity(0.3),
+                            border: Border(bottom: BorderSide(color: cs.outline.withOpacity(0.2))),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: List.generate(7, (i) {
+                              final isSelected = _selectedDay == i;
+                              final dayClassesCount = _getClassesForDay(i).length;
+                              final studyMinutes = heatmap[i] ?? 0;
+                              return InkWell(
+                                onTap: () => setState(() => _selectedDay = i),
+                                borderRadius: BorderRadius.circular(14),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? cs.primaryContainer : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _dayNames[i],
+                                        style: TextStyle(
+                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                          color: isSelected ? cs.onPrimaryContainer : cs.onSurface,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          Container(
+                                            width: 24,
+                                            height: 24,
+                                            decoration: BoxDecoration(
+                                              color: isSelected ? cs.primary : cs.outline.withOpacity(0.2),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                '$dayClassesCount',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isSelected ? cs.onPrimary : cs.onSurfaceVariant,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          // -- HEATMAP DOT --
+                                          Positioned(
+                                            bottom: 0,
+                                            right: 0,
+                                            child: Container(
+                                              width: 8,
+                                              height: 8,
+                                              decoration: BoxDecoration(
+                                                color: _heatmapColor(studyMinutes),
+                                                shape: BoxShape.circle,
+                                                border: Border.all(color: cs.surface, width: 1),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
+                          ),
+                        );
+                      },
                     ),
 
                     // Conflict warning
@@ -1323,7 +1680,6 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   final hour = _timelineStartHour + i;
                   final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
                   final ampm = hour >= 12 ? 'PM' : 'AM';
-                  // Handle midnight display
                   final labelHour = hour == 24 ? 12 : displayHour;
                   final labelAmpm = hour == 24 ? 'AM' : ampm;
                   return Container(
@@ -1338,11 +1694,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     ),
                     child: Text(
                       '$labelHour $labelAmpm',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: cs.outline,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: TextStyle(fontSize: 11, color: cs.outline, fontWeight: FontWeight.w500),
                     ),
                   );
                 }),
@@ -1359,9 +1711,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       return Container(
                         height: _hourHeight,
                         decoration: BoxDecoration(
-                          border: Border(
-                            top: BorderSide(color: cs.outline.withOpacity(0.1)),
-                          ),
+                          border: Border(top: BorderSide(color: cs.outline.withOpacity(0.1))),
                         ),
                       );
                     }),
@@ -1403,23 +1753,17 @@ class _TimetableScreenState extends State<TimetableScreen> {
           Container(
             width: 8,
             height: 8,
-            decoration: const BoxDecoration(
-              color: Colors.red,
-              shape: BoxShape.circle,
-            ),
+            decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
           ),
           Expanded(
-            child: Container(
-              height: 2,
-              color: Colors.red.withOpacity(0.5),
-            ),
+            child: Container(height: 2, color: Colors.red.withOpacity(0.5)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildFreeTimeSlot(Map<String, dynamic> slot, ColorScheme cs) {
+    Widget _buildFreeTimeSlot(Map<String, dynamic> slot, ColorScheme cs) {
     final start = slot['start'] as int;
     final end = slot['end'] as int;
     final duration = slot['duration'] as int;
@@ -1453,6 +1797,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
+  // ============================================================================
+  // CLASS BLOCK — ENHANCED with Pomodoro start button
+  // ============================================================================
   Widget _buildClassBlock(Map<String, dynamic> c, List<Map<String, dynamic>> conflicts, ColorScheme cs) {
     final start = c['startTimeMinutes'] as int;
     final end = c['endTimeMinutes'] as int;
@@ -1461,6 +1808,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final color = _hexToColor(c['colorHex'] as String? ?? '#2196F3');
     final isConflict = conflicts.any((conf) =>
         conf['a']['id'] == c['id'] || conf['b']['id'] == c['id']);
+    final subject = c['subjectName'] as String? ?? '';
 
     return Positioned(
       top: top,
@@ -1494,7 +1842,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          c['subjectName'] as String,
+                          subject,
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
@@ -1514,6 +1862,31 @@ class _TimetableScreenState extends State<TimetableScreen> {
                           child: const Text(
                             'CONFLICT',
                             style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      // -- NEW: Quick Pomodoro button for NEET subjects --
+                      if (_pcbSubjects.any((s) => subject.toLowerCase().contains(s.toLowerCase())) && height > 50)
+                        InkWell(
+                          onTap: () => _startPomodoro(subject, minutes: 25),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            margin: const EdgeInsets.only(left: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.deepPurple.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.timer, size: 10, color: Colors.deepPurple.shade700),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '25m',
+                                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.deepPurple.shade700),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                     ],
@@ -1556,7 +1929,6 @@ class _TimetableScreenState extends State<TimetableScreen> {
                         ],
                       ),
                   ],
-                  // Time label at bottom
                   if (height > 35)
                     Text(
                       '${_formatMinutes24(start)} - ${_formatMinutes24(end)}',
@@ -1571,6 +1943,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
+  // ============================================================================
+  // TASK BLOCK — ENHANCED with Pomodoro start button
+  // ============================================================================
   Widget _buildTaskBlock(Map<String, dynamic> t, ColorScheme cs) {
     final start = t['startTimeMinutes'] as int;
     final end = t['endTimeMinutes'] as int;
@@ -1579,6 +1954,8 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final typeColor = _typeColor(t['taskType'] as String);
     final isDeadline = t['taskType'] == 'assignment' || t['taskType'] == 'exam';
     final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
+    final subject = t['subjectName'] as String? ?? '';
+    final isStudyBlock = t['taskType'] == 'study_block';
 
     return Positioned(
       top: top,
@@ -1639,6 +2016,31 @@ class _TimetableScreenState extends State<TimetableScreen> {
                             style: TextStyle(color: Colors.red.shade700, fontSize: 8, fontWeight: FontWeight.bold),
                           ),
                         ),
+                      // -- NEW: Quick Pomodoro button for study blocks --
+                      if (isStudyBlock && height > 40)
+                        InkWell(
+                          onTap: () => _startPomodoro(subject.isNotEmpty ? subject : 'Study', minutes: 25),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            margin: const EdgeInsets.only(left: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.deepPurple.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.play_arrow, size: 10, color: Colors.deepPurple.shade700),
+                                const SizedBox(width: 2),
+                                Text(
+                                  'Start',
+                                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.deepPurple.shade700),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                   if (height > 40 && (t['subjectName'] as String?)?.isNotEmpty == true) ...[
@@ -1664,8 +2066,14 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
+  // ============================================================================
+  // DETAIL SHEETS
+  // ============================================================================
   void _showClassDetails(Map<String, dynamic> c) {
     final color = _hexToColor(c['colorHex'] as String? ?? '#2196F3');
+    final subject = c['subjectName'] as String? ?? '';
+    final isPcbSubject = _pcbSubjects.any((s) => subject.toLowerCase().contains(s.toLowerCase()));
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -1694,7 +2102,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        c['subjectName'] as String,
+                        subject,
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       Text(
@@ -1717,6 +2125,21 @@ class _TimetableScreenState extends State<TimetableScreen> {
             if ((c['note'] as String?)?.isNotEmpty == true)
               _detailRow(Icons.notes, 'Note', c['note'] as String),
             const SizedBox(height: 16),
+            // -- NEW: Start Pomodoro from details sheet --
+            if (isPcbSubject)
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _startPomodoro(subject, minutes: 25);
+                },
+                icon: const Icon(Icons.timer),
+                label: const Text('Start 25m Pomodoro'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  minimumSize: const Size(double.infinity, 48),
+                ),
+              ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -1742,6 +2165,8 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
     final dueDate = DateTime.fromMillisecondsSinceEpoch(t['dueDateMillis'] as int);
     final daysLeft = dueDate.difference(DateTime.now()).inDays;
+    final subject = t['subjectName'] as String? ?? '';
+    final isStudyBlock = t['taskType'] == 'study_block';
 
     showModalBottomSheet(
       context: context,
@@ -1797,6 +2222,21 @@ class _TimetableScreenState extends State<TimetableScreen> {
             if ((t['note'] as String?)?.isNotEmpty == true)
               _detailRow(Icons.notes, 'Note', t['note'] as String),
             const SizedBox(height: 16),
+            // -- NEW: Start Pomodoro from task details --
+            if (isStudyBlock)
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _startPomodoro(subject.isNotEmpty ? subject : 'Study', minutes: 25);
+                },
+                icon: const Icon(Icons.timer),
+                label: const Text('Start 25m Pomodoro'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  minimumSize: const Size(double.infinity, 48),
+                ),
+              ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
