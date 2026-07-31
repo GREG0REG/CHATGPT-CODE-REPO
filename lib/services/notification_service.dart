@@ -1,5 +1,5 @@
 // lib/services/notification_service.dart
-// COMPLETE REPLACEMENT — Version 2.0 (Fixed + Enhanced)
+// COMPLETE REPLACEMENT — Version 2.1 (Added NEET Motivational Notifications)
 // FIXED: DB schema mismatch with notification_history
 // FIXED: Workmanager reliability issues for near-term alerts
 // FIXED: Task ID collisions and invalid characters
@@ -8,8 +8,10 @@
 // NEW: Notification channels with proper grouping
 // NEW: Smart batching and duplicate prevention
 // NEW: Boot-aware rescheduling helper
+// NEW: NEET daily motivational notifications at 6 AM
 
 import 'dart:math';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz_data;
@@ -42,6 +44,7 @@ const String _channelExam = 'timetable_exam';
 const String _channelEvent = 'event_countdown_channel';
 const String _channelTest = 'event_countdown_test';
 const String _channelGroupSummary = 'notification_group_summary';
+const String _channelNeetMotivation = 'neet_motivation';
 
 // ============================================================================
 // NOTIFICATION ACTION IDs
@@ -239,6 +242,12 @@ class NotificationService {
         'Notification Summary',
         description: 'Grouped notification summaries',
         importance: Importance.low,
+      ),
+      AndroidNotificationChannel(
+        _channelNeetMotivation,
+        'NEET Motivation',
+        description: 'Daily motivational quotes for NEET aspirants at 6 AM',
+        importance: Importance.defaultImportance,
       ),
     ];
 
@@ -1163,6 +1172,120 @@ class NotificationService {
       eventTitle: title,
       reminderType: 'exam_${daysRemaining}d',
     );
+  }
+
+  // ==========================================================================
+  // NEET MOTIVATIONAL NOTIFICATIONS (NEW)
+  // ==========================================================================
+
+  static final List<Map<String, String>> _neetMotivationalQuotes = [
+    {'quote': 'Success is the sum of small efforts, repeated day in and day out.', 'author': 'Robert Collier'},
+    {'quote': 'The future belongs to those who believe in the beauty of their dreams.', 'author': 'Eleanor Roosevelt'},
+    {'quote': 'Don\'t watch the clock; do what it does. Keep going.', 'author': 'Sam Levenson'},
+    {'quote': 'The only way to do great work is to love what you do.', 'author': 'Steve Jobs'},
+    {'quote': 'Believe you can and you\'re halfway there.', 'author': 'Theodore Roosevelt'},
+    {'quote': 'It always seems impossible until it\'s done.', 'author': 'Nelson Mandela'},
+    {'quote': 'The secret of getting ahead is getting started.', 'author': 'Mark Twain'},
+    {'quote': 'Your time is limited, don\'t waste it living someone else\'s life.', 'author': 'Steve Jobs'},
+    {'quote': 'Dream big and dare to fail.', 'author': 'Norman Vaughan'},
+    {'quote': 'Act as if what you do makes a difference. It does.', 'author': 'William James'},
+    {'quote': 'Success usually comes to those who are too busy to be looking for it.', 'author': 'Henry David Thoreau'},
+    {'quote': 'Don\'t be pushed around by the fears in your mind. Be led by the dreams in your heart.', 'author': 'Roy T. Bennett'},
+    {'quote': 'Everything you\'ve ever wanted is on the other side of fear.', 'author': 'George Addair'},
+    {'quote': 'Opportunities don\'t happen. You create them.', 'author': 'Chris Grosser'},
+    {'quote': 'I have not failed. I\'ve just found 10,000 ways that won\'t work.', 'author': 'Thomas Edison'},
+    {'quote': 'The best way to predict the future is to create it.', 'author': 'Peter Drucker'},
+    {'quote': 'Do one thing every day that scares you.', 'author': 'Eleanor Roosevelt'},
+    {'quote': 'It does not matter how slowly you go as long as you do not stop.', 'author': 'Confucius'},
+    {'quote': 'Hard work beats talent when talent doesn\'t work hard.', 'author': 'Tim Notke'},
+    {'quote': 'The only limit to our realization of tomorrow will be our doubts of today.', 'author': 'Franklin D. Roosevelt'},
+    {'quote': 'Start where you are. Use what you have. Do what you can.', 'author': 'Arthur Ashe'},
+    {'quote': 'Fall seven times, stand up eight.', 'author': 'Japanese Proverb'},
+    {'quote': 'Pain is temporary. Quitting lasts forever.', 'author': 'Lance Armstrong'},
+    {'quote': 'Push yourself, because no one else is going to do it for you.', 'author': 'Unknown'},
+    {'quote': 'Great things never come from comfort zones.', 'author': 'Unknown'},
+    {'quote': 'Dream it. Wish it. Do it.', 'author': 'Unknown'},
+    {'quote': 'Success doesn\'t just find you. You have to go out and get it.', 'author': 'Unknown'},
+    {'quote': 'The harder you work for something, the greater you\'ll feel when you achieve it.', 'author': 'Unknown'},
+    {'quote': 'Dream bigger. Do bigger.', 'author': 'Unknown'},
+    {'quote': 'Don\'t stop when you\'re tired. Stop when you\'re done.', 'author': 'Unknown'},
+  ];
+
+  /// Shows a daily motivational notification for NEET aspirants at 6 AM.
+  /// Picks a random quote from the curated list.
+  Future<void> showNeetMotivationNotification() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastQuoteIndex = prefs.getInt('_neet_last_quote_index') ?? -1;
+
+      // Pick a random quote different from the last one
+      final random = Random();
+      int quoteIndex;
+      if (_neetMotivationalQuotes.length > 1) {
+        do {
+          quoteIndex = random.nextInt(_neetMotivationalQuotes.length);
+        } while (quoteIndex == lastQuoteIndex);
+      } else {
+        quoteIndex = 0;
+      }
+
+      await prefs.setInt('_neet_last_quote_index', quoteIndex);
+
+      final quoteData = _neetMotivationalQuotes[quoteIndex];
+      final quote = quoteData['quote']!;
+      final author = quoteData['author']!;
+
+      // Calculate days to NEET
+      final now = DateTime.now();
+      var year = now.year;
+      var date = DateTime(year, 5, 1);
+      while (date.weekday != DateTime.sunday) {
+        date = date.add(const Duration(days: 1));
+      }
+      if (date.isBefore(now)) {
+        year++;
+        date = DateTime(year, 5, 1);
+        while (date.weekday != DateTime.sunday) {
+          date = date.add(const Duration(days: 1));
+        }
+      }
+      final daysRemaining = date.difference(now).inDays;
+
+      String title;
+      if (daysRemaining <= 0) {
+        title = '🎯 NEET is here! Give your best!';
+      } else if (daysRemaining == 1) {
+        title = '🎯 NEET is tomorrow! You\'ve got this!';
+      } else if (daysRemaining <= 7) {
+        title = '🎯 NEET in $daysRemaining days! Final push!';
+      } else if (daysRemaining <= 30) {
+        title = '🎯 NEET in $daysRemaining days! Stay focused!';
+      } else {
+        title = '🌅 Good Morning, Future Doctor!';
+      }
+
+      final body = '"$quote" — $author';
+
+      await _showNotification(
+        id: 700001,
+        title: title,
+        body: body,
+        channelId: _channelNeetMotivation,
+        channelName: 'NEET Motivation',
+        channelDesc: 'Daily motivational quotes for NEET aspirants at 6 AM',
+        importance: Importance.defaultImportance,
+        priority: Priority.defaultPriority,
+      );
+
+      await _logHistory(
+        eventTitle: 'NEET Motivation: $quote',
+        reminderType: 'neet_motivation',
+      );
+
+      debugPrint('NEET motivation sent: $title — $quote');
+    } catch (e) {
+      debugPrint('NEET motivation notification error: $e');
+    }
   }
 
   // ==========================================================================
