@@ -3,19 +3,16 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:home_widget/home_widget.dart';
 import '../models/event.dart';
 import '../models/custom_reminder.dart';
 import '../models/subtask.dart';
-import '../models/yearly_specific_date.dart';
 import '../database_helper.dart';
 import '../services/notification_service.dart';
 import '../services/settings_service.dart';
 import '../services/widget_service.dart';
-import '../theme/event_icons.dart';
 
-enum RecurrenceType { none, daily, weekly, monthly, yearly }
-
+// NeetExamType and RevisionRound are UI-only enums used in dropdowns.
+// They map to strings stored in Event.neetExamType and Event.revisionRound.
 enum NeetExamType { none, mockTest, revisionSession, finalPrep, pyqPractice }
 
 enum RevisionRound { round1, round2, round3, mockTestPhase }
@@ -99,8 +96,8 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
       }
       _iconName = e.iconName ?? 'event';
       _priority = e.priority;
-      _neetExamType = e.neetExamType;
-      _revisionRound = e.revisionRound;
+      _neetExamType = _parseNeetExamType(e.neetExamType);
+      _revisionRound = _parseRevisionRound(e.revisionRound);
       _isPyqSession = e.isPyqSession;
       _isCompleted = e.isCompleted;
     } else {
@@ -113,6 +110,50 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
     _loadSettings();
     _loadExistingReminders();
     _loadExistingSubtasks();
+  }
+
+  // Helper to convert stored string back to NeetExamType enum
+  NeetExamType _parseNeetExamType(String? value) {
+    if (value == null) return NeetExamType.none;
+    switch (value) {
+      case 'mockTest': return NeetExamType.mockTest;
+      case 'revisionSession': return NeetExamType.revisionSession;
+      case 'finalPrep': return NeetExamType.finalPrep;
+      case 'pyqPractice': return NeetExamType.pyqPractice;
+      default: return NeetExamType.none;
+    }
+  }
+
+  // Helper to convert stored string back to RevisionRound enum
+  RevisionRound _parseRevisionRound(String? value) {
+    if (value == null) return RevisionRound.round1;
+    switch (value) {
+      case 'round2': return RevisionRound.round2;
+      case 'round3': return RevisionRound.round3;
+      case 'mockTestPhase': return RevisionRound.mockTestPhase;
+      default: return RevisionRound.round1;
+    }
+  }
+
+  // Helper to convert NeetExamType enum to storage string
+  String _neetExamTypeToString(NeetExamType type) {
+    switch (type) {
+      case NeetExamType.mockTest: return 'mockTest';
+      case NeetExamType.revisionSession: return 'revisionSession';
+      case NeetExamType.finalPrep: return 'finalPrep';
+      case NeetExamType.pyqPractice: return 'pyqPractice';
+      case NeetExamType.none: return 'none';
+    }
+  }
+
+  // Helper to convert RevisionRound enum to storage string
+  String _revisionRoundToString(RevisionRound round) {
+    switch (round) {
+      case RevisionRound.round1: return 'round1';
+      case RevisionRound.round2: return 'round2';
+      case RevisionRound.round3: return 'round3';
+      case RevisionRound.mockTestPhase: return 'mockTestPhase';
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -294,6 +335,10 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
 
       final dateOnly = DateTime(_date.year, _date.month, _date.day);
 
+      // Parse target score from controller
+      final targetScoreText = _targetScoreController.text.trim();
+      final int? targetScore = targetScoreText.isEmpty ? null : int.tryParse(targetScoreText);
+
       final event = Event(
         id: _isEditing ? widget.existing!.id : null,
         title: _titleController.text.trim(),
@@ -311,6 +356,11 @@ class _AddEditEventScreenState extends State<AddEditEventScreen> {
         priority: _priority,
         subjectTag: _subjectController.text.trim().isEmpty ? null : _subjectController.text.trim(),
         isCompleted: _isCompleted,
+        // NEW: Persist NEET UI fields
+        targetScore: targetScore,
+        neetExamType: _neetExamTypeToString(_neetExamType),
+        revisionRound: _revisionRoundToString(_revisionRound),
+        isPyqSession: _isPyqSession,
       );
 
       int id;
@@ -1201,7 +1251,7 @@ class _SpecificDatesPickerDialogState extends State<_SpecificDatesPickerDialog> 
                 },
               ),
             ),
-            const SizedBox(height: 8),
+                        const SizedBox(height: 8),
             Text(
               '${_selectedDates.length} date(s) selected',
               style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.outline),
