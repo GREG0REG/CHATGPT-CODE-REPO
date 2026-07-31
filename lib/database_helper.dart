@@ -951,6 +951,85 @@ class DatabaseHelper {
     return (result.first['total'] as int?) ?? 0;
   }
 
+  // ============================================
+  // NEW: Home Screen Helper Methods (v16.1)
+  // ============================================
+
+  /// Check if any study sessions exist on a specific date
+  /// Returns true if student studied on that day
+  Future<bool> hasStudySessionsOnDate(int dateMillis) async {
+    final db = await database;
+    final endOfDay = dateMillis + const Duration(days: 1).inMilliseconds;
+    final result = await db.rawQuery("""
+      SELECT COUNT(*) as count FROM study_sessions
+      WHERE completedAtMillis >= ? AND completedAtMillis < ?
+    """, [dateMillis, endOfDay]);
+    return ((result.first['count'] as int?) ?? 0) > 0;
+  }
+
+  /// Get today's attendance summary for home screen dashboard
+  /// Returns: {'present': 3, 'absent': 1, 'total': 4, 'percentage': 75.0}
+  Future<Map<String, dynamic>> getTodayAttendanceSummary() async {
+    final db = await database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final todayEnd = todayStart + const Duration(days: 1).inMilliseconds;
+
+    final result = await db.rawQuery("""
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present,
+        SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent,
+        SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late
+      FROM attendance_logs
+      WHERE dateMillis >= ? AND dateMillis < ?
+    """, [todayStart, todayEnd]);
+
+    final total = (result.first['total'] as int?) ?? 0;
+    final present = (result.first['present'] as int?) ?? 0;
+    final absent = (result.first['absent'] as int?) ?? 0;
+    final late = (result.first['late'] as int?) ?? 0;
+    final percentage = total > 0 ? ((present + late * 0.5) / total * 100) : 0.0;
+
+    return {
+      'total': total,
+      'present': present,
+      'absent': absent,
+      'late': late,
+      'percentage': percentage,
+    };
+  }
+
+  /// Get upcoming events for next N days (for home screen reminders)
+  Future<List<Event>> getUpcomingEvents(int daysAhead) async {
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final endMillis = now + Duration(days: daysAhead).inMilliseconds;
+    final rows = await db.query(
+      'events',
+      where: 'dateMillis >= ? AND dateMillis < ? AND isCompleted = 0',
+      whereArgs: [now, endMillis],
+      orderBy: 'dateMillis ASC',
+      limit: 10,
+    );
+    return rows.map((r) => Event.fromMap(r)).toList();
+  }
+
+  /// Get overdue events (for home screen alerts)
+  Future<List<Event>> getOverdueEvents() async {
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rows = await db.query(
+      'events',
+      where: 'dateMillis < ? AND isCompleted = 0',
+      whereArgs: [now],
+      orderBy: 'dateMillis ASC',
+      limit: 10,
+    );
+    return rows.map((r) => Event.fromMap(r)).toList();
+  }
+
+
   Future<int> deleteStudySession(int id) async {
     final db = await database;
     return db.delete('study_sessions', where: 'id = ?', whereArgs: [id]);
