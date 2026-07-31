@@ -309,6 +309,138 @@ class AppThemes {
     return getInfo(option)?.icon;
   }
 
+  // ===========================================================================
+  // NEW STATIC HELPERS (called from widget_service.dart and other widgets)
+  // ===========================================================================
+
+  /// Returns the primary [Color] for a theme given its string identifier/name.
+  ///
+  /// Matches against [AppThemeOption] enum names (case-insensitive) and
+  /// [ThemeInfo.label] values. Falls back to the default Aurora color
+  /// if no match is found.
+  ///
+  /// Example:
+  /// ```dart
+  /// final c = AppThemes.colorFor('neetAspirant'); // Color(0xFF00A86B)
+  /// final c = AppThemes.colorFor('NEET Aspirant'); // Color(0xFF00A86B)
+  /// ```
+  static Color colorFor(String theme) {
+    final String normalized = theme.trim();
+
+    // 1. Try exact enum name match (case-insensitive)
+    for (final AppThemeOption opt in AppThemeOption.values) {
+      if (opt.name.toLowerCase() == normalized.toLowerCase()) {
+        return getPrimaryColor(opt);
+      }
+    }
+
+    // 2. Try label match (case-insensitive)
+    for (final ThemeInfo info in all) {
+      if (info.label.toLowerCase() == normalized.toLowerCase()) {
+        return getPrimaryColor(info.option);
+      }
+    }
+
+    // 3. Try partial label match (e.g. "neet" matches "NEET Aspirant")
+    for (final ThemeInfo info in all) {
+      if (info.label.toLowerCase().contains(normalized.toLowerCase()) ||
+          normalized.toLowerCase().contains(info.label.toLowerCase())) {
+        return getPrimaryColor(info.option);
+      }
+    }
+
+    // 4. Fallback to default Aurora primary color
+    return const Color(0xFF00BFA5);
+  }
+
+  /// Returns [Colors.black] or [Colors.white] depending on which provides
+  /// better contrast against the given [color].
+  ///
+  /// Uses the relative luminance formula (WCAG 2.0).
+  static Color autoContrastColor(Color color) {
+    return color.computeLuminance() > 0.5 ? Colors.black : Colors.white;
+  }
+
+  /// Returns a contrast-aware text color (black/white) for the given
+  /// [AppThemeOption]. Useful for widgets that need to overlay text on
+  /// a themed background.
+  static Color contrastForTheme(AppThemeOption option, {Color? customColor}) {
+    final Color primary = getPrimaryColor(option, customColor: customColor);
+    return autoContrastColor(primary);
+  }
+
+  /// Returns a contrast-aware text color for a theme string identifier.
+  /// Convenience wrapper around [colorFor] + [autoContrastColor].
+  static Color contrastFor(String theme) {
+    return autoContrastColor(colorFor(theme));
+  }
+
+  /// Returns a lightened or darkened variant of [color] suitable for
+  /// use as a background when [color] is used as foreground.
+  ///
+  /// [amount] controls how far to shift (0.0 = no change, 1.0 = full white/black).
+  static Color contrastingBackground(Color color, {double amount = 0.85}) {
+    final double clamped = amount.clamp(0.0, 1.0);
+    return color.computeLuminance() > 0.5
+        ? Color.lerp(color, Colors.black, clamped)!
+        : Color.lerp(color, Colors.white, clamped)!;
+  }
+
+  /// Returns a softened version of the theme color for use in
+  /// backgrounds, chips, or subtle highlights.
+  static Color softColorFor(String theme, {double opacity = 0.15}) {
+    return colorFor(theme).withOpacity(opacity.clamp(0.0, 1.0));
+  }
+
+  /// Returns a darker variant of the theme color for borders, shadows,
+  /// or emphasis elements.
+  static Color darkColorFor(String theme, {double amount = 0.3}) {
+    final Color base = colorFor(theme);
+    return Color.lerp(base, Colors.black, amount.clamp(0.0, 1.0))!;
+  }
+
+  /// Returns a lighter variant of the theme color for highlights.
+  static Color lightColorFor(String theme, {double amount = 0.3}) {
+    final Color base = colorFor(theme);
+    return Color.lerp(base, Colors.white, amount.clamp(0.0, 1.0))!;
+  }
+
+  /// Builds a linear gradient from the theme's primary and secondary colors.
+  static LinearGradient gradientFor(String theme, {
+    Alignment begin = Alignment.topLeft,
+    Alignment end = Alignment.bottomRight,
+  }) {
+    final Color primary = colorFor(theme);
+    final Color secondary = lightColorFor(theme, amount: 0.4);
+    return LinearGradient(
+      colors: [primary, secondary],
+      begin: begin,
+      end: end,
+    );
+  }
+
+  /// Returns an [AppThemeOption] enum value from a string identifier.
+  /// Returns `null` if no match is found.
+  static AppThemeOption? optionFromString(String theme) {
+    final String normalized = theme.trim().toLowerCase();
+    for (final AppThemeOption opt in AppThemeOption.values) {
+      if (opt.name.toLowerCase() == normalized) return opt;
+    }
+    for (final ThemeInfo info in all) {
+      if (info.label.toLowerCase() == normalized) return info.option;
+    }
+    return null;
+  }
+
+  /// Returns the [ThemeInfo.label] for a given [AppThemeOption].
+  static String labelFor(AppThemeOption option) {
+    return getInfo(option)?.label ?? option.name;
+  }
+
+  // ===========================================================================
+  // END NEW STATIC HELPERS
+  // ===========================================================================
+
   /// Build a full ThemeData for the given theme option.
   static ThemeData buildTheme(
     AppThemeOption option, {
