@@ -1,10 +1,118 @@
-llisecondsSinceEpoch(e.deadlineMillis!);
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:home_widget/home_widget.dart';
+import '../models/event.dart';
+import '../models/custom_reminder.dart';
+import '../models/subtask.dart';
+import '../models/yearly_specific_date.dart';
+import '../db/database_helper.dart';
+import '../services/notification_service.dart';
+import '../services/settings_service.dart';
+import '../services/widget_service.dart';
+import '../theme/event_icons.dart';
+
+enum RecurrenceType { none, daily, weekly, monthly, yearly }
+
+enum NeetExamType { none, mockTest, revisionSession, finalPrep, pyqPractice }
+
+enum RevisionRound { round1, round2, round3, mockTestPhase }
+
+class AddEditEventScreen extends StatefulWidget {
+  final Event? existing;
+  final String? prefillSubject;
+  final DateTime? initialDate;
+
+  const AddEditEventScreen({
+    super.key,
+    this.existing,
+    this.prefillSubject,
+    this.initialDate,
+  });
+
+  @override
+  State<AddEditEventScreen> createState() => _AddEditEventScreenState();
+}
+
+class _AddEditEventScreenState extends State<AddEditEventScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
+  final _notesController = TextEditingController();
+  final _subjectController = TextEditingController();
+  final _targetScoreController = TextEditingController();
+
+  late DateTime _date;
+  DateTime? _deadlineDate;
+  TimeOfDay? _startTime;
+  TimeOfDay? _deadlineTime;
+
+  RecurrenceType _recurrence = RecurrenceType.none;
+  int _recurrenceInterval = 1;
+  bool _yearlyUseSpecificDates = false;
+  List<YearlySpecificDate> _yearlySpecificDates = [];
+
+  String _iconName = 'event';
+  int _priority = 2;
+
+  NeetExamType _neetExamType = NeetExamType.none;
+  RevisionRound _revisionRound = RevisionRound.round1;
+  bool _isPyqSession = false;
+
+  bool _isCompleted = false;
+  bool _isEditing = false;
+  bool _isSaving = false;
+  bool _use24Hour = false;
+
+  List<CustomReminder> _customReminders = [];
+  List<Subtask> _subtasks = [];
+  final Set<int> _originalSubtaskIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+
+    _isEditing = widget.existing != null;
+
+    if (_isEditing) {
+      final e = widget.existing!;
+      _titleController.text = e.title;
+      _notesController.text = e.notes ?? '';
+      _subjectController.text = e.subjectTag ?? '';
+      _targetScoreController.text = e.targetScore?.toString() ?? '';
+      _date = DateTime.fromMillisecondsSinceEpoch(e.dateMillis);
+      _startTime = e.startTimeMillis != null
+          ? TimeOfDay.fromDateTime(DateTime.fromMillisecondsSinceEpoch(e.startTimeMillis!))
+          : null;
+      if (e.deadlineMillis != null) {
+        final dt = DateTime.fromMillisecondsSinceEpoch(e.deadlineMillis!);
         _deadlineDate = DateTime(dt.year, dt.month, dt.day);
         _deadlineTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
       }
-    } else if (widget.prefillSubject != null) {
-      _subjectController.text = widget.prefillSubject!;
+      _recurrence = e.recurrence;
+      _recurrenceInterval = e.recurrenceInterval;
+      _yearlyUseSpecificDates = e.yearlyUseSpecificDates;
+      if (e.yearlySpecificDatesJson != null && e.yearlySpecificDatesJson!.isNotEmpty) {
+        final list = jsonDecode(e.yearlySpecificDatesJson!) as List;
+        _yearlySpecificDates = list.map((j) => YearlySpecificDate.fromJson(j)).toList();
+      }
+      _iconName = e.iconName ?? 'event';
+      _priority = e.priority;
+      _neetExamType = e.neetExamType;
+      _revisionRound = e.revisionRound;
+      _isPyqSession = e.isPyqSession;
+      _isCompleted = e.isCompleted;
+    } else {
+      _date = widget.initialDate ?? DateTime.now();
+      if (widget.prefillSubject != null) {
+        _subjectController.text = widget.prefillSubject!;
+      }
     }
+
+    _loadSettings();
+    _loadExistingReminders();
+    _loadExistingSubtasks();
   }
 
   Future<void> _loadSettings() async {
@@ -624,7 +732,7 @@ llisecondsSinceEpoch(e.deadlineMillis!);
     return Scaffold(
       appBar: AppBar(
         title: Hero(
-          tag: _isEditing ? 'event_title_\${widget.existing!.id}' : 'event_title_new',
+          tag: _isEditing ? 'event_title_${widget.existing!.id}' : 'event_title_new',
           child: Material(
             color: Colors.transparent,
             child: Text(_isEditing ? 'Edit Event' : 'Add Event'),
@@ -648,7 +756,7 @@ llisecondsSinceEpoch(e.deadlineMillis!);
           padding: const EdgeInsets.all(16),
           children: [
             Hero(
-              tag: _isEditing ? 'event_avatar_\${widget.existing!.id}' : 'event_avatar_new',
+              tag: _isEditing ? 'event_avatar_${widget.existing!.id}' : 'event_avatar_new',
               child: Material(
                 color: Colors.transparent,
                 child: TextFormField(
@@ -675,7 +783,7 @@ llisecondsSinceEpoch(e.deadlineMillis!);
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Event Date'),
-              subtitle: Text('\${_date.month}/\${_date.day}/\${_date.year}'),
+              subtitle: Text('${_date.month}/${_date.day}/${_date.year}'),
               trailing: const Icon(Icons.calendar_today),
               onTap: _pickDate,
             ),
@@ -734,7 +842,7 @@ llisecondsSinceEpoch(e.deadlineMillis!);
                   children: [
                     const Text('Repeat every: ', style: TextStyle(fontSize: 14)),
                     Text(
-                      '\$_recurrenceInterval',
+                      '$_recurrenceInterval',
                       style: TextStyle(
                         fontSize: 18, fontWeight: FontWeight.bold,
                         color: Theme.of(context).colorScheme.primary,
@@ -747,7 +855,7 @@ llisecondsSinceEpoch(e.deadlineMillis!);
                 Slider(
                   value: _recurrenceInterval.toDouble(),
                   min: 1, max: 50, divisions: 49,
-                  label: '\$_recurrenceInterval',
+                  label: '$_recurrenceInterval',
                   onChanged: (v) => setState(() => _recurrenceInterval = v.round()),
                 ),
               ],
@@ -758,7 +866,7 @@ llisecondsSinceEpoch(e.deadlineMillis!);
                   icon: const Icon(Icons.calendar_month),
                   label: Text(_yearlySpecificDates.isEmpty
                       ? 'Select specific dates'
-                      : 'Edit specific dates (\${_yearlySpecificDates.length} selected)'),
+                      : 'Edit specific dates (${_yearlySpecificDates.length} selected)'),
                 ),
                 if (_yearlySpecificDates.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -766,7 +874,7 @@ llisecondsSinceEpoch(e.deadlineMillis!);
                     spacing: 8, runSpacing: 8,
                     children: _yearlySpecificDates.map((d) {
                       return Chip(
-                        label: Text('\${d.month}/\${d.day}'),
+                        label: Text('${d.month}/${d.day}'),
                         deleteIcon: const Icon(Icons.close, size: 18),
                         onDeleted: () => setState(() => _yearlySpecificDates.removeWhere(
                             (item) => item.month == d.month && item.day == d.day)),
@@ -817,7 +925,7 @@ llisecondsSinceEpoch(e.deadlineMillis!);
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Deadline date'),
-                subtitle: Text('\${(_deadlineDate ?? _date).month}/\${(_deadlineDate ?? _date).day}/\${(_deadlineDate ?? _date).year}'),
+                subtitle: Text('${(_deadlineDate ?? _date).month}/${(_deadlineDate ?? _date).day}/${(_deadlineDate ?? _date).year}'),
                 trailing: const Icon(Icons.calendar_today),
                 onTap: _pickDeadlineDate,
               ),
@@ -887,7 +995,7 @@ llisecondsSinceEpoch(e.deadlineMillis!);
                 contentPadding: EdgeInsets.zero,
                 dense: true,
                 leading: Icon(r.isAlarm ? Icons.alarm : Icons.notifications, color: r.isAlarm ? Colors.red : null),
-                title: Text('\${r.minutesBefore} minutes before'),
+                title: Text('${r.minutesBefore} minutes before'),
                 subtitle: r.soundUri != null ? const Text('Custom sound') : null,
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -956,12 +1064,12 @@ class _SpecificDatesPickerDialogState extends State<_SpecificDatesPickerDialog> 
     }).toSet();
     _dateDetails = {
       for (final d in widget.initialDates)
-        '\${d.month}-\${d.day}': d,
+        '${d.month}-${d.day}': d,
     };
   }
 
   void _toggleDate(DateTime date) {
-    final key = '\${date.month}-\${date.day}';
+    final key = '${date.month}-${date.day}';
     setState(() {
       if (_selectedDates.any((d) => d.month == date.month && d.day == date.day)) {
         _selectedDates.removeWhere((d) => d.month == date.month && d.day == date.day);
@@ -974,7 +1082,7 @@ class _SpecificDatesPickerDialogState extends State<_SpecificDatesPickerDialog> 
   }
 
   Future<void> _editDateTimes(DateTime date) async {
-    final key = '\${date.month}-\${date.day}';
+    final key = '${date.month}-${date.day}';
     final existing = _dateDetails[key];
 
     final result = await showDialog<_DateTimeOverrides>(
@@ -1028,7 +1136,7 @@ class _SpecificDatesPickerDialogState extends State<_SpecificDatesPickerDialog> 
                   }),
                 ),
                 Text(
-                  '\${_monthName(_currentMonth.month)} \${_currentMonth.year}',
+                  '${_monthName(_currentMonth.month)} ${_currentMonth.year}',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 IconButton(
@@ -1063,8 +1171,8 @@ class _SpecificDatesPickerDialogState extends State<_SpecificDatesPickerDialog> 
                   final day = index - firstWeekday + 1;
                   final date = DateTime(_currentMonth.year, _currentMonth.month, day);
                   final isSelected = _selectedDates.any((d) => d.month == date.month && d.day == date.day);
-                  final hasCustomTimes = _dateDetails['\${date.month}-\${date.day}']?.customStartTimeMillis != null ||
-                      _dateDetails['\${date.month}-\${date.day}']?.customDeadlineMillis != null;
+                  final hasCustomTimes = _dateDetails['${date.month}-${date.day}']?.customStartTimeMillis != null ||
+                      _dateDetails['${date.month}-${date.day}']?.customDeadlineMillis != null;
 
                   return InkWell(
                     onTap: () => _toggleDate(date),
@@ -1095,7 +1203,7 @@ class _SpecificDatesPickerDialogState extends State<_SpecificDatesPickerDialog> 
             ),
             const SizedBox(height: 8),
             Text(
-              '\${_selectedDates.length} date(s) selected',
+              '${_selectedDates.length} date(s) selected',
               style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.outline),
             ),
             if (_selectedDates.isNotEmpty)
@@ -1111,7 +1219,7 @@ class _SpecificDatesPickerDialogState extends State<_SpecificDatesPickerDialog> 
         TextButton(
           onPressed: () {
             final result = _selectedDates.map((d) {
-              final key = '\${d.month}-\${d.day}';
+              final key = '${d.month}-${d.day}';
               return _dateDetails[key] ?? YearlySpecificDate(month: d.month, day: d.day);
             }).toList();
             result.sort((a, b) {
@@ -1168,7 +1276,7 @@ class _DateTimeEditDialogState extends State<_DateTimeEditDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Edit times for \${widget.date.month}/\${widget.date.day}'),
+      title: Text('Edit times for ${widget.date.month}/${widget.date.day}'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1176,7 +1284,7 @@ class _DateTimeEditDialogState extends State<_DateTimeEditDialog> {
             contentPadding: EdgeInsets.zero,
             title: const Text('Custom start time'),
             subtitle: Text(_startTime != null
-                ? '\${_startTime!.hour.toString().padLeft(2, '0')}:\${_startTime!.minute.toString().padLeft(2, '0')}'
+                ? '${_startTime!.hour.toString().padLeft(2, '0')}:${_startTime!.minute.toString().padLeft(2, '0')}'
                 : 'Use default'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
@@ -1197,7 +1305,7 @@ class _DateTimeEditDialogState extends State<_DateTimeEditDialog> {
             contentPadding: EdgeInsets.zero,
             title: const Text('Custom deadline time'),
             subtitle: Text(_deadlineTime != null
-                ? '\${_deadlineTime!.hour.toString().padLeft(2, '0')}:\${_deadlineTime!.minute.toString().padLeft(2, '0')}'
+                ? '${_deadlineTime!.hour.toString().padLeft(2, '0')}:${_deadlineTime!.minute.toString().padLeft(2, '0')}'
                 : 'Use default'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
@@ -1287,7 +1395,7 @@ class _ReminderDialogState extends State<_ReminderDialog> {
           const SizedBox(height: 16),
           Center(
             child: Text(
-              '\$_totalMinutes minutes before event',
+              '$_totalMinutes minutes before event',
               style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600),
             ),
           ),
