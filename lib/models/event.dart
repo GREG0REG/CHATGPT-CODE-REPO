@@ -13,6 +13,27 @@ enum RecurrenceType {
 }
 
 // ============================================
+// NEET EXAM TYPE
+// ============================================
+enum NeetExamType {
+  none,
+  mockTest,
+  revisionSession,
+  finalPrep,
+  pyqPractice,
+}
+
+// ============================================
+// REVISION ROUND
+// ============================================
+enum RevisionRound {
+  round1,
+  round2,
+  round3,
+  mockTestPhase,
+}
+
+// ============================================
 // YEARLY SPECIFIC DATE (for JSON serialization)
 // ============================================
 class YearlySpecificDate {
@@ -130,6 +151,12 @@ class Event {
   final int? neetTargetScore;      // Target score (e.g., 680+ for govt college)
   final String? neetSubjectFocus;  // Which subject to focus: 'Physics', 'Chemistry', 'Biology', 'All'
 
+  // --- NEW: UI NEET fields (stored for persistence) ---
+  final int? targetScore;          // Target score for mock tests (UI field)
+  final String? neetExamType;      // 'none', 'mockTest', 'revisionSession', 'finalPrep', 'pyqPractice'
+  final String? revisionRound;   // 'round1', 'round2', 'round3', 'mockTestPhase'
+  final bool isPyqSession;       // Is this a PYQ practice session
+
   const Event({
     this.id,
     required this.title,
@@ -151,6 +178,11 @@ class Event {
     this.neetTotalMarks,
     this.neetTargetScore,
     this.neetSubjectFocus,
+    // NEW UI NEET fields
+    this.targetScore,
+    this.neetExamType,
+    this.revisionRound,
+    this.isPyqSession = false,
   });
 
   // --- Computed properties ---
@@ -339,6 +371,14 @@ class Event {
     bool clearNeetTargetScore = false,
     String? neetSubjectFocus,
     bool clearNeetSubjectFocus = false,
+    // NEW UI NEET fields
+    int? targetScore,
+    bool clearTargetScore = false,
+    String? neetExamType,
+    bool clearNeetExamType = false,
+    String? revisionRound,
+    bool clearRevisionRound = false,
+    bool? isPyqSession,
   }) {
     return Event(
       id: id ?? this.id,
@@ -370,6 +410,11 @@ class Event {
       neetTotalMarks: clearNeetTotalMarks ? null : (neetTotalMarks ?? this.neetTotalMarks),
       neetTargetScore: clearNeetTargetScore ? null : (neetTargetScore ?? this.neetTargetScore),
       neetSubjectFocus: clearNeetSubjectFocus ? null : (neetSubjectFocus ?? this.neetSubjectFocus),
+      // NEW UI NEET fields
+      targetScore: clearTargetScore ? null : (targetScore ?? this.targetScore),
+      neetExamType: clearNeetExamType ? null : (neetExamType ?? this.neetExamType),
+      revisionRound: clearRevisionRound ? null : (revisionRound ?? this.revisionRound),
+      isPyqSession: isPyqSession ?? this.isPyqSession,
     );
   }
 
@@ -449,6 +494,19 @@ class Event {
     if (map['neetSubjectFocus'] != null && map['neetSubjectFocus'] is! String) {
       errors.add('"neetSubjectFocus" must be a String or null, got ${map['neetSubjectFocus'].runtimeType}');
     }
+    // NEW UI NEET fields validation
+    if (map['targetScore'] != null && map['targetScore'] is! int) {
+      errors.add('"targetScore" must be an int or null, got ${map['targetScore'].runtimeType}');
+    }
+    if (map['neetExamType'] != null && map['neetExamType'] is! String) {
+      errors.add('"neetExamType" must be a String or null, got ${map['neetExamType'].runtimeType}');
+    }
+    if (map['revisionRound'] != null && map['revisionRound'] is! String) {
+      errors.add('"revisionRound" must be a String or null, got ${map['revisionRound'].runtimeType}');
+    }
+    if (map['isPyqSession'] != null && map['isPyqSession'] is! int && map['isPyqSession'] is! bool) {
+      errors.add('"isPyqSession" must be an int, bool, or null, got ${map['isPyqSession'].runtimeType}');
+    }
 
     if (errors.isNotEmpty) {
       throw FormatException(errors.join('; '));
@@ -477,6 +535,11 @@ class Event {
       'neetTotalMarks': neetTotalMarks,
       'neetTargetScore': neetTargetScore,
       'neetSubjectFocus': neetSubjectFocus,
+      // NEW UI NEET fields
+      'targetScore': targetScore,
+      'neetExamType': neetExamType,
+      'revisionRound': revisionRound,
+      'isPyqSession': isPyqSession ? 1 : 0,
     };
   }
 
@@ -506,6 +569,11 @@ class Event {
       neetTotalMarks: map['neetTotalMarks'] as int?,
       neetTargetScore: map['neetTargetScore'] as int?,
       neetSubjectFocus: map['neetSubjectFocus'] as String?,
+      // NEW UI NEET fields
+      targetScore: map['targetScore'] as int?,
+      neetExamType: map['neetExamType'] as String?,
+      revisionRound: map['revisionRound'] as String?,
+      isPyqSession: _parseBool(map['isPyqSession']),
     );
   }
 
