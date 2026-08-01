@@ -1,0 +1,133 @@
+name: Build Flutter Release APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: '17'
+  FLUTTER_VERSION: '3.24.0'
+  GRADLE_VERSION: '8.4'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Deep Clean
+        run: |
+          flutter clean
+          rm -rf android/.gradle
+          rm -rf android/app/build
+          rm -rf build/
+          rm -rf .dart_tool/
+          flutter pub get
+
+      - name: Verify Flutter Embedding
+        run: |
+          echo "=== Checking for v1 embedding references ==="
+          grep -r "io.flutter.app" . --include="*.kt" --include="*.java" --include="*.xml" 2>/dev/null || echo "No v1 references found"
+          echo "=== Flutter version ==="
+          flutter --version
+          echo "=== Embedding config ==="
+          grep -A2 "flutterEmbedding" android/app/src/main/AndroidManifest.xml
+
+      - name: Ensure Gradle wrapper
+        run: |
+          if [ ! -f android/gradlew ]; then
+            flutter create --platforms=android .temp_proj
+            cp .temp_proj/android/gradlew android/
+            cp .temp_proj/android/gradlew.bat android/
+            mkdir -p android/gradle/wrapper
+            cp .temp_proj/android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/
+            cp .temp_proj/android/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/
+            chmod +x android/gradlew
+            rm -rf .temp_proj
+          fi
+          sed -i 's/gradle-[0-9.]*-/gradle-8.4-/g' android/gradle/wrapper/gradle-wrapper.properties
+          cat android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-8.4-${{ hashFiles('android/**/*.gradle', 'android/**/*.gradle.kts') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-8.4-
+
+      - name: Cache Android Keystore
+        id: cache-keystore
+        uses: actions/cache@v4
+        with:
+          path: |
+            android/app/release-key.jks
+            android/key.properties
+          key: android-keystore-v1
+
+      - name: Generate signing keystore
+        if: steps.cache-keystore.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p android/app
+          keytool -genkey -v -keystore android/app/release-key.jks \
+            -storepass releasepass -alias release -keypass releasepass \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=StudyFlow,O=Personal,C=US"
+          echo "storePassword=releasepass" > android/key.properties
+          echo "keyPassword=releasepass" >> android/key.properties
+          echo "keyAlias=release" >> android/key.properties
+          echo "storeFile=release-key.jks" >> android/key.properties
+
+      - name: Verify Keystore
+        run: |
+          if [ ! -f android/app/release-key.jks ]; then
+            echo "ERROR: Keystore not found!"
+            exit 1
+          fi
+          echo "Keystore OK. Size: $(du -h android/app/release-key.jks | cut -f1)"
+
+      - name: Build Release APK
+        run: |
+          flutter build apk --release --target-platform android-arm64
+          echo "=== APK Info ==="
+          ls -lh build/app/outputs/flutter-apk/*.apk
+
+      - name: Prepare Output
+        run: |
+          mkdir -p output
+          cp build/app/outputs/flutter-apk/app-release.apk output/StudyFlow.apk
+          cd output && zip StudyFlow.zip StudyFlow.apk
+          echo "=== Final Sizes ==="
+          ls -lh
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudyFlow-APK
+          path: output/StudyFlow.apk
+          retention-days: 30
+
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudyFlow-ZIP
+          path: output/StudyFlow.zip
+          retention-days: 30
