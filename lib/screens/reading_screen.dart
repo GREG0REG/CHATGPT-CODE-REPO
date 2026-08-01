@@ -1973,12 +1973,13 @@ class _ReadingTimerDialogState extends State<_ReadingTimerDialog> {
     }
     final newPage = widget.currentPage + pages;
     final clampedPage = newPage.clamp(0, widget.totalPages);
-    await DatabaseHelper.instance.updateReadingProgress(widget.bookId, clampedPage, minutes);
+        await DatabaseHelper.instance.updateReadingProgress(widget.bookId, clampedPage, minutes);
     HapticFeedback.mediumImpact();
     _timer?.cancel();
     if (mounted) {
       Navigator.pop(context);
       widget.onSessionComplete();
+      await WidgetService.refreshReadingWidget(); // <-- ADD THIS
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Session saved! $pages pages in $minutes min')));
     }
   }
