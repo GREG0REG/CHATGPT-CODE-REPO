@@ -44,13 +44,13 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             val minutes = TimeUnit.MILLISECONDS.toMinutes(diff) % 60
 
             return when {
-                days > 0 -> {
+                days > 0L -> {
                     // FIXED: Ceiling for days to match app behavior
-                    val displayDays = if (hours > 0 || minutes > 0) days + 1 else days
-                    "$displayDays day${if (displayDays == 1) "" else "s"} left"
+                    val displayDays = if (hours > 0L || minutes > 0L) days + 1L else days
+                    "$displayDays day${if (displayDays == 1L) "" else "s"} left"
                 }
-                hours > 0 -> "$hours hour${if (hours == 1) "" else "s"} left"
-                else -> "$minutes minute${if (minutes == 1) "" else "s"} left"
+                hours > 0L -> "$hours hour${if (hours == 1L) "" else "s"} left"
+                else -> "$minutes minute${if (minutes == 1L) "" else "s"} left"
             }
         }
 
@@ -65,12 +65,12 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
             val subject = subjectTag?.takeIf { it.isNotBlank() } ?: "this"
 
             return when {
-                days <= 0 -> "Exam is now! Good luck!"
-                days == 1 -> "Last day! Quick review of $subject"
-                days <= 3 -> "High intensity: focus $subject weak areas"
-                days <= 7 -> "Weekly plan: 2-3 hrs/day on $subject"
-                days <= 14 -> "Start $subject revision schedule"
-                days <= 30 -> "Build $subject concept notes"
+                days <= 0L -> "Exam is now! Good luck!"
+                days == 1L -> "Last day! Quick review of $subject"
+                days <= 3L -> "High intensity: focus $subject weak areas"
+                days <= 7L -> "Weekly plan: 2-3 hrs/day on $subject"
+                days <= 14L -> "Start $subject revision schedule"
+                days <= 30L -> "Build $subject concept notes"
                 priority >= 3 -> "$subject: begin early prep"
                 else -> "On track with $subject"
             }
@@ -150,12 +150,12 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                         }
 
                         // FIXED: Proper day rounding for countdown
-                        if (deadlineMillis > 0) {
+                        if (deadlineMillis > 0L) {
                             countdownText = formatCountdownDays(deadlineMillis, smartCountdown)
                         }
 
                         // If smart countdown is OFF, show absolute date
-                        if (!smartCountdown && deadlineMillis > 0) {
+                        if (!smartCountdown && deadlineMillis > 0L) {
                             val sdf = SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault())
                             countdownText = sdf.format(Date(deadlineMillis))
                         }
@@ -231,7 +231,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 }
 
                 // ── NEW: SMART STUDY NUDGE ──
-                if (!isCompleted && deadlineMillis > 0) {
+                if (!isCompleted && deadlineMillis > 0L) {
                     views.setViewVisibility(R.id.widget_nudge_row, View.VISIBLE)
                     val nudge = getStudyNudge(deadlineMillis, subjectTag, priority)
                     views.setTextViewText(R.id.widget_nudge_text, nudge)
@@ -244,7 +244,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                 if (dailyGoalTarget > 0) {
                     views.setViewVisibility(R.id.widget_goal_row, View.VISIBLE)
                     views.setProgressBar(R.id.widget_goal_ring, 100, goalProgress, false)
-                    views.setTextViewText(R.id.widget_goal_text, 
+                    views.setTextViewText(R.id.widget_goal_text,
                         "$dailyGoalAchieved/$dailyGoalTarget min")
 
                     // Color based on progress
@@ -274,8 +274,12 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                     )
 
                     // Hide all first
-                    subtaskViews.forEach { views.setViewVisibility(it, View.GONE) }
-                    subtaskCheckViews.forEach { views.setViewVisibility(it, View.GONE) }
+                    for (viewId in subtaskViews) {
+                        views.setViewVisibility(viewId, View.GONE)
+                    }
+                    for (viewId in subtaskCheckViews) {
+                        views.setViewVisibility(viewId, View.GONE)
+                    }
 
                     val count = minOf(subtasksJson.length(), 3)
                     for (i in 0 until count) {
@@ -290,7 +294,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
 
                             // Strike-through for completed
                             if (stCompleted) {
-                                views.setInt(subtaskViews[i], "setPaintFlags", 
+                                views.setInt(subtaskViews[i], "setPaintFlags",
                                     android.graphics.Paint.STRIKE_THRU_TEXT_FLAG)
                                 views.setTextColor(subtaskViews[i], Color.parseColor("#9E9E9E"))
                             } else {
@@ -307,7 +311,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                     // Show "+X more" if there are more subtasks
                     if (subtasksJson.length() > 3) {
                         views.setViewVisibility(R.id.widget_subtasks_more, View.VISIBLE)
-                        views.setTextViewText(R.id.widget_subtasks_more, 
+                        views.setTextViewText(R.id.widget_subtasks_more,
                             "+${subtasksJson.length() - 3} more")
                     } else {
                         views.setViewVisibility(R.id.widget_subtasks_more, View.GONE)
@@ -329,8 +333,12 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
                         R.id.widget_upcoming_date_2
                     )
 
-                    upcomingViews.forEach { views.setViewVisibility(it, View.GONE) }
-                    upcomingDateViews.forEach { views.setViewVisibility(it, View.GONE) }
+                    for (viewId in upcomingViews) {
+                        views.setViewVisibility(viewId, View.GONE)
+                    }
+                    for (viewId in upcomingDateViews) {
+                        views.setViewVisibility(viewId, View.GONE)
+                    }
 
                     val count = minOf(upcomingEventsJson.length(), 2)
                     for (i in 0 until count) {
@@ -345,7 +353,7 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
 
                             val prefix = if (evSubject.isNotBlank()) "[$evSubject] " else ""
                             views.setTextViewText(upcomingViews[i], "$prefix$evTitle")
-                            views.setTextViewText(upcomingDateViews[i], 
+                            views.setTextViewText(upcomingDateViews[i],
                                 "$evDays day${if (evDays == 1) "" else "s"}")
                         }
                     }
