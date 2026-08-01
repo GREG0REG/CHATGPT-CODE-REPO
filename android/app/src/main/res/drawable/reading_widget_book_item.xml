@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/book_item_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:layout_marginBottom="8dp"
+    android:background="@drawable/widget_book_item_background">
+
+    <!-- Left colored accent bar -->
+    <View
+        android:id="@+id/book_item_accent_bar"
+        android:layout_width="4dp"
+        android:layout_height="match_parent"
+        android:background="#2196F3" />
+
+    <!-- Content container -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="10dp"
+        android:paddingStart="12dp">
+
+        <!-- Top row: Title + Status badge -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/book_item_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Book Title"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/book_item_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="On Track"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="2dp"
+                android:background="@drawable/widget_badge_background"
+                android:textColor="#69F0AE" />
+        </LinearLayout>
+
+        <!-- Page info + % + pages/day -->
+        <TextView
+            android:id="@+id/book_item_pages"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Page 245/500 • 49% • Need 18 pgs/day"
+            android:textColor="#BBFFFFFF"
+            android:textSize="11sp" />
+
+        <!-- Progress bar -->
+        <ProgressBar
+            android:id="@+id/book_item_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginTop="8dp"
+            android:max="100"
+            android:progress="0"
+            android:progressDrawable="@drawable/reading_progress_blue" />
+
+    </LinearLayout>
+
+</LinearLayout>
