@@ -40,18 +40,16 @@ class HabitWidgetProvider : AppWidgetProvider() {
             var weekProgress = 0
             var weekTarget = 7
             var statusColor = "#4CAF50"
-            var message = "Add habits to start tracking"
 
             if (habitCount > 0) {
-                // Use the first habit for the widget (top streak)
+                // Use the first habit (top streak from Flutter side)
                 habitName = widgetData.getString("habit_name_0", habitName) ?: habitName
-                weekProgress = widgetData.getInt("habit_streak_0", 0)
-                // Calculate weekly progress from progress percent
-                val progressPercent = widgetData.getInt("habit_progress_0", 0)
                 weekTarget = 7
+                // habit_progress is the weekly completion PERCENT (0-100)
+                val progressPercent = widgetData.getInt("habit_progress_0", 0)
+                // Convert percent to days completed out of 7
                 weekProgress = ((progressPercent / 100.0) * weekTarget).toInt().coerceIn(0, weekTarget)
                 statusColor = widgetData.getString("habit_color_0", statusColor) ?: statusColor
-                message = "$weekProgress/$weekTarget this week"
             }
 
             // ── Update widget UI ──
@@ -71,7 +69,7 @@ class HabitWidgetProvider : AppWidgetProvider() {
                 // Color the progress text
                 views.setTextColor(R.id.habit_widget_progress, accentColor)
 
-                // Set week circles (7 dots) — use setTextColor on "●" TextViews
+                // Set week circles (7 dots) — fill first N dots based on weekly progress
                 for (i in 0 until 7) {
                     val isDone = i < weekProgress
                     val dotId = DOT_IDS[i]
