@@ -8,48 +8,147 @@
     android:padding="12dp"
     android:background="@drawable/widget_glass_background">
 
-    <!-- Book title -->
-    <TextView
-        android:id="@+id/reading_widget_title"
+    <!-- Header: Title + Streak -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="The Great Gatsby"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:maxLines="1"
-        android:ellipsize="end" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
 
-    <!-- Page info -->
-    <TextView
-        android:id="@+id/reading_widget_pages"
+        <TextView
+            android:id="@+id/reading_widget_header_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📖 NEET Reading"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/reading_widget_streak"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔥 0"
+            android:textColor="#FFAB40"
+            android:textSize="11sp"
+            android:background="@drawable/widget_badge_background"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="2dp" />
+    </LinearLayout>
+
+    <!-- Book Container - dynamically populated -->
+    <LinearLayout
+        android:id="@+id/reading_widget_books_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="Page 120/300 • 40%"
-        android:textColor="#AAFFFFFF"
-        android:textSize="12sp" />
+        android:orientation="vertical" />
 
-    <!-- Progress bar -->
-    <ProgressBar
-        android:id="@+id/reading_widget_progress_bar"
-        style="?android:attr/progressBarStyleHorizontal"
+    <!-- Empty State -->
+    <LinearLayout
+        android:id="@+id/reading_widget_empty"
         android:layout_width="match_parent"
-        android:layout_height="4dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingVertical="16dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/reading_widget_empty_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📖 No Books"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/reading_widget_empty_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Page 0/0 • 0%"
+            android:textColor="#AAFFFFFF"
+            android:textSize="12sp" />
+
+        <ProgressBar
+            android:id="@+id/reading_widget_empty_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginTop="8dp"
+            android:progress="0"
+            android:max="100"
+            android:progressDrawable="@drawable/widget_progress_bar" />
+
+        <TextView
+            android:id="@+id/reading_widget_empty_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Add a book to start tracking"
+            android:textColor="#88FFFFFF"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- Footer: Aggregate Stats -->
+    <LinearLayout
+        android:id="@+id/reading_widget_footer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
         android:layout_marginTop="8dp"
-        android:progress="40"
-        android:max="100"
-        android:progressDrawable="@drawable/widget_progress_bar" />
+        android:paddingTop="8dp"
+        android:visibility="gone">
 
-    <!-- Reminder text -->
-    <TextView
-        android:id="@+id/reading_widget_reminder"
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#22FFFFFF"
+            android:layout_marginBottom="8dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/reading_widget_footer_stats"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:text="Read for 20 min today"
-        android:textColor="#88FFFFFF"
-        android:textSize="11sp"
-        android:visibility="visible" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/reading_widget_footer_books"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📊 0/0 books"
+            android:textColor="#88FFFFFF"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/reading_widget_footer_pages"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="📄 0 pages today"
+            android:textColor="#88FFFFFF"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/reading_widget_footer_time"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="end"
+            android:text="⏱️ 0h 0m"
+            android:textColor="#88FFFFFF"
+            android:textSize="10sp" />
+    </LinearLayout>
 
 </LinearLayout>
