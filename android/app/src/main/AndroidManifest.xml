@@ -54,7 +54,8 @@
         <!-- Event Countdown Widget -->
         <receiver
             android:name=".EventCountdownWidgetProvider"
-            android:exported="true">
+            android:exported="true"
+            android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
                 <action android:name="com.example.event_countdown.EVENT_WIDGET_TICK"/>
@@ -71,7 +72,8 @@
         <!-- Pomodoro Widget -->
         <receiver
             android:name=".PomodoroWidgetProvider"
-            android:exported="true">
+            android:exported="true"
+            android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
                 <action android:name="com.example.event_countdown.POMODORO_WIDGET_TICK"/>
@@ -88,7 +90,8 @@
         <!-- Attendance Widget -->
         <receiver
             android:name=".AttendanceWidgetProvider"
-            android:exported="true">
+            android:exported="true"
+            android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
                 <action android:name="com.example.event_countdown.ATTENDANCE_WIDGET_REFRESH"/>
@@ -103,7 +106,8 @@
         <!-- Timetable Widget -->
         <receiver
             android:name=".TimetableWidgetProvider"
-            android:exported="true">
+            android:exported="true"
+            android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
                 <action android:name="com.example.event_countdown.TIMETABLE_WIDGET_REFRESH"/>
@@ -118,7 +122,8 @@
         <!-- Habit Widget -->
         <receiver
             android:name=".HabitWidgetProvider"
-            android:exported="true">
+            android:exported="true"
+            android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
                 <action android:name="com.example.event_countdown.HABIT_WIDGET_REFRESH"/>
@@ -133,7 +138,8 @@
         <!-- Reading Widget -->
         <receiver
             android:name=".ReadingWidgetProvider"
-            android:exported="true">
+            android:exported="true"
+            android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
                 <action android:name="com.example.event_countdown.READING_WIDGET_REFRESH"/>
