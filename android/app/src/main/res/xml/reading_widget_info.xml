@@ -8,5 +8,4 @@
     android:resizeMode="horizontal|vertical"
     android:minResizeWidth="280dp"
     android:minResizeHeight="140dp"
-    android:widgetCategory="home_screen"
-    android:previewImage="@drawable/reading_widget_preview" />
+    android:widgetCategory="home_screen" />
