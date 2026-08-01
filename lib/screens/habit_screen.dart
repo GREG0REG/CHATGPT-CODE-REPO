@@ -386,8 +386,9 @@ class _HabitScreenState extends State<HabitScreen> {
   // ── Archive ──
   Future<void> _archiveHabit(int habitId) async {
     await DatabaseHelper.instance.archiveHabit(habitId, true);
-    HapticFeedback.lightImpact();
+        HapticFeedback.lightImpact();
     await _loadAllData();
+    await WidgetService.refreshHabitWidget(); // <-- ADD THIS
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Habit archived')),
