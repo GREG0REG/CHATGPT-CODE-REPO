@@ -1108,10 +1108,11 @@ class _BookDetailScreenState extends State<BookDetailScreen> with SingleTickerPr
     final newPage = currentPage + pagesRead;
     final totalPages = (_book?['totalPages'] as int?) ?? 1;
     final clampedPage = newPage.clamp(0, totalPages);
-    await DatabaseHelper.instance.updateReadingProgress(widget.bookId, clampedPage, minutes);
+        await DatabaseHelper.instance.updateReadingProgress(widget.bookId, clampedPage, minutes);
     HapticFeedback.lightImpact();
     await _loadData();
     widget.onUpdate();
+    await WidgetService.refreshReadingWidget(); // <-- ADD THIS
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Session saved! $pagesRead pages in $minutes min')));
     }
