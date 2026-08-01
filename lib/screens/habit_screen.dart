@@ -373,8 +373,9 @@ class _HabitScreenState extends State<HabitScreen> {
         'metricValue': metricValue ?? log['metricValue'],
       });
     }
-    HapticFeedback.mediumImpact();
+    HapticFeedback.lightImpact();
     await _loadAllData();
+    await WidgetService.refreshHabitWidget(); // <-- ADD THIS
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Yesterday marked as done!')),
