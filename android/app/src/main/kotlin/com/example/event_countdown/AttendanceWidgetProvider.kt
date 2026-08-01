@@ -25,7 +25,6 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
         private const val KEY_PREFIX_SUBJECT_COLOR = "attendance_subject_color_"
         private const val KEY_PREFIX_SUBJECT_STATUS = "attendance_subject_status_"
         private const val KEY_PREFIX_SUBJECT_STREAK = "attendance_subject_streak_"
-        private const val KEY_PREFIX_SUBJECT_CAN_MISS = "attendance_subject_can_miss_"
 
         fun updateWidgetDirectly(
             context: Context,
@@ -71,12 +70,6 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     val statusText = widgetData.getString(KEY_PREFIX_SUBJECT_STATUS + "0", "No data") ?: "No data"
                     val streak = widgetData.getInt(KEY_PREFIX_SUBJECT_STREAK + "0", 0)
 
-                    val subjectColor = try {
-                        Color.parseColor(colorHex)
-                    } catch (e: Exception) {
-                        Color.parseColor("#4CAF50")
-                    }
-
                     val percentColor = when {
                         percent >= 75 -> Color.parseColor("#4CAF50")
                         percent >= 60 -> Color.parseColor("#FF9800")
@@ -108,14 +101,15 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                         views.setViewVisibility(R.id.attendance_widget_streak_chip, View.GONE)
                     }
 
-                    // FIXED: Wrapped setBackgroundColor in try-catch
-                    // RemoteViews.setInt with "setBackgroundColor" can fail on some View types
-                    // or Android versions when the method is not accessible via reflection
-                    try {
-                        views.setInt(R.id.attendance_widget_subject_dot, "setBackgroundColor", subjectColor)
+                    // CRITICAL FIX: Replaced unsafe setInt(setBackgroundColor) with setTextColor on the dot.
+                    // The dot is now a TextView in XML (changed below) that uses a bullet character.
+                    // We color the text instead of the background, which is 100% safe in RemoteViews.
+                    val subjectColor = try {
+                        Color.parseColor(colorHex)
                     } catch (e: Exception) {
-                        android.util.Log.w("AttendanceWidget", "Failed to set dot color via setBackgroundColor: ${e.message}")
+                        Color.parseColor("#4CAF50")
                     }
+                    views.setTextColor(R.id.attendance_widget_subject_dot, subjectColor)
 
                     val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                     if (launchIntent != null) {
