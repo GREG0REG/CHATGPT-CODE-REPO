@@ -126,7 +126,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     WidgetService.refreshPomodoroWidget();
   }
 
-  Future<void> _loadSettings() async {
+    Future<void> _loadSettings() async {
     final fs = FocusSettingsService.instance;
     final presetName = await fs.getDefaultPreset();
     final customFocus = await fs.getCustomFocusMinutes();
@@ -136,7 +136,12 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     final goalMin = await fs.getDailyGoalMinutes();
     final showBanner = await fs.getShowNeetCountdown();
 
-    final lastName = await fs.getLastSubjectName();
+    // Check for route arguments (from timetable)
+    final routeArgs = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    String? preselectedSubject = routeArgs?['subject'] as String?;
+    String? preselectedPreset = routeArgs?['preset'] as String?;
+
+    final lastName = preselectedSubject ?? await fs.getLastSubjectName();
     StudySubject? lastSubject;
     if (lastName != null) {
       final subjects = await DatabaseHelper.instance.getAllStudySubjects();
@@ -144,7 +149,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     }
 
     _selectedPreset = PomodoroPreset.all.firstWhere(
-      (p) => p.name.toLowerCase() == presetName.toLowerCase(),
+      (p) => p.name.toLowerCase() == (preselectedPreset ?? presetName).toLowerCase(),
       orElse: () => PomodoroPreset.neetRevision,
     );
 
@@ -166,7 +171,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     }
 
     _updateDailyProgress();
-    // Refresh widget on settings load
     WidgetService.refreshPomodoroWidget();
     _updateWeeklyData();
     _updateWakelock();
