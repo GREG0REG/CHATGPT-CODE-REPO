@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingVertical="8dp">
+
+    <!-- Habit name + streak + progress -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/habit_row_name"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Habit"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/habit_row_streak"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔥 0"
+            android:textColor="#FF9800"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:layout_marginEnd="8dp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/habit_row_progress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0/7"
+            android:textColor="#AAFFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Week dots row (Mon-Sun) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="6dp">
+
+        <!-- Day 0 (Mon) -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+            <TextView
+                android:id="@+id/habit_row_dot_0"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="●"
+                android:textColor="#33FFFFFF"
+                android:textSize="14sp" />
+        </FrameLayout>
+
+        <!-- Day 1 (Tue) -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+            <TextView
+                android:id="@+id/habit_row_dot_1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="●"
+                android:textColor="#33FFFFFF"
+                android:textSize="14sp" />
+        </FrameLayout>
+
+        <!-- Day 2 (Wed) -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+            <TextView
+                android:id="@+id/habit_row_dot_2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="●"
+                android:textColor="#33FFFFFF"
+                android:textSize="14sp" />
+        </FrameLayout>
+
+        <!-- Day 3 (Thu) -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+            <TextView
+                android:id="@+id/habit_row_dot_3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="●"
+                android:textColor="#33FFFFFF"
+                android:textSize="14sp" />
+        </FrameLayout>
+
+        <!-- Day 4 (Fri) -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+            <TextView
+                android:id="@+id/habit_row_dot_4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="●"
+                android:textColor="#33FFFFFF"
+                android:textSize="14sp" />
+        </FrameLayout>
+
+        <!-- Day 5 (Sat) -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+            <TextView
+                android:id="@+id/habit_row_dot_5"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="●"
+                android:textColor="#33FFFFFF"
+                android:textSize="14sp" />
+        </FrameLayout>
+
+        <!-- Day 6 (Sun) -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+            <TextView
+                android:id="@+id/habit_row_dot_6"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="●"
+                android:textColor="#33FFFFFF"
+                android:textSize="14sp" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Day labels -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="2dp">
+
+        <TextView android:id="@+id/habit_row_day_0" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="M" android:textColor="#88FFFFFF" android:textSize="8sp" android:gravity="center" />
+        <TextView android:id="@+id/habit_row_day_1" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="T" android:textColor="#88FFFFFF" android:textSize="8sp" android:gravity="center" />
+        <TextView android:id="@+id/habit_row_day_2" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="W" android:textColor="#88FFFFFF" android:textSize="8sp" android:gravity="center" />
+        <TextView android:id="@+id/habit_row_day_3" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="T" android:textColor="#88FFFFFF" android:textSize="8sp" android:gravity="center" />
+        <TextView android:id="@+id/habit_row_day_4" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="F" android:textColor="#88FFFFFF" android:textSize="8sp" android:gravity="center" />
+        <TextView android:id="@+id/habit_row_day_5" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="S" android:textColor="#88FFFFFF" android:textSize="8sp" android:gravity="center" />
+        <TextView android:id="@+id/habit_row_day_6" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="S" android:textColor="#88FFFFFF" android:textSize="8sp" android:gravity="center" />
+    </LinearLayout>
+
+    <!-- Divider between habits -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="8dp"
+        android:background="#15FFFFFF" />
+
+</LinearLayout>
