@@ -616,7 +616,7 @@ class WidgetService {
       final processedBookIds = <int>{};
 
       // Helper: compute NEET metrics for a book
-      Map<String, dynamic> computeBookMetrics(Map<String, dynamic> book) {
+      Future<Map<String, dynamic>> computeBookMetrics(Map<String, dynamic> book) async {
         final bookId = (book['id'] as int?) ?? 0;
         final title = (book['title'] as String?) ?? 'Book';
         final totalPages = (book['totalPages'] as int?) ?? 1;
@@ -829,7 +829,7 @@ class WidgetService {
         final dayStart = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
         final dayEnd = dayStart + const Duration(days: 1).inMilliseconds;
 
-        final sessions = await DatabaseHelper.instance.getReadingSessionsForDateRange(dayStart, dayEnd);
+        final sessions = await _getReadingSessionsForDateRange(dayStart, dayEnd);
         final hasReading = sessions.isNotEmpty;
 
         if (hasReading) {
@@ -848,6 +848,22 @@ class WidgetService {
     } catch (e) {
       debugPrint('_calculateReadingStreak error: $e');
       return 0;
+    }
+  }
+
+  /// Local helper to fetch reading sessions in a date range.
+  /// Mirrors DatabaseHelper behavior without requiring a non-existent method.
+  static Future<List<Map<String, dynamic>>> _getReadingSessionsForDateRange(int dayStart, int dayEnd) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final result = await db.rawQuery(
+        'SELECT * FROM reading_sessions WHERE sessionDateMillis >= ? AND sessionDateMillis < ?',
+        [dayStart, dayEnd],
+      );
+      return result;
+    } catch (e) {
+      debugPrint('_getReadingSessionsForDateRange error: $e');
+      return [];
     }
   }
 
