@@ -17,7 +17,7 @@ if (flutterVersionCode == null) {
     flutterVersionCode = '1'
 }
 
-def flutterVersionName = localProperties.getProperty('flutter.versionName')
+def flutterVersionName = localProperties.getProperty('flutterVersionName')
 if (flutterVersionName == null) {
     flutterVersionName = '1.0'
 }
@@ -45,8 +45,6 @@ android {
         versionName flutterVersionName
         multiDexEnabled true
 
-        // ABI filter: only arm64 (removes x86, x86_64, armeabi-v7a)
-        // This cuts APK size by ~40-50%
         ndk {
             abiFilters 'arm64-v8a'
         }
@@ -73,7 +71,6 @@ android {
                 jniLibs {
                     useLegacyPackaging false
                 }
-                // Remove unnecessary metadata files
                 exclude 'META-INF/DEPENDENCIES'
                 exclude 'META-INF/LICENSE'
                 exclude 'META-INF/LICENSE.txt'
@@ -86,10 +83,6 @@ android {
             shrinkResources false
         }
     }
-
-    // REMOVED: splits.abi block with universalApk=true
-    // This was creating multiple APKs + a huge universal APK
-    // Now we use ndk.abiFilters above for a single optimized APK
 
     lint {
         checkReleaseBuilds = true
@@ -115,4 +108,5 @@ flutter {
 dependencies {
     implementation 'androidx.work:work-runtime-ktx:2.8.1'
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
+    implementation 'com.google.android.play:core:1.10.3'
 }
