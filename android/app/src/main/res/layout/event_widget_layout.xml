@@ -6,63 +6,19 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="16dp"
-    android:background="@drawable/widget_glass_background">
+    android:background="#E61A1A2E">
 
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- HEADER: Title + Badges Row                                    -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <LinearLayout
+    <TextView
+        android:id="@+id/widget_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:text="No upcoming events"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end" />
 
-        <TextView
-            android:id="@+id/widget_title"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="No upcoming events"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-        <!-- Priority Badge -->
-        <TextView
-            android:id="@+id/widget_priority_badge"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="High"
-            android:textColor="#FB8C00"
-            android:textSize="10sp"
-            android:textStyle="bold"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="2dp"
-            android:background="@drawable/widget_pill_orange"
-            android:layout_marginStart="6dp"
-            android:visibility="gone" />
-
-        <!-- Subject Chip -->
-        <TextView
-            android:id="@+id/widget_subject_chip"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Physics"
-            android:textColor="#00897B"
-            android:textSize="10sp"
-            android:textStyle="bold"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="2dp"
-            android:background="@drawable/widget_pill_green"
-            android:layout_marginStart="6dp"
-            android:visibility="gone" />
-    </LinearLayout>
-
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- COUNTDOWN DISPLAY                                             -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
     <TextView
         android:id="@+id/widget_countdown"
         android:layout_width="wrap_content"
@@ -73,331 +29,28 @@
         android:textStyle="bold"
         android:layout_marginTop="4dp" />
 
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- URGENCY ROW: colored dot + label                              -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <LinearLayout
-        android:id="@+id/widget_urgency_row"
+    <TextView
+        android:id="@+id/widget_urgency_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
+        android:text=""
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
         android:layout_marginTop="6dp"
-        android:visibility="gone">
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="3dp"
+        android:background="#40FF1744"
+        android:visibility="gone" />
 
-        <TextView
-            android:id="@+id/widget_urgency_dot"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="●"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/widget_urgency_label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="2dp"
-            android:layout_marginStart="6dp" />
-    </LinearLayout>
-
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- STREAK INDICATOR                                              -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <LinearLayout
-        android:id="@+id/widget_streak_row"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginTop="6dp"
-        android:visibility="gone">
-
-        <TextView
-            android:id="@+id/widget_streak_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="🔥 5 day streak"
-            android:textColor="#FFB74D"
-            android:textSize="12sp"
-            android:textStyle="bold" />
-    </LinearLayout>
-
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- SMART STUDY NUDGE                                             -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <LinearLayout
-        android:id="@+id/widget_nudge_row"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/widget_pill_green"
-        android:padding="8dp"
-        android:visibility="gone">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="💡"
-            android:textSize="14sp"
-            android:layout_marginEnd="6dp" />
-
-        <TextView
-            android:id="@+id/widget_nudge_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Start revision schedule"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
-    </LinearLayout>
-
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- DAILY STUDY GOAL MINI-RING                                    -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <LinearLayout
-        android:id="@+id/widget_goal_row"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginTop="8dp"
-        android:visibility="gone">
-
-        <ProgressBar
-            android:id="@+id/widget_goal_ring"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="0dp"
-            android:layout_height="4dp"
-            android:layout_weight="1"
-            android:max="100"
-            android:progress="0"
-            android:progressDrawable="@drawable/widget_progress_drawable" />
-
-        <TextView
-            android:id="@+id/widget_goal_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="45/120 min"
-            android:textColor="#FFFFFF"
-            android:textSize="11sp"
-            android:layout_marginStart="8dp" />
-    </LinearLayout>
-
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- MAIN PROGRESS RING                                            -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
     <ProgressBar
-        android:id="@+id/widget_progress_ring"
+        android:id="@+id/widget_progress_bar"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
         android:layout_height="6dp"
         android:layout_marginTop="10dp"
         android:max="100"
         android:progress="0"
-        android:progressDrawable="@drawable/widget_progress_drawable" />
-
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- SUBTASKS PREVIEW (up to 3)                                    -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <LinearLayout
-        android:id="@+id/widget_subtasks_container"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:layout_marginTop="10dp"
-        android:visibility="gone">
-
-        <!-- Divider line -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#20FFFFFF"
-            android:layout_marginBottom="8dp" />
-
-        <!-- Subtask 1 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="4dp">
-
-            <TextView
-                android:id="@+id/widget_subtask_check_1"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="✓"
-                android:textColor="#757575"
-                android:textSize="12sp"
-                android:layout_marginEnd="6dp" />
-
-            <TextView
-                android:id="@+id/widget_subtask_1"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Subtask 1"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:maxLines="1"
-                android:ellipsize="end" />
-        </LinearLayout>
-
-        <!-- Subtask 2 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="4dp">
-
-            <TextView
-                android:id="@+id/widget_subtask_check_2"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="✓"
-                android:textColor="#757575"
-                android:textSize="12sp"
-                android:layout_marginEnd="6dp" />
-
-            <TextView
-                android:id="@+id/widget_subtask_2"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Subtask 2"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:maxLines="1"
-                android:ellipsize="end" />
-        </LinearLayout>
-
-        <!-- Subtask 3 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="4dp">
-
-            <TextView
-                android:id="@+id/widget_subtask_check_3"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="✓"
-                android:textColor="#757575"
-                android:textSize="12sp"
-                android:layout_marginEnd="6dp" />
-
-            <TextView
-                android:id="@+id/widget_subtask_3"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Subtask 3"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:maxLines="1"
-                android:ellipsize="end" />
-        </LinearLayout>
-
-        <!-- More subtasks indicator -->
-        <TextView
-            android:id="@+id/widget_subtasks_more"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="+2 more"
-            android:textColor="#9E9E9E"
-            android:textSize="11sp"
-            android:layout_marginStart="18dp"
-            android:visibility="gone" />
-    </LinearLayout>
-
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- UPCOMING EVENTS MINI-LIST                                     -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <LinearLayout
-        android:id="@+id/widget_upcoming_container"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:layout_marginTop="10dp"
-        android:visibility="gone">
-
-        <!-- Divider line -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#20FFFFFF"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Upcoming"
-            android:textColor="#9E9E9E"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="4dp" />
-
-        <!-- Upcoming Event 1 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="4dp">
-
-            <TextView
-                android:id="@+id/widget_upcoming_1"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="[Math] Chapter 3 Test"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:maxLines="1"
-                android:ellipsize="end" />
-
-            <TextView
-                android:id="@+id/widget_upcoming_date_1"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="3 days"
-                android:textColor="#9E9E9E"
-                android:textSize="11sp"
-                android:layout_marginStart="6dp" />
-        </LinearLayout>
-
-        <!-- Upcoming Event 2 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:id="@+id/widget_upcoming_2"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="[Physics] Lab Report"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:maxLines="1"
-                android:ellipsize="end" />
-
-            <TextView
-                android:id="@+id/widget_upcoming_date_2"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="5 days"
-                android:textColor="#9E9E9E"
-                android:textSize="11sp"
-                android:layout_marginStart="6dp" />
-        </LinearLayout>
-    </LinearLayout>
+        android:progressTint="#5B6EF5"
+        android:progressBackgroundTint="#33FFFFFF" />
 
 </LinearLayout>
