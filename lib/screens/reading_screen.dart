@@ -193,9 +193,10 @@ class _ReadingScreenState extends State<ReadingScreen> {
         ],
       ),
     );
-    if (confirm == true) {
+        if (confirm == true) {
       await DatabaseHelper.instance.deleteReadingBook(id);
       await _loadData();
+      await WidgetService.refreshReadingWidget(); // <-- ADD THIS
     }
   }
 
