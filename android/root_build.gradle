@@ -1,0 +1,29 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = '../build'
+
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+
+subprojects {
+    project.evaluationDependsOn(':app')
+}
+
+// NOTE: Removed the FlutterExtension mock injection.
+// The flutter-gradle-plugin (applied in app/build.gradle) already provides
+// the "flutter" extension. Injecting a mock class can cause conflicts
+// and "v1 embedding deleted" errors when plugins try to read real values.
+// If you get "Extension with name 'flutter' does not exist" errors,
+// ensure you have:
+//   plugins { id "dev.flutter.flutter-gradle-plugin" }
+// in android/app/build.gradle (which you already do).
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
