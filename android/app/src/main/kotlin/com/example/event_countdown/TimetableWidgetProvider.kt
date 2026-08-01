@@ -9,15 +9,20 @@ import android.content.Intent
 import android.graphics.Color
 import android.view.View
 import android.widget.RemoteViews
-import org.json.JSONObject
-import java.io.File
+import es.antonborri.home_widget.HomeWidgetPlugin
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class TimetableWidgetProvider : AppWidgetProvider() {
 
     companion object {
-        private const val TIMETABLE_DATA_FILE = "timetable_widget_data.json"
+        private const val KEY_CLASS_COUNT = "timetable_class_count"
+        private const val KEY_PREFIX_SUBJECT = "timetable_subject_"
+        private const val KEY_PREFIX_TIME = "timetable_time_"
+        private const val KEY_PREFIX_ROOM = "timetable_room_"
+        private const val KEY_PREFIX_COLOR = "timetable_color_"
 
-        // IDs for the 3 preset class rows
         private val ROW_IDS = listOf(
             R.id.timetable_class_row_1,
             R.id.timetable_class_row_2,
@@ -45,64 +50,32 @@ class TimetableWidgetProvider : AppWidgetProvider() {
             widgetId: Int
         ) {
             try {
-                var dayName = "Today"
-                var dateText = ""
-                val classesList = mutableListOf<Map<String, String>>()
-
-                try {
-                    // CRITICAL FIX: Use context.filesDir directly — matches Event widget
-                    val file = File(context.filesDir, TIMETABLE_DATA_FILE)
-
-                    if (file.exists()) {
-                        val json = JSONObject(file.readText())
-                        dayName = json.optString("dayName", dayName)
-                        dateText = json.optString("dateText", dateText)
-                        val classesArray = json.optJSONArray("classes")
-                        if (classesArray != null) {
-                            for (i in 0 until classesArray.length()) {
-                                val cls = classesArray.getJSONObject(i)
-                                classesList.add(mapOf(
-                                    "subject" to cls.optString("subject", "Unknown"),
-                                    "timeSlot" to cls.optString("timeSlot", ""),
-                                    "room" to cls.optString("room", "TBD"),
-                                    "countdownText" to cls.optString("countdownText", ""),
-                                    "colorHex" to cls.optString("colorHex", "#2196F3"),
-                                    "isToday" to cls.optBoolean("isToday", true).toString()
-                                ))
-                            }
-                        }
-                    } else {
-                        android.util.Log.w("TimetableWidget", "Data file not found at: ${file.absolutePath}")
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("TimetableWidget", "JSON read failed", e)
-                }
+                val widgetData = HomeWidgetPlugin.getData(context)
+                val classCount = widgetData.getInt(KEY_CLASS_COUNT, 0)
 
                 val views = RemoteViews(context.packageName, R.layout.timetable_widget_layout)
 
-                // Header: day name + date
-                views.setTextViewText(R.id.timetable_widget_day, dayName)
-                views.setTextViewText(R.id.timetable_widget_date, dateText)
+                // Compute day name and date locally
+                val now = Date()
+                val dayFormat = SimpleDateFormat("EEEE", Locale.getDefault())
+                val dateFormat = SimpleDateFormat("MMM d", Locale.getDefault())
+                views.setTextViewText(R.id.timetable_widget_day, dayFormat.format(now))
+                views.setTextViewText(R.id.timetable_widget_date, dateFormat.format(now))
 
-                if (classesList.isEmpty()) {
-                    // Show empty state, hide all rows
+                if (classCount == 0) {
                     views.setViewVisibility(R.id.timetable_widget_empty, View.VISIBLE)
                     for (rowId in ROW_IDS) {
                         views.setViewVisibility(rowId, View.GONE)
                     }
                 } else {
-                    // Hide empty state
                     views.setViewVisibility(R.id.timetable_widget_empty, View.GONE)
 
-                    // Show up to 3 classes
                     for (i in 0 until 3) {
-                        if (i < classesList.size) {
-                            val cls = classesList[i]
-                            val colorHex = cls["colorHex"] ?: "#2196F3"
-                            val subject = cls["subject"] ?: "Unknown"
-                            val timeSlot = cls["timeSlot"] ?: ""
-                            val room = cls["room"] ?: "TBD"
-                            val countdownText = cls["countdownText"] ?: ""
+                        if (i < classCount) {
+                            val subject = widgetData.getString(KEY_PREFIX_SUBJECT + "$i", "Class") ?: "Class"
+                            val timeStr = widgetData.getString(KEY_PREFIX_TIME + "$i", "") ?: ""
+                            val room = widgetData.getString(KEY_PREFIX_ROOM + "$i", "") ?: ""
+                            val colorHex = widgetData.getString(KEY_PREFIX_COLOR + "$i", "#2196F3") ?: "#2196F3"
 
                             val color = try {
                                 Color.parseColor(colorHex)
@@ -110,23 +83,20 @@ class TimetableWidgetProvider : AppWidgetProvider() {
                                 Color.parseColor("#2196F3")
                             }
 
-                            // Format: "9:00 - 10:00  •  Math  •  Hall A  •  25 min"
-                            val infoText = "$timeSlot  •  $subject  •  $room  •  $countdownText"
+                            val infoText = if (room.isNotEmpty()) "$timeStr  •  $room" else timeStr
 
                             views.setViewVisibility(ROW_IDS[i], View.VISIBLE)
-                            // FIXED: Use setTextColor on TextView "●" instead of setBackgroundColor on View with drawable
                             views.setTextViewText(DOT_IDS[i], "●")
                             views.setTextColor(DOT_IDS[i], color)
                             views.setTextViewText(SUBJECT_IDS[i], subject)
-                            views.setTextViewText(INFO_IDS[i], infoText)
                             views.setTextColor(SUBJECT_IDS[i], color)
+                            views.setTextViewText(INFO_IDS[i], infoText)
                         } else {
                             views.setViewVisibility(ROW_IDS[i], View.GONE)
                         }
                     }
                 }
 
-                // Tap opens app to /timetable
                 context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { launchIntent ->
                     launchIntent.putExtra("route", "/timetable")
                     val pendingIntent = PendingIntent.getActivity(
@@ -137,7 +107,7 @@ class TimetableWidgetProvider : AppWidgetProvider() {
                 }
 
                 appWidgetManager.updateAppWidget(widgetId, views)
-                android.util.Log.i("TimetableWidget", "Widget $widgetId updated: ${classesList.size} classes")
+                android.util.Log.i("TimetableWidget", "Widget $widgetId updated: $classCount classes")
 
             } catch (e: Exception) {
                 android.util.Log.e("TimetableWidget", "Update failed", e)
@@ -160,7 +130,6 @@ class TimetableWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        android.util.Log.i("TimetableWidget", "onUpdate: ${appWidgetIds.size} widgets")
         for (widgetId in appWidgetIds) {
             updateWidgetDirectly(context, appWidgetManager, widgetId)
         }
@@ -168,7 +137,6 @@ class TimetableWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        android.util.Log.i("TimetableWidget", "onReceive: ${intent.action}")
         when (intent.action) {
             AppWidgetManager.ACTION_APPWIDGET_UPDATE -> {
                 val widgetIds = intent.getIntArrayExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS)
@@ -181,6 +149,13 @@ class TimetableWidgetProvider : AppWidgetProvider() {
                     updateAllWidgets(context)
                 }
             }
+            Intent.ACTION_BOOT_COMPLETED -> updateAllWidgets(context)
+            Intent.ACTION_MY_PACKAGE_REPLACED -> updateAllWidgets(context)
         }
+    }
+
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        updateAllWidgets(context)
     }
 }
