@@ -1092,10 +1092,11 @@ class _BookDetailScreenState extends State<BookDetailScreen> with SingleTickerPr
     final newPage = int.tryParse(_pageController.text) ?? 0;
     final oldPage = (_book?['currentPage'] as int?) ?? 0;
     if (newPage == oldPage) return;
-    await DatabaseHelper.instance.updateReadingBook(widget.bookId, {..._book!, 'currentPage': newPage});
+        await DatabaseHelper.instance.updateReadingBook(widget.bookId, {..._book!, 'currentPage': newPage});
     HapticFeedback.lightImpact();
     await _loadData();
     widget.onUpdate();
+    await WidgetService.refreshReadingWidget(); // <-- ADD THIS
   }
 
   Future<void> _logSession() async {
