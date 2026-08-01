@@ -1,13 +1,3 @@
-# ============================================
-# Flutter Event Countdown - ProGuard Rules
-# ============================================
-
-# Play Core / Deferred Components (NOT used by this app)
--dontwarn com.google.android.play.core.**
--dontwarn com.google.android.gms.**
--dontwarn com.google.android.material.**
--dontwarn com.google.firebase.**
-
 # Flutter
 -keep class io.flutter.app.** { *; }
 -keep class io.flutter.plugin.** { *; }
@@ -15,22 +5,38 @@
 -keep class io.flutter.view.** { *; }
 -keep class io.flutter.** { *; }
 -keep class io.flutter.plugins.** { *; }
--keep class com.google.firebase.** { *; }
--dontwarn io.flutter.embedding.**
+-keep class com.example.event_countdown.** { *; }
 
-# Local notifications
--keep class com.dexterous.** { *; }
--dontwarn com.dexterous.**
+# Keep widget providers (accessed via reflection by Android system)
+-keep class * extends android.appwidget.AppWidgetProvider { *; }
+
+# Keep MethodChannel handlers
+-keep class * extends io.flutter.embedding.android.FlutterActivity { *; }
+
+# home_widget
+-keep class es.antonborri.home_widget.** { *; }
 
 # WorkManager
 -keep class androidx.work.** { *; }
--dontwarn androidx.work.**
+-keep class * extends androidx.work.Worker { *; }
+-keep class * extends androidx.work.ListenableWorker { *; }
 
-# SQLite / sqflite
+# Prevent R8 from stripping necessary metadata
+-keepattributes *Annotation*
+-keepattributes Signature
+-keepattributes Exceptions
+-keepattributes InnerClasses
+-keepattributes EnclosingMethod
+
+# SQLite (used by sqflite)
 -keep class net.sqlcipher.** { *; }
--keep class net.sqlcipher.database.** { *; }
 
-# Remove logging in release builds
+# Gson/JSON serialization (if used)
+-keepclassmembers class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+
+# Remove logging in release
 -assumenosideeffects class android.util.Log {
     public static boolean isLoggable(java.lang.String, int);
     public static int v(...);
@@ -38,25 +44,4 @@
     public static int w(...);
     public static int d(...);
     public static int e(...);
-}
-
-# Keep JSON serialization for event export
--keepclassmembers class * {
-    @com.google.gson.annotations.SerializedName <fields>;
-}
-
-# Keep generic signatures
--keepattributes Signature, InnerClasses, EnclosingMethod, Exceptions, *Annotation*
-
-# Keep native methods
--keepclasseswithmembernames class * {
-    native <methods>;
-}
-
-# Keep setters/getters for reflection
--keepclassmembers class * {
-    void set*(***);
-    *** get*();
-    ***
-    is*();
 }

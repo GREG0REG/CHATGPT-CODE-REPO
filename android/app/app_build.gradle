@@ -1,0 +1,118 @@
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '1.0'
+}
+
+android {
+    namespace "com.example.event_countdown"
+    compileSdk = 35
+    ndkVersion = "25.1.8937393"
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+        coreLibraryDesugaringEnabled true
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    defaultConfig {
+        applicationId "com.example.event_countdown"
+        minSdkVersion 21
+        targetSdkVersion 35
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+        multiDexEnabled true
+
+        // ABI filter: only arm64 (removes x86, x86_64, armeabi-v7a)
+        // This cuts APK size by ~40-50%
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+    }
+
+    signingConfigs {
+        release {
+            keyAlias 'release'
+            keyPassword 'releasepass'
+            storeFile file('release-key.jks')
+            storePassword 'releasepass'
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            crunchPngs true
+
+            packagingOptions {
+                jniLibs {
+                    useLegacyPackaging false
+                }
+                // Remove unnecessary metadata files
+                exclude 'META-INF/DEPENDENCIES'
+                exclude 'META-INF/LICENSE'
+                exclude 'META-INF/LICENSE.txt'
+                exclude 'META-INF/NOTICE'
+                exclude 'META-INF/NOTICE.txt'
+            }
+        }
+        debug {
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+
+    // REMOVED: splits.abi block with universalApk=true
+    // This was creating multiple APKs + a huge universal APK
+    // Now we use ndk.abiFilters above for a single optimized APK
+
+    lint {
+        checkReleaseBuilds = true
+        disable += 'InvalidPackage'
+        textReport = true
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        eachDependency { details ->
+            if (details.requested.group == 'androidx.work') {
+                details.useVersion '2.8.1'
+            }
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+    implementation 'androidx.work:work-runtime-ktx:2.8.1'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
+}
