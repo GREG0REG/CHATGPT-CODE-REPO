@@ -873,10 +873,11 @@ class _HabitScreenState extends State<HabitScreen> {
       ),
     );
 
-    if (result != null) {
+        if (result != null) {
       await DatabaseHelper.instance.insertHabit(result);
       HapticFeedback.mediumImpact();
       await _loadAllData();
+      await WidgetService.refreshHabitWidget(); // <-- ADD THIS
     }
   }
 
