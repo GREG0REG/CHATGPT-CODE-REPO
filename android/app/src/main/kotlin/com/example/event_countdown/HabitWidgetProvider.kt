@@ -45,12 +45,14 @@ class HabitWidgetProvider : AppWidgetProvider() {
                     freshViews.setViewVisibility(R.id.habit_widget_empty, android.view.View.GONE)
                     freshViews.setViewVisibility(R.id.habit_widget_container, android.view.View.VISIBLE)
 
+                    // CRITICAL FIX: Clear old rows before adding new ones
+                    freshViews.removeAllViews(R.id.habit_widget_container)
+
                     val displayCount = habitCount.coerceAtMost(MAX_HABITS)
 
                     for (i in 0 until displayCount) {
                         val habitName = widgetData.getString("habit_name_$i", "Habit") ?: "Habit"
                         val streak = widgetData.getInt("habit_streak_$i", 0)
-                        val progress = widgetData.getInt("habit_progress_$i", 0)
                         val completed = widgetData.getInt("habit_completed_$i", 0)
                         val target = widgetData.getInt("habit_target_$i", 7)
                         val colorStr = widgetData.getString("habit_color_$i", "#4CAF50") ?: "#4CAF50"
