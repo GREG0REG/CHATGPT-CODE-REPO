@@ -12,31 +12,11 @@ import android.os.Build
 import android.os.SystemClock
 import android.view.View
 import android.widget.RemoteViews
-import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetPlugin
 
-/**
- * Pomodoro Home Screen Widget — NEET Edition v2
- * COMPLETE REPLACEMENT
- *
- * FIX: Now uses HomeWidgetPlugin.getData() to read from home_widget SharedPreferences
- * instead of reading from "FlutterSharedPreferences" (which is the wrong prefs file).
- *
- * FEATURES:
- * - Circular progress ring with phase-based colors (teal focus, green break, orange paused)
- * - NEET countdown banner with urgency colors
- * - Timer display with phase label
- * - Session counter with flame
- * - Distraction counter
- * - Daily goal progress bar
- * - Subject + topic display
- * - Tap to open app
- * - Alarm-based tick updates (1s active, 10s idle)
- */
 class PomodoroWidgetProvider : AppWidgetProvider() {
 
     companion object {
-        // Keys MUST match what WidgetService.saveWidgetData() uses in Dart
         private const val KEY_PHASE = "pomodoro_phase"
         private const val KEY_TIMER_TEXT = "pomodoro_timer_text"
         private const val KEY_STATUS = "pomodoro_status"
@@ -60,7 +40,6 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             widgetId: Int
         ) {
             try {
-                // CRITICAL FIX: Use HomeWidgetPlugin.getData() instead of wrong SharedPreferences
                 val widgetData = HomeWidgetPlugin.getData(context)
 
                 val phase = widgetData.getString(KEY_PHASE, "idle") ?: "idle"
@@ -82,11 +61,11 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 val isFocusing = phase.equals("focusing", ignoreCase = true)
                 val isIdle = phase.equals("idle", ignoreCase = true)
 
-                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, timer=$timerText, progress=$progress")
+                android.util.Log.i("PomodoroWidget", "Widget $widgetId: phase=$phase, timer=$timerText")
 
                 val views = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
 
-                // ── Background ──
+                // Background
                 val bgColor = when {
                     isBreak -> Color.parseColor("#0A2E2A")
                     isPaused -> Color.parseColor("#2A1F0A")
@@ -94,7 +73,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 }
                 views.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", bgColor)
 
-                // ── NEET Countdown Banner ──
+                // NEET Banner
                 if (neetDays > 0) {
                     views.setViewVisibility(R.id.neet_banner, View.VISIBLE)
                     views.setTextViewText(R.id.neet_days_text, "$neetDays")
@@ -110,7 +89,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.neet_banner, View.GONE)
                 }
 
-                // ── Phase Pill ──
+                // Phase Pill
                 if (!isIdle) {
                     views.setViewVisibility(R.id.pomodoro_phase_pill, View.VISIBLE)
                     val phaseLabel = when {
@@ -133,43 +112,43 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.pomodoro_phase_pill, View.GONE)
                 }
 
-                // ── Timer ──
+                // Timer
                 views.setTextViewText(R.id.pomodoro_widget_timer, timerText)
                 views.setTextColor(R.id.pomodoro_widget_timer, Color.WHITE)
 
-                // ── Status ──
+                // Status
                 val statusText = when {
                     isIdle -> "Tap to begin"
                     isFocusing -> "Session ${sessions + 1}"
-                    isBreak -> timerText + " remaining"
+                    isBreak -> "$timerText remaining"
                     isPaused -> "Tap app to resume"
                     else -> status
                 }
                 views.setTextViewText(R.id.pomodoro_widget_status, statusText)
                 views.setTextColor(R.id.pomodoro_widget_status, Color.parseColor("#B0FFFFFF"))
 
-                // ── Subject ──
+                // Subject
                 views.setTextViewText(R.id.pomodoro_widget_subject, subject)
                 views.setTextColor(R.id.pomodoro_widget_subject, Color.WHITE)
 
-                // ── Topic ──
-                if (topic != null && topic.isNotEmpty()) {
+                // Topic
+                if (!topic.isNullOrEmpty()) {
                     views.setViewVisibility(R.id.pomodoro_widget_topic, View.VISIBLE)
                     views.setTextViewText(R.id.pomodoro_widget_topic, "\uD83D\uDCCC $topic")
                 } else {
                     views.setViewVisibility(R.id.pomodoro_widget_topic, View.GONE)
                 }
 
-                // ── Progress Rings ──
-                views.setProgressBar(R.id.pomodoro_progress_ring_default, 100, progress, false)
-                views.setProgressBar(R.id.pomodoro_progress_ring_break, 100, progress, false)
-                views.setProgressBar(R.id.pomodoro_progress_ring_paused, 100, progress, false)
+                // Linear Progress Bar (replaces circular rings)
+                val progressColor = when {
+                    isBreak -> Color.parseColor("#00C9A7")
+                    isPaused -> Color.parseColor("#FFA726")
+                    else -> Color.parseColor("#5B6EF5")
+                }
+                views.setProgressBar(R.id.pomodoro_progress_bar, 100, progress.coerceIn(0, 100), false)
+                views.setInt(R.id.pomodoro_progress_bar, "setProgressTintList", progressColor)
 
-                views.setViewVisibility(R.id.pomodoro_progress_ring_default, if (!isBreak && !isPaused) View.VISIBLE else View.GONE)
-                views.setViewVisibility(R.id.pomodoro_progress_ring_break, if (isBreak) View.VISIBLE else View.GONE)
-                views.setViewVisibility(R.id.pomodoro_progress_ring_paused, if (isPaused) View.VISIBLE else View.GONE)
-
-                // ── Session Counter ──
+                // Session Counter
                 if (sessions > 0) {
                     views.setViewVisibility(R.id.pomodoro_session_chips, View.VISIBLE)
                     views.setTextViewText(R.id.completed_sessions, "$sessions")
@@ -177,7 +156,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.pomodoro_session_chips, View.GONE)
                 }
 
-                // ── Distraction Counter ──
+                // Distraction Counter
                 if (isFocusing && distractions > 0) {
                     views.setViewVisibility(R.id.distraction_chip, View.VISIBLE)
                     views.setTextViewText(R.id.distraction_text, "$distractions")
@@ -185,15 +164,15 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.distraction_chip, View.GONE)
                 }
 
-                // ── Next Subject Preview (during break) ──
-                if (isBreak && nextSubject != null && nextSubject.isNotEmpty()) {
+                // Next Subject Preview
+                if (isBreak && !nextSubject.isNullOrEmpty()) {
                     views.setViewVisibility(R.id.next_subject_chip, View.VISIBLE)
                     views.setTextViewText(R.id.next_subject_text, "Next: $nextSubject")
                 } else {
                     views.setViewVisibility(R.id.next_subject_chip, View.GONE)
                 }
 
-                // ── Daily Goal Bar ──
+                // Daily Goal Bar
                 if (dailyGoal > 0) {
                     views.setViewVisibility(R.id.daily_goal_container, View.VISIBLE)
                     views.setTextViewText(R.id.daily_goal_text, "$dailyMinutes / $dailyGoal min")
@@ -203,7 +182,7 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.daily_goal_container, View.GONE)
                 }
 
-                // ── Tap to open app ──
+                // Tap to open app
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 if (launchIntent != null) {
                     val pendingIntent = PendingIntent.getActivity(
@@ -286,13 +265,10 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
-        android.util.Log.i("PomodoroWidget", "onEnabled: scheduling first tick")
         scheduleTick(context, IDLE_TICK_INTERVAL_MS)
     }
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-        super.onUpdate(context, appWidgetManager, appWidgetIds)
-        android.util.Log.i("PomodoroWidget", "onUpdate: ${appWidgetIds.size} widgets")
         for (widgetId in appWidgetIds) {
             updateWidgetDirectly(context, appWidgetManager, widgetId)
         }
@@ -301,7 +277,6 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        android.util.Log.i("PomodoroWidget", "onReceive: ${intent.action}")
         when (intent.action) {
             ACTION_POMODORO_TICK -> updateAllWidgets(context)
             Intent.ACTION_BOOT_COMPLETED -> updateAllWidgets(context)
