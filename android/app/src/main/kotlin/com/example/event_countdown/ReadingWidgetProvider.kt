@@ -8,13 +8,11 @@ import android.content.Context
 import android.content.Intent
 import android.view.View
 import android.widget.RemoteViews
-import org.json.JSONObject
-import java.io.File
+import es.antonborri.home_widget.HomeWidgetPlugin
 
 class ReadingWidgetProvider : AppWidgetProvider() {
 
     companion object {
-        private const val READING_DATA_FILE = "reading_widget_data.json"
 
         fun updateWidgetDirectly(
             context: Context,
@@ -23,6 +21,11 @@ class ReadingWidgetProvider : AppWidgetProvider() {
         ) {
             try {
                 val views = RemoteViews(context.packageName, R.layout.reading_widget_layout)
+
+                // ── Read data from home_widget SharedPreferences ──
+                val widgetData = HomeWidgetPlugin.getData(context)
+
+                val bookCount = widgetData.getInt("reading_book_count", 0)
 
                 // Safe defaults
                 var bookTitle = "No Books"
@@ -33,24 +36,19 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                 var reminderText = "Add a book to start tracking"
                 var minutesReadToday = 0
 
-                try {
-                    // CRITICAL FIX: Use context.filesDir directly — matches Event widget and Dart's getApplicationSupportDirectory()
-                    val file = File(context.filesDir, READING_DATA_FILE)
+                if (bookCount > 0) {
+                    // Use the first book (highest progress)
+                    bookTitle = widgetData.getString("reading_title_0", bookTitle) ?: bookTitle
+                    progressPercent = widgetData.getInt("reading_progress_0", 0)
+                    val pagesStr = widgetData.getString("reading_pages_0", "0 / 1") ?: "0 / 1"
+                    statusColor = widgetData.getString("reading_color_0", statusColor) ?: statusColor
 
-                    if (file.exists()) {
-                        val json = JSONObject(file.readText())
-                        bookTitle = json.optString("bookTitle", bookTitle)
-                        currentPage = json.optInt("currentPage", 0)
-                        totalPages = json.optInt("totalPages", 0)
-                        progressPercent = json.optInt("progressPercent", 0)
-                        statusColor = json.optString("statusColor", statusColor)
-                        reminderText = json.optString("message", reminderText)
-                        minutesReadToday = json.optInt("minutesReadToday", 0)
-                    } else {
-                        android.util.Log.w("ReadingWidget", "Data file not found at: ${file.absolutePath}")
+                    // Parse "current / total" from pages string
+                    val parts = pagesStr.split("/").map { it.trim() }
+                    if (parts.size == 2) {
+                        currentPage = parts[0].toIntOrNull() ?: 0
+                        totalPages = parts[1].toIntOrNull() ?: 1
                     }
-                } catch (e: Exception) {
-                    android.util.Log.e("ReadingWidget", "JSON read failed", e)
                 }
 
                 // Set book title
@@ -62,8 +60,7 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                     "Page $currentPage/$totalPages • $progressPercent%"
                 )
 
-                // Set progress bar value (FIXED: removed crashing setProgressTintList call)
-                // The progress bar uses widget_progress_bar.xml which already has white progress color
+                // Set progress bar value
                 views.setProgressBar(R.id.reading_widget_progress_bar, 100, progressPercent, false)
 
                 // Show reminder based on reading status
@@ -78,7 +75,7 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                     views.setTextViewText(R.id.reading_widget_reminder, reminderText)
                 }
 
-                // FIXED: Null-safe PendingIntent using ?.let (matches Event widget pattern)
+                // Null-safe PendingIntent using ?.let
                 context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { openAppIntent ->
                     openAppIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     val pendingIntent = PendingIntent.getActivity(
