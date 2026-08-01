@@ -95,15 +95,14 @@
             android:textSize="11sp" />
     </LinearLayout>
 
-    <!-- Footer: Aggregate Stats -->
+    <!-- CRITICAL FIX: Combined footer into one coherent LinearLayout.
+         Previously the divider and stats were separate siblings causing measurement issues. -->
     <LinearLayout
         android:id="@+id/reading_widget_footer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
+        android:orientation="vertical"
         android:layout_marginTop="8dp"
-        android:paddingTop="8dp"
         android:visibility="gone">
 
         <View
@@ -111,44 +110,43 @@
             android:layout_height="1dp"
             android:background="#22FFFFFF"
             android:layout_marginBottom="8dp" />
-    </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/reading_widget_footer_stats"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:visibility="gone">
-
-        <TextView
-            android:id="@+id/reading_widget_footer_books"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:id="@+id/reading_widget_footer_stats"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="📊 0/0 books"
-            android:textColor="#88FFFFFF"
-            android:textSize="10sp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-        <TextView
-            android:id="@+id/reading_widget_footer_pages"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:text="📄 0 pages today"
-            android:textColor="#88FFFFFF"
-            android:textSize="10sp" />
+            <TextView
+                android:id="@+id/reading_widget_footer_books"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="📊 0/0 books"
+                android:textColor="#88FFFFFF"
+                android:textSize="10sp" />
 
-        <TextView
-            android:id="@+id/reading_widget_footer_time"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="end"
-            android:text="⏱️ 0h 0m"
-            android:textColor="#88FFFFFF"
-            android:textSize="10sp" />
+            <TextView
+                android:id="@+id/reading_widget_footer_pages"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="📄 0 pages today"
+                android:textColor="#88FFFFFF"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/reading_widget_footer_time"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="end"
+                android:text="⏱️ 0h 0m"
+                android:textColor="#88FFFFFF"
+                android:textSize="10sp" />
+        </LinearLayout>
     </LinearLayout>
 
 </LinearLayout>
