@@ -38,21 +38,37 @@ class _WidgetSettingsScreenState extends State<WidgetSettingsScreen> {
   Future<void> _setProgressBar(bool value) async {
     await SettingsService.instance.setWidgetProgressBar(value);
     setState(() => _progressBar = value);
-    await WidgetService.refreshWidget();
+    // CRITICAL FIX: Wrapped in try-catch to prevent UI crash if platform channel fails
+    try {
+      await WidgetService.refreshWidget();
+    } catch (e) {
+      debugPrint('Widget refresh failed: $e');
+    }
   }
 
   Future<void> _setPulseAnimation(bool value) async {
     await SettingsService.instance.setWidgetPulseAnimation(value);
     setState(() => _pulseAnimation = value);
-    await WidgetService.refreshWidget();
+    try {
+      await WidgetService.refreshWidget();
+    } catch (e) {
+      debugPrint('Widget refresh failed: $e');
+    }
   }
 
   Future<void> _forceRefresh() async {
-    await WidgetService.refreshWidget();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Widget refreshed!')),
-    );
+    try {
+      await WidgetService.refreshWidget();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Widget refreshed!')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Widget refresh failed: $e')),
+      );
+    }
   }
 
   @override
