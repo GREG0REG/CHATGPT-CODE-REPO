@@ -208,19 +208,42 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
                 alarmManager.cancel(pendingIntent)
                 val triggerAt = SystemClock.elapsedRealtime() + intervalMillis
 
+                // CRITICAL FIX: Check for exact alarm permission on Android 12+ before using exact alarms.
+                // Falls back to inexact alarm if permission is missing, preventing SecurityException crashes.
+                val canUseExactAlarm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    alarmManager.canScheduleExactAlarms()
+                } else {
+                    true
+                }
+
                 try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && canUseExactAlarm) {
                         alarmManager.setExactAndAllowWhileIdle(
                             AlarmManager.ELAPSED_REALTIME_WAKEUP,
                             triggerAt,
                             pendingIntent
                         )
-                    } else {
+                    } else if (canUseExactAlarm) {
                         alarmManager.setExact(
                             AlarmManager.ELAPSED_REALTIME_WAKEUP,
                             triggerAt,
                             pendingIntent
                         )
+                    } else {
+                        // Fallback: inexact alarm — still wakes device, just not exact
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            alarmManager.setAndAllowWhileIdle(
+                                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                                triggerAt,
+                                pendingIntent
+                            )
+                        } else {
+                            alarmManager.set(
+                                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                                triggerAt,
+                                pendingIntent
+                            )
+                        }
                     }
                 } catch (e: SecurityException) {
                     android.util.Log.w("PomodoroWidget", "Exact alarm not permitted, using fallback")
