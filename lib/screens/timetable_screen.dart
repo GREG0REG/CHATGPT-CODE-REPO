@@ -1523,7 +1523,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
   // ═══════════════════════════════════════════════════════════════════
   // TASK BLOCK — Dashed border, distinct from classes
   // ═══════════════════════════════════════════════════════════════════
-  Widget _buildTaskBlock(Map<String, dynamic> t, ColorScheme cs) {
+    Widget _buildTaskBlock(Map<String, dynamic> t, ColorScheme cs) {
     final start = t['startTimeMinutes'] as int;
     final end = t['endTimeMinutes'] as int;
     final top = _minutesToPixels(start);
@@ -1532,6 +1532,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
     final subject = t['subjectName'] as String? ?? '';
     final isStudyBlock = t['taskType'] == 'study_block';
+    final isSmall = height < 45;
 
     return Positioned(
       top: top,
@@ -1546,7 +1547,6 @@ class _TimetableScreenState extends State<TimetableScreen> {
           side: BorderSide(
             color: isCompleted ? Colors.grey.withOpacity(0.4) : typeColor.withOpacity(0.5),
             width: 1.5,
-            style: BorderStyle.solid,
           ),
         ),
         color: isCompleted ? Colors.grey.withOpacity(0.05) : typeColor.withOpacity(0.06),
@@ -1555,7 +1555,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
           onLongPress: () => _deleteTask(t['id'] as int),
           borderRadius: BorderRadius.circular(10),
           child: Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -1563,41 +1563,49 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 Row(
                   children: [
                     Icon(_typeIcon(t['taskType'] as String), size: 12, color: isCompleted ? Colors.grey : typeColor),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 5),
                     Expanded(
                       child: Text(
                         t['title'] as String,
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: isSmall ? 11 : 12,
                           fontWeight: FontWeight.w600,
                           color: isCompleted ? Colors.grey : typeColor.withOpacity(0.9),
                           decoration: isCompleted ? TextDecoration.lineThrough : null,
+                          height: 1.2,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (isStudyBlock && height > 40)
+                    if (isStudyBlock && !isSmall)
                       InkWell(
                         onTap: () => _goToPomodoro(subject.isNotEmpty ? subject : 'Study'),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(5),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: Colors.deepPurple.withOpacity(0.15), borderRadius: BorderRadius.circular(4)),
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurple.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: Colors.deepPurple.withOpacity(0.25)),
+                          ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.play_arrow, size: 10, color: Colors.deepPurple.shade700),
+                              Icon(Icons.play_arrow, size: 10, color: Colors.deepPurple.shade600),
                               const SizedBox(width: 2),
-                              Text('Start', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.deepPurple.shade700)),
+                              Text('Start', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.deepPurple.shade600)),
                             ],
                           ),
                         ),
                       ),
                   ],
                 ),
-                if (height > 30)
-                  Text('${_formatMinutes24(start)} - ${_formatMinutes24(end)}', style: TextStyle(fontSize: 9, color: cs.outline.withOpacity(0.7))),
+                if (!isSmall)
+                  Text(
+                    '${_formatMinutes24(start)} – ${_formatMinutes24(end)}',
+                    style: TextStyle(fontSize: 9, color: cs.outline.withOpacity(0.5)),
+                  ),
               ],
             ),
           ),
@@ -1617,7 +1625,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
           color: cs.surfaceContainerHighest.withOpacity(0.5),
-          border: Border(top: BorderSide(color: cs.outline.withOpacity(0.2))),
+          border: Border(top: BorderSide(color: cs.outline.withOpacity(0.15))),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1638,21 +1646,20 @@ class _TimetableScreenState extends State<TimetableScreen> {
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // ENTRY DRAWER — Expandable panel with Class/Task tabs
+  // ENTRY DRAWER
   // ═══════════════════════════════════════════════════════════════════
   Widget _buildEntryDrawer(ColorScheme cs) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cs.surface,
-        border: Border(top: BorderSide(color: cs.outline.withOpacity(0.2))),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, -2))],
+        border: Border(top: BorderSide(color: cs.outline.withOpacity(0.15))),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, -2))],
       ),
       child: SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Tabs
             Container(
               decoration: BoxDecoration(
                 color: cs.surfaceContainerHighest.withOpacity(0.3),
@@ -1706,7 +1713,6 @@ class _TimetableScreenState extends State<TimetableScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            // Quick action buttons
             Row(
               children: [
                 Expanded(
@@ -1724,7 +1730,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 ),
               ],
             ),
-                        const SizedBox(height: 8),
+            const SizedBox(height: 8),
             if (_entryTab == 0)
               OutlinedButton.icon(
                 onPressed: _suggestStudyBlock,
