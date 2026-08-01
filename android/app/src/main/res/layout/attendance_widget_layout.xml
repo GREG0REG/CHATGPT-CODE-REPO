@@ -77,7 +77,7 @@
         android:gravity="center_vertical"
         android:visibility="visible">
 
-        <!-- Left: Large Percentage Text (replaces circular rings) -->
+        <!-- Left: Large Percentage Text -->
         <FrameLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
@@ -109,11 +109,15 @@
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
 
-                <View
+                <!-- CRITICAL FIX: Changed from <View> to <TextView> with bullet character.
+                     This allows safe setTextColor() from RemoteViews instead of crash-prone setBackgroundColor. -->
+                <TextView
                     android:id="@+id/attendance_widget_subject_dot"
                     android:layout_width="10dp"
                     android:layout_height="10dp"
-                    android:background="#4CAF50"
+                    android:text="\u25CF"
+                    android:textSize="10sp"
+                    android:gravity="center"
                     android:layout_marginEnd="8dp" />
 
                 <TextView
