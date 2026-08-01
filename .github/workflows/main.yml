@@ -52,14 +52,14 @@ jobs:
       - name: Ensure Gradle wrapper
         run: |
           if [ ! -f android/gradlew ]; then
-            flutter create --platforms=android .temp_proj
-            cp .temp_proj/android/gradlew android/
-            cp .temp_proj/android/gradlew.bat android/
+            flutter create --platforms=android temp_proj
+            cp temp_proj/android/gradlew android/
+            cp temp_proj/android/gradlew.bat android/
             mkdir -p android/gradle/wrapper
-            cp .temp_proj/android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/
-            cp .temp_proj/android/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/
+            cp temp_proj/android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/
+            cp temp_proj/android/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/
             chmod +x android/gradlew
-            rm -rf .temp_proj
+            rm -rf temp_proj
           fi
           sed -i 's/gradle-[0-9.]*-/gradle-8.4-/g' android/gradle/wrapper/gradle-wrapper.properties
           cat android/gradle/wrapper/gradle-wrapper.properties
