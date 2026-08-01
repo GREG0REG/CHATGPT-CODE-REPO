@@ -7,7 +7,7 @@
     android:orientation="vertical"
     android:padding="8dp"
     android:layout_marginBottom="8dp"
-    android:background="@drawable/widget_book_item_background">
+    android:background="#15FFFFFF">
 
     <!-- Top row: Title + Status badge -->
     <LinearLayout
