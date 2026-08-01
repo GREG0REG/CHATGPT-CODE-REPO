@@ -164,7 +164,7 @@ class _ReadingScreenState extends State<ReadingScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => _AddBookSheet(existingBook: existingBook),
     );
-    if (result != null) {
+   if (result != null) {
       if (existingBook != null) {
         await DatabaseHelper.instance.updateReadingBook(existingBook['id'] as int, result);
       } else {
@@ -172,8 +172,9 @@ class _ReadingScreenState extends State<ReadingScreen> {
       }
       HapticFeedback.mediumImpact();
       await _loadData();
+      await WidgetService.refreshReadingWidget(); // <-- ADD THIS
     }
-  }
+ }
 
   Future<void> _deleteBook(int id) async {
     final confirm = await showDialog<bool>(
