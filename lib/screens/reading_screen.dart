@@ -785,6 +785,7 @@ class _TodayWidget extends StatelessWidget {
                 await DatabaseHelper.instance.updateReadingProgress(bookId, newPage, 20);
                 HapticFeedback.lightImpact();
                 onLogSession();
+                await WidgetService.refreshReadingWidget(); // <-- ADD THIS
               }
             },
             child: const Text('Log 20 min'),
