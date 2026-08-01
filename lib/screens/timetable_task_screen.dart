@@ -1,7 +1,7 @@
 // FILE: lib/screens/timetable_task_screen.dart
 // COMPLETE REPLACEMENT — Task/Deadline Manager
+// FIXED: Only uses columns that exist in timetable_tasks table
 
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database_helper.dart';
@@ -76,8 +76,6 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
     int? startTimeMinutes;
     int? endTimeMinutes;
     bool hasTime = false;
-    bool hasReminder = false;
-    DateTime? reminderDateTime;
 
     final types = ['assignment', 'exam', 'revision', 'personal', 'study_block'];
     final typeLabels = ['Assignment', 'Exam', 'Revision', 'Personal', 'Study Block'];
@@ -96,18 +94,12 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
                 children: [
                   TextField(
                     controller: titleController,
-                    decoration: const InputDecoration(
-                      labelText: 'Title *',
-                      prefixIcon: Icon(Icons.title),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Title *', prefixIcon: Icon(Icons.title)),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: taskType,
-                    decoration: const InputDecoration(
-                      labelText: 'Type',
-                      prefixIcon: Icon(Icons.category),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Type', prefixIcon: Icon(Icons.category)),
                     items: List.generate(types.length, (i) => DropdownMenuItem(
                       value: types[i],
                       child: Text(typeLabels[i]),
@@ -117,19 +109,13 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: subjectController,
-                    decoration: const InputDecoration(
-                      labelText: 'Subject (optional)',
-                      prefixIcon: Icon(Icons.book),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Subject (optional)', prefixIcon: Icon(Icons.book)),
                   ),
                   const SizedBox(height: 12),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Due Date', style: TextStyle(fontSize: 12)),
-                    subtitle: Text(
-                      '${dueDate.day}/${dueDate.month}/${dueDate.year}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    subtitle: Text('${dueDate.day}/${dueDate.month}/${dueDate.year}', style: const TextStyle(fontWeight: FontWeight.bold)),
                     trailing: const Icon(Icons.calendar_today, size: 20),
                     onTap: () async {
                       final picked = await showDatePicker(
@@ -190,58 +176,10 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
                       ],
                     ),
                   ],
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Set Reminder'),
-                    subtitle: const Text('Get notified before due date'),
-                    value: hasReminder,
-                    onChanged: (v) => setDialogState(() => hasReminder = v),
-                  ),
-                  if (hasReminder) ...[
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Reminder Date & Time', style: TextStyle(fontSize: 12)),
-                      subtitle: Text(
-                        reminderDateTime != null
-                            ? '${reminderDateTime.day}/${reminderDateTime.month}/${reminderDateTime.year} ${_formatMinutes(reminderDateTime.hour * 60 + reminderDateTime.minute)}'
-                            : 'Not set',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      trailing: const Icon(Icons.alarm, size: 20),
-                      onTap: () async {
-                        final pickedDate = await showDatePicker(
-                          context: context,
-                          initialDate: reminderDateTime ?? dueDate.subtract(const Duration(days: 1)),
-                          firstDate: DateTime.now(),
-                          lastDate: dueDate,
-                        );
-                        if (pickedDate != null) {
-                          final pickedTime = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay.fromDateTime(reminderDateTime ?? DateTime.now()),
-                          );
-                          if (pickedTime != null) {
-                            setDialogState(() {
-                              reminderDateTime = DateTime(
-                                pickedDate.year,
-                                pickedDate.month,
-                                pickedDate.day,
-                                pickedTime.hour,
-                                pickedTime.minute,
-                              );
-                            });
-                          }
-                        }
-                      },
-                    ),
-                  ],
                   const SizedBox(height: 8),
                   TextField(
                     controller: noteController,
-                    decoration: const InputDecoration(
-                      labelText: 'Note (optional)',
-                      prefixIcon: Icon(Icons.notes),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Note (optional)', prefixIcon: Icon(Icons.notes)),
                     maxLines: 2,
                   ),
                 ],
@@ -252,15 +190,11 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
               FilledButton(
                 onPressed: () {
                   if (titleController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('Title is required')),
-                    );
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Title is required')));
                     return;
                   }
                   if (hasTime && startTimeMinutes != null && endTimeMinutes != null && endTimeMinutes! <= startTimeMinutes!) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('End time must be after start time')),
-                    );
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('End time must be after start time')));
                     return;
                   }
                   Navigator.pop(ctx, {
@@ -271,8 +205,6 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
                     'startTime': hasTime ? startTimeMinutes : null,
                     'endTime': hasTime ? endTimeMinutes : null,
                     'note': noteController.text.trim(),
-                    'hasReminder': hasReminder,
-                    'reminderDateTime': hasReminder ? reminderDateTime?.millisecondsSinceEpoch : null,
                   });
                 },
                 child: const Text('Add'),
@@ -301,8 +233,6 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
         'colorHex': _colorToHex(_typeColor(result['type'] as String)),
         'isCompleted': 0,
         'note': result['note'],
-        'hasReminder': (result['hasReminder'] as bool) ? 1 : 0,
-        'reminderDateTimeMillis': result['reminderDateTime'],
         'createdAtMillis': now,
       });
       HapticFeedback.mediumImpact();
@@ -322,10 +252,6 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
     int? startTimeMinutes = existing['startTimeMinutes'] as int?;
     int? endTimeMinutes = existing['endTimeMinutes'] as int?;
     bool hasTime = startTimeMinutes != null;
-    bool hasReminder = (existing['hasReminder'] as int? ?? 0) == 1;
-    DateTime? reminderDateTime = existing['reminderDateTimeMillis'] != null
-        ? DateTime.fromMillisecondsSinceEpoch(existing['reminderDateTimeMillis'] as int)
-        : null;
 
     final types = ['assignment', 'exam', 'revision', 'personal', 'study_block'];
     final typeLabels = ['Assignment', 'Exam', 'Revision', 'Personal', 'Study Block'];
@@ -344,18 +270,12 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
                 children: [
                   TextField(
                     controller: titleController,
-                    decoration: const InputDecoration(
-                      labelText: 'Title *',
-                      prefixIcon: Icon(Icons.title),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Title *', prefixIcon: Icon(Icons.title)),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: taskType,
-                    decoration: const InputDecoration(
-                      labelText: 'Type',
-                      prefixIcon: Icon(Icons.category),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Type', prefixIcon: Icon(Icons.category)),
                     items: List.generate(types.length, (i) => DropdownMenuItem(
                       value: types[i],
                       child: Text(typeLabels[i]),
@@ -365,19 +285,13 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: subjectController,
-                    decoration: const InputDecoration(
-                      labelText: 'Subject (optional)',
-                      prefixIcon: Icon(Icons.book),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Subject (optional)', prefixIcon: Icon(Icons.book)),
                   ),
                   const SizedBox(height: 12),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Due Date', style: TextStyle(fontSize: 12)),
-                    subtitle: Text(
-                      '${dueDate.day}/${dueDate.month}/${dueDate.year}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    subtitle: Text('${dueDate.day}/${dueDate.month}/${dueDate.year}', style: const TextStyle(fontWeight: FontWeight.bold)),
                     trailing: const Icon(Icons.calendar_today, size: 20),
                     onTap: () async {
                       final picked = await showDatePicker(
@@ -444,58 +358,10 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
                       ],
                     ),
                   ],
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Set Reminder'),
-                    subtitle: const Text('Get notified before due date'),
-                    value: hasReminder,
-                    onChanged: (v) => setDialogState(() => hasReminder = v),
-                  ),
-                  if (hasReminder) ...[
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Reminder Date & Time', style: TextStyle(fontSize: 12)),
-                      subtitle: Text(
-                        reminderDateTime != null
-                            ? '${reminderDateTime.day}/${reminderDateTime.month}/${reminderDateTime.year} ${_formatMinutes(reminderDateTime.hour * 60 + reminderDateTime.minute)}'
-                            : 'Not set',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      trailing: const Icon(Icons.alarm, size: 20),
-                      onTap: () async {
-                        final pickedDate = await showDatePicker(
-                          context: context,
-                          initialDate: reminderDateTime ?? dueDate.subtract(const Duration(days: 1)),
-                          firstDate: DateTime.now(),
-                          lastDate: dueDate,
-                        );
-                        if (pickedDate != null) {
-                          final pickedTime = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay.fromDateTime(reminderDateTime ?? DateTime.now()),
-                          );
-                          if (pickedTime != null) {
-                            setDialogState(() {
-                              reminderDateTime = DateTime(
-                                pickedDate.year,
-                                pickedDate.month,
-                                pickedDate.day,
-                                pickedTime.hour,
-                                pickedTime.minute,
-                              );
-                            });
-                          }
-                        }
-                      },
-                    ),
-                  ],
                   const SizedBox(height: 8),
                   TextField(
                     controller: noteController,
-                    decoration: const InputDecoration(
-                      labelText: 'Note (optional)',
-                      prefixIcon: Icon(Icons.notes),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Note (optional)', prefixIcon: Icon(Icons.notes)),
                     maxLines: 2,
                   ),
                 ],
@@ -506,15 +372,11 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
               FilledButton(
                 onPressed: () {
                   if (titleController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('Title is required')),
-                    );
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Title is required')));
                     return;
                   }
                   if (hasTime && startTimeMinutes != null && endTimeMinutes != null && endTimeMinutes! <= startTimeMinutes!) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('End time must be after start time')),
-                    );
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('End time must be after start time')));
                     return;
                   }
                   Navigator.pop(ctx, {
@@ -525,8 +387,6 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
                     'startTime': hasTime ? startTimeMinutes : null,
                     'endTime': hasTime ? endTimeMinutes : null,
                     'note': noteController.text.trim(),
-                    'hasReminder': hasReminder,
-                    'reminderDateTime': hasReminder ? reminderDateTime?.millisecondsSinceEpoch : null,
                   });
                 },
                 child: const Text('Save'),
@@ -556,8 +416,6 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
           'isAllDay': result['startTime'] == null ? 1 : 0,
           'colorHex': _colorToHex(_typeColor(result['type'] as String)),
           'note': result['note'],
-          'hasReminder': (result['hasReminder'] as bool) ? 1 : 0,
-          'reminderDateTimeMillis': result['reminderDateTime'],
           'updatedAtMillis': now,
         },
         where: 'id = ?',
@@ -630,7 +488,8 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
   }
 
   String _colorToHex(Color color) {
-    return '#${color.value.toRadixString(16).padLeft(8, '0').substring(2)}';
+    final argb = color.value;
+    return '#${(argb & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
   }
 
   Color _hexToColor(String hex) {
@@ -643,48 +502,30 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
 
   Color _typeColor(String type) {
     final map = {
-      'lecture': Colors.blue,
-      'lab': Colors.green,
-      'tutorial': Colors.purple,
-      'seminar': Colors.teal,
-      'exam': Colors.red,
-      'quiz': Colors.orange,
-      'assignment': Colors.indigo,
-      'revision': Colors.amber,
-      'personal': Colors.pink,
-      'study_block': Colors.cyan,
+      'lecture': Colors.blue, 'lab': Colors.green, 'tutorial': Colors.purple,
+      'seminar': Colors.teal, 'exam': Colors.red, 'quiz': Colors.orange,
+      'assignment': Colors.indigo, 'revision': Colors.amber,
+      'personal': Colors.pink, 'study_block': Colors.cyan,
     };
     return map[type] ?? Colors.blue;
   }
 
   IconData _typeIcon(String type) {
     final map = {
-      'lecture': Icons.school,
-      'lab': Icons.science,
-      'tutorial': Icons.group,
-      'seminar': Icons.record_voice_over,
-      'exam': Icons.quiz,
-      'quiz': Icons.help,
-      'assignment': Icons.assignment,
-      'revision': Icons.menu_book,
-      'personal': Icons.person,
-      'study_block': Icons.timer,
+      'lecture': Icons.school, 'lab': Icons.science, 'tutorial': Icons.group,
+      'seminar': Icons.record_voice_over, 'exam': Icons.quiz, 'quiz': Icons.help,
+      'assignment': Icons.assignment, 'revision': Icons.menu_book,
+      'personal': Icons.person, 'study_block': Icons.timer,
     };
     return map[type] ?? Icons.event;
   }
 
   String _typeLabel(String type) {
     final map = {
-      'lecture': 'Lecture',
-      'lab': 'Lab',
-      'tutorial': 'Tutorial',
-      'seminar': 'Seminar',
-      'exam': 'Exam',
-      'quiz': 'Quiz',
-      'assignment': 'Assignment',
-      'revision': 'Revision',
-      'personal': 'Personal',
-      'study_block': 'Study Block',
+      'lecture': 'Lecture', 'lab': 'Lab', 'tutorial': 'Tutorial',
+      'seminar': 'Seminar', 'exam': 'Exam', 'quiz': 'Quiz',
+      'assignment': 'Assignment', 'revision': 'Revision',
+      'personal': 'Personal', 'study_block': 'Study Block',
     };
     return map[type] ?? type;
   }
@@ -749,9 +590,7 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
                     child: Row(
                       children: _filterOptions.map((opt) {
                         final isSelected = _filterType == opt['value'];
-                        final color = opt['value'] == 'all'
-                            ? cs.primary
-                            : _typeColor(opt['value']!);
+                        final color = opt['value'] == 'all' ? cs.primary : _typeColor(opt['value']!);
                         return Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: FilterChip(
@@ -838,14 +677,8 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          value,
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
-        ),
-        Text(
-          label,
-          style: TextStyle(fontSize: 11, color: color.withOpacity(0.7)),
-        ),
+        Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+        Text(label, style: TextStyle(fontSize: 11, color: color.withOpacity(0.7))),
       ],
     );
   }
@@ -883,7 +716,6 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
     final dueMillis = t['dueDateMillis'] as int;
     final overdue = _isOverdue(dueMillis);
     final dueSoon = _isDueSoon(dueMillis);
-    final hasReminder = (t['hasReminder'] as int? ?? 0) == 1;
     final cardColor = isCompleted
         ? Colors.grey.withOpacity(0.05)
         : overdue
@@ -898,10 +730,7 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        decoration: BoxDecoration(
-          color: Colors.red,
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(12)),
         child: const Icon(Icons.delete, color: Colors.white),
       ),
       confirmDismiss: (_) async {
@@ -1015,7 +844,6 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
                         ],
                       ),
                     ),
-                    // Checkbox
                     Checkbox(
                       value: isCompleted,
                       onChanged: (_) => _toggleTaskComplete(t['id'] as int, isCompleted),
@@ -1024,7 +852,6 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                // Due date and time row
                 Row(
                   children: [
                     Icon(
@@ -1050,47 +877,18 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
                         style: TextStyle(fontSize: 12, color: cs.outline),
                       ),
                     ],
-                    if (hasReminder) ...[
-                      const SizedBox(width: 12),
-                      Icon(Icons.alarm, size: 14, color: Colors.blue.withOpacity(0.7)),
-                      const SizedBox(width: 2),
-                      Text(
-                        'Reminder',
-                        style: TextStyle(fontSize: 11, color: Colors.blue.withOpacity(0.7)),
-                      ),
-                    ],
                     const Spacer(),
                     if (overdue)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          'OVERDUE',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.red,
-                          ),
-                        ),
+                        decoration: BoxDecoration(color: Colors.red.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
+                        child: const Text('OVERDUE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
                       ),
                     if (dueSoon && !overdue)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          'DUE SOON',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.orange,
-                          ),
-                        ),
+                        decoration: BoxDecoration(color: Colors.orange.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
+                        child: const Text('DUE SOON', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange)),
                       ),
                   ],
                 ),
