@@ -3,7 +3,7 @@
 // FEATURES: Chain visualization, weekly progress, tap-to-toggle, templates,
 //           flexible habit types, stats modal, long-press menu, weekly review,
 //           metric tracking (pages/minutes/count), "OR" logic display
-
+import '../services/widget_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'main_screen.dart';
@@ -1116,10 +1116,11 @@ class _HabitScreenState extends State<HabitScreen> {
       ),
     );
 
-    if (result != null) {
+        if (result != null) {
       await DatabaseHelper.instance.updateHabit(habitId, result);
       HapticFeedback.mediumImpact();
       await _loadAllData();
+      await WidgetService.refreshHabitWidget(); // <-- ADD THIS
     }
   }
 
