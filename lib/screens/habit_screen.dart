@@ -416,6 +416,7 @@ class _HabitScreenState extends State<HabitScreen> {
       await DatabaseHelper.instance.deleteHabit(habitId);
       HapticFeedback.mediumImpact();
       await _loadAllData();
+      await WidgetService.refreshHabitWidget(); // <-- ADD THIS
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Habit deleted')),
