@@ -18,17 +18,31 @@ class ReadingWidgetProvider : AppWidgetProvider() {
         private const val REQUEST_CODE_BASE = 5000
 
         private val SUBJECT_COLORS = mapOf(
-            "physics" to "#2196F3",
-            "chemistry" to "#4CAF50",
-            "biology" to "#F44336",
-            "zoology" to "#E91E63",
-            "botany" to "#009688",
-            "math" to "#FF9800",
-            "mathematics" to "#FF9800",
-            "organic chemistry" to "#4CAF50",
-            "physical chemistry" to "#8BC34A",
-            "inorganic chemistry" to "#CDDC39",
-            "general" to "#607D8B"
+            "physics" to Color.parseColor("#2196F3"),
+            "chemistry" to Color.parseColor("#4CAF50"),
+            "biology" to Color.parseColor("#F44336"),
+            "zoology" to Color.parseColor("#E91E63"),
+            "botany" to Color.parseColor("#009688"),
+            "math" to Color.parseColor("#FF9800"),
+            "mathematics" to Color.parseColor("#FF9800"),
+            "organic chemistry" to Color.parseColor("#4CAF50"),
+            "physical chemistry" to Color.parseColor("#8BC34A"),
+            "inorganic chemistry" to Color.parseColor("#CDDC39"),
+            "general" to Color.parseColor("#607D8B")
+        )
+
+        private val SUBJECT_PROGRESS_COLORS = mapOf(
+            "physics" to "reading_progress_blue",
+            "chemistry" to "reading_progress_green",
+            "biology" to "reading_progress_red",
+            "zoology" to "reading_progress_pink",
+            "botany" to "reading_progress_teal",
+            "math" to "reading_progress_orange",
+            "mathematics" to "reading_progress_orange",
+            "organic chemistry" to "reading_progress_green",
+            "physical chemistry" to "reading_progress_light_green",
+            "inorganic chemistry" to "reading_progress_lime",
+            "general" to "reading_progress_gray"
         )
 
         fun updateWidgetDirectly(
@@ -47,35 +61,37 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                 val streakDays = widgetData.getInt("reading_streak_days", 0)
                 val readToday = widgetData.getBoolean("reading_read_today", false)
 
-                // CRITICAL FIX: Clear container before repopulating
+                // Clear container before repopulating
                 views.removeAllViews(R.id.reading_widget_books_container)
 
                 if (bookCount <= 0) {
+                    // EMPTY STATE
                     views.setViewVisibility(R.id.reading_widget_empty, View.VISIBLE)
                     views.setViewVisibility(R.id.reading_widget_books_container, View.GONE)
                     views.setViewVisibility(R.id.reading_widget_footer, View.GONE)
-                    views.setViewVisibility(R.id.reading_widget_footer_stats, View.GONE)
                     views.setViewVisibility(R.id.reading_widget_streak, View.GONE)
 
                     views.setTextViewText(R.id.reading_widget_empty_title, "No Books")
-                    views.setTextViewText(R.id.reading_widget_empty_subtitle, "Page 0/0 \u2022 0%")
+                    views.setTextViewText(R.id.reading_widget_empty_subtitle, "Page 0/0 • 0%")
                     views.setProgressBar(R.id.reading_widget_empty_progress, 100, 0, false)
                     views.setTextViewText(R.id.reading_widget_empty_hint, "Add a book to start tracking")
 
                 } else {
+                    // HAS BOOKS
                     views.setViewVisibility(R.id.reading_widget_empty, View.GONE)
                     views.setViewVisibility(R.id.reading_widget_books_container, View.VISIBLE)
                     views.setViewVisibility(R.id.reading_widget_footer, View.VISIBLE)
-                    views.setViewVisibility(R.id.reading_widget_footer_stats, View.VISIBLE)
 
+                    // Streak badge
                     if (streakDays > 0) {
                         views.setViewVisibility(R.id.reading_widget_streak, View.VISIBLE)
-                        val streakText = if (readToday) "\uD83D\uDD25 $streakDays" else "\u26A0\uFE0F $streakDays"
+                        val streakText = if (readToday) "🔥 $streakDays day streak" else "⚠️ $streakDays day streak"
                         views.setTextViewText(R.id.reading_widget_streak, streakText)
                     } else {
                         views.setViewVisibility(R.id.reading_widget_streak, View.GONE)
                     }
 
+                    // Populate books
                     for (i in 0 until bookCount.coerceAtMost(MAX_BOOKS)) {
                         val bookViews = RemoteViews(context.packageName, R.layout.reading_widget_book_item)
 
@@ -94,42 +110,55 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                         val currentPage = parts.getOrNull(0)?.toIntOrNull() ?: 0
                         val totalPages = parts.getOrNull(1)?.toIntOrNull() ?: 1
 
-                        val displayColor = getSubjectColor(subject, colorHex)
+                        // Determine colors
+                        val accentColor = getSubjectColorInt(subject, colorHex)
+                        val progressDrawableName = getProgressDrawableName(subject)
 
+                        // Set accent bar color
+                        bookViews.setInt(R.id.book_item_accent_bar, "setBackgroundColor", accentColor)
+
+                        // Set progress bar drawable
+                        val progressDrawableId = context.resources.getIdentifier(
+                            progressDrawableName, "drawable", context.packageName
+                        )
+                        if (progressDrawableId != 0) {
+                            bookViews.setInt(R.id.book_item_progress, "setProgressDrawable", progressDrawableId)
+                        }
+
+                        // Title with emoji
                         val emoji = getSubjectEmoji(subject)
                         bookViews.setTextViewText(R.id.book_item_title, "$emoji $title")
 
-                        val statusColor = when {
-                            status.contains("Behind") -> Color.parseColor("#FF5252")
-                            status.contains("Urgent") -> Color.parseColor("#FF1744")
-                            status.contains("Goal") || status.contains("met") -> Color.parseColor("#69F0AE")
-                            else -> Color.parseColor("#69F0AE")
+                        // Status badge
+                        val (statusText, statusColor) = when {
+                            status.contains("Behind", ignoreCase = true) -> "⚠️ Behind" to Color.parseColor("#FFB74D")
+                            status.contains("Goal", ignoreCase = true) || status.contains("met", ignoreCase = true) -> "✅ Goal met" to Color.parseColor("#69F0AE")
+                            status.contains("Completed", ignoreCase = true) -> "✅ Done" to Color.parseColor("#69F0AE")
+                            status.contains("Not Started", ignoreCase = true) -> "⏳ Not started" to Color.parseColor("#B0BEC5")
+                            else -> "✅ On track" to Color.parseColor("#69F0AE")
                         }
-                        bookViews.setTextViewText(R.id.book_item_status, status)
+                        bookViews.setTextViewText(R.id.book_item_status, statusText)
                         bookViews.setTextColor(R.id.book_item_status, statusColor)
 
-                        bookViews.setTextViewText(R.id.book_item_pages, "Page $currentPage/$totalPages \u2022 $progressPercent%")
-
-                        val neetInfo = when {
-                            pagesPerDayNeeded > 50 -> "\uD83D\uDD25 Need $pagesPerDayNeeded pgs/day \u2014 URGENT!"
-                            pagesPerDayNeeded > 0 -> "\uD83D\uDCC8 Need $pagesPerDayNeeded pgs/day"
-                            estCompletionDate.isNotEmpty() -> "\u2705 Done by $estCompletionDate"
-                            else -> ""
+                        // Pages info line - combine all info like the target image
+                        val pagesInfo = buildString {
+                            append("Page $currentPage/$totalPages")
+                            append(" • $progressPercent%")
+                            if (pagesPerDayNeeded > 0 && !status.contains("Completed", ignoreCase = true)) {
+                                append(" • Need $pagesPerDayNeeded pgs/day")
+                            } else if (estCompletionDate.isNotEmpty() && !status.contains("Completed", ignoreCase = true)) {
+                                append(" • Done by $estCompletionDate")
+                            }
                         }
-                        if (neetInfo.isNotEmpty()) {
-                            bookViews.setViewVisibility(R.id.book_item_neet_info, View.VISIBLE)
-                            bookViews.setTextViewText(R.id.book_item_neet_info, neetInfo)
-                        } else {
-                            bookViews.setViewVisibility(R.id.book_item_neet_info, View.GONE)
-                        }
+                        bookViews.setTextViewText(R.id.book_item_pages, pagesInfo)
 
+                        // Progress
                         bookViews.setProgressBar(R.id.book_item_progress, 100, progressPercent, false)
 
-                        // CRITICAL FIX: Removed setBackgroundResource calls that crash when drawables are missing.
-                        // The XML now uses a safe default background. We only change text colors for urgency.
+                        // Title color based on urgency
                         val titleColor = when {
-                            isUrgent || pagesPerDayNeeded > 50 -> Color.parseColor("#FF1744")
-                            !readTodayThisBook && progressPercent < 100 -> Color.parseColor("#FFA726")
+                            isUrgent || pagesPerDayNeeded > 50 -> Color.parseColor("#FF8A80")
+                            !readTodayThisBook && progressPercent < 100 -> Color.parseColor("#FFE082")
                             else -> Color.WHITE
                         }
                         bookViews.setTextColor(R.id.book_item_title, titleColor)
@@ -137,15 +166,24 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                         views.addView(R.id.reading_widget_books_container, bookViews)
                     }
 
+                    // Footer stats
                     val hours = totalMinutesToday / 60
                     val mins = totalMinutesToday % 60
-                    val timeStr = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
+                    val timeStr = when {
+                        hours > 0 && mins > 0 -> "${hours}h ${mins}m"
+                        hours > 0 -> "${hours}h"
+                        else -> "${mins}m"
+                    }
 
-                    views.setTextViewText(R.id.reading_widget_footer_books, "\uD83D\uDCCA $bookCount/${totalBooksAdded.coerceAtLeast(bookCount)} books")
-                    views.setTextViewText(R.id.reading_widget_footer_pages, "\uD83D\uDCC4 $totalPagesToday pages today")
-                    views.setTextViewText(R.id.reading_widget_footer_time, "\u23F1\uFE0F $timeStr")
+                    val activeBooks = bookCount.coerceAtMost(MAX_BOOKS)
+                    val totalBooks = totalBooksAdded.coerceAtLeast(activeBooks)
+
+                    views.setTextViewText(R.id.reading_widget_footer_books, "$activeBooks/$totalBooks books active")
+                    views.setTextViewText(R.id.reading_widget_footer_pages, "$totalPagesToday pages today")
+                    views.setTextViewText(R.id.reading_widget_footer_time, timeStr)
                 }
 
+                // Tap to open app
                 context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { openAppIntent ->
                     openAppIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     openAppIntent.putExtra("screen", "reading")
@@ -159,22 +197,27 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                 }
 
                 appWidgetManager.updateAppWidget(widgetId, views)
-                android.util.Log.i("ReadingWidget", "Widget $widgetId updated with $bookCount books")
+                android.util.Log.i("ReadingWidget", "Widget $widgetId updated: $bookCount books")
 
             } catch (e: Exception) {
                 android.util.Log.e("ReadingWidget", "Update failed for widget $widgetId", e)
-                try {
-                    val fallbackViews = RemoteViews(context.packageName, R.layout.reading_widget_layout)
-                    fallbackViews.setViewVisibility(R.id.reading_widget_empty, View.VISIBLE)
-                    fallbackViews.setViewVisibility(R.id.reading_widget_books_container, View.GONE)
-                    fallbackViews.setViewVisibility(R.id.reading_widget_footer, View.GONE)
-                    fallbackViews.setTextViewText(R.id.reading_widget_empty_title, "Reading Tracker")
-                    fallbackViews.setTextViewText(R.id.reading_widget_empty_subtitle, "Tap to open app")
-                    fallbackViews.setTextViewText(R.id.reading_widget_empty_hint, "Add books to track progress")
-                    appWidgetManager.updateAppWidget(widgetId, fallbackViews)
-                } catch (e2: Exception) {
-                    android.util.Log.e("ReadingWidget", "Fallback also failed", e2)
-                }
+                tryFallback(context, appWidgetManager, widgetId)
+            }
+        }
+
+        private fun tryFallback(context: Context, appWidgetManager: AppWidgetManager, widgetId: Int) {
+            try {
+                val fallbackViews = RemoteViews(context.packageName, R.layout.reading_widget_layout)
+                fallbackViews.setViewVisibility(R.id.reading_widget_empty, View.VISIBLE)
+                fallbackViews.setViewVisibility(R.id.reading_widget_books_container, View.GONE)
+                fallbackViews.setViewVisibility(R.id.reading_widget_footer, View.GONE)
+                fallbackViews.setViewVisibility(R.id.reading_widget_streak, View.GONE)
+                fallbackViews.setTextViewText(R.id.reading_widget_empty_title, "Reading Tracker")
+                fallbackViews.setTextViewText(R.id.reading_widget_empty_subtitle, "Tap to open app")
+                fallbackViews.setTextViewText(R.id.reading_widget_empty_hint, "Add books to track progress")
+                appWidgetManager.updateAppWidget(widgetId, fallbackViews)
+            } catch (e2: Exception) {
+                android.util.Log.e("ReadingWidget", "Fallback also failed", e2)
             }
         }
 
@@ -188,21 +231,30 @@ class ReadingWidgetProvider : AppWidgetProvider() {
             }
         }
 
-        private fun getSubjectColor(subject: String, fallbackHex: String): String {
+        private fun getSubjectColorInt(subject: String, fallbackHex: String): Int {
             val key = subject.lowercase().trim()
-            return SUBJECT_COLORS[key] ?: fallbackHex
+            return SUBJECT_COLORS[key] ?: try {
+                Color.parseColor(fallbackHex)
+            } catch (_: Exception) {
+                Color.parseColor("#2196F3")
+            }
+        }
+
+        private fun getProgressDrawableName(subject: String): String {
+            val key = subject.lowercase().trim()
+            return SUBJECT_PROGRESS_COLORS[key] ?: "reading_progress_blue"
         }
 
         private fun getSubjectEmoji(subject: String): String {
             return when (subject.lowercase().trim()) {
-                "physics" -> "\u269B\uFE0F"
-                "chemistry", "organic chemistry", "physical chemistry", "inorganic chemistry" -> "\uD83E\uDDEA"
-                "biology" -> "\uD83E\uDDEC"
-                "zoology" -> "\uD83D\uDC3E"
-                "botany" -> "\uD83C\uDF3F"
-                "math", "mathematics" -> "\uD83D\uDCD0"
-                "computer science" -> "\uD83D\uDCBB"
-                else -> "\uD83D\uDCD8"
+                "physics" -> "⚛️"
+                "chemistry", "organic chemistry", "physical chemistry", "inorganic chemistry" -> "🧪"
+                "biology" -> "🧬"
+                "zoology" -> "🐾"
+                "botany" -> "🌿"
+                "math", "mathematics" -> "📐"
+                "computer science" -> "💻"
+                else -> "📘"
             }
         }
     }
