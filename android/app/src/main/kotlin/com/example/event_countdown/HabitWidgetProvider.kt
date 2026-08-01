@@ -8,14 +8,11 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.widget.RemoteViews
-import org.json.JSONObject
-import java.io.File
+import es.antonborri.home_widget.HomeWidgetPlugin
 
 class HabitWidgetProvider : AppWidgetProvider() {
 
     companion object {
-        private const val HABIT_DATA_FILE = "habit_widget_data.json"
-
         private val DOT_IDS = listOf(
             R.id.habit_dot_1,
             R.id.habit_dot_2,
@@ -33,39 +30,28 @@ class HabitWidgetProvider : AppWidgetProvider() {
         ) {
             val views = RemoteViews(context.packageName, R.layout.habit_widget_layout)
 
+            // ── Read data from home_widget SharedPreferences ──
+            val widgetData = HomeWidgetPlugin.getData(context)
+
+            val habitCount = widgetData.getInt("habit_count", 0)
+
             // Safe defaults
             var habitName = "No Habits"
             var weekProgress = 0
             var weekTarget = 7
             var statusColor = "#4CAF50"
             var message = "Add habits to start tracking"
-            val weekCompletion = mutableListOf<Boolean>()
 
-            // ── Read JSON data written by Flutter ──
-            try {
-                // CRITICAL FIX: Use context.filesDir directly — matches Event widget
-                val file = File(context.filesDir, HABIT_DATA_FILE)
-
-                if (file.exists()) {
-                    val json = JSONObject(file.readText())
-                    habitName = json.optString("habitName", habitName)
-                    weekProgress = json.optInt("weekProgress", 0)
-                    weekTarget = json.optInt("weekTarget", 7)
-                    statusColor = json.optString("colorHex", "#4CAF50")
-                    message = json.optString("message", message)
-
-                    // Read week circles if present
-                    val circlesArray = json.optJSONArray("weekCircles")
-                    if (circlesArray != null) {
-                        for (i in 0 until circlesArray.length().coerceAtMost(7)) {
-                            weekCompletion.add(circlesArray.getBoolean(i))
-                        }
-                    }
-                } else {
-                    android.util.Log.w("HabitWidget", "Data file not found at: ${file.absolutePath}")
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("HabitWidget", "JSON read failed", e)
+            if (habitCount > 0) {
+                // Use the first habit for the widget (top streak)
+                habitName = widgetData.getString("habit_name_0", habitName) ?: habitName
+                weekProgress = widgetData.getInt("habit_streak_0", 0)
+                // Calculate weekly progress from progress percent
+                val progressPercent = widgetData.getInt("habit_progress_0", 0)
+                weekTarget = 7
+                weekProgress = ((progressPercent / 100.0) * weekTarget).toInt().coerceIn(0, weekTarget)
+                statusColor = widgetData.getString("habit_color_0", statusColor) ?: statusColor
+                message = "$weekProgress/$weekTarget this week"
             }
 
             // ── Update widget UI ──
@@ -85,9 +71,9 @@ class HabitWidgetProvider : AppWidgetProvider() {
                 // Color the progress text
                 views.setTextColor(R.id.habit_widget_progress, accentColor)
 
-                // Set week circles (7 dots) — FIXED: Use setTextColor on "●" TextViews
+                // Set week circles (7 dots) — use setTextColor on "●" TextViews
                 for (i in 0 until 7) {
-                    val isDone = i < weekCompletion.size && weekCompletion[i]
+                    val isDone = i < weekProgress
                     val dotId = DOT_IDS[i]
 
                     views.setTextViewText(dotId, "●")
