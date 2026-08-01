@@ -5,9 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- EMPTY STATE: Shown when no subjects exist -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- EMPTY STATE -->
     <LinearLayout
         android:id="@+id/attendance_widget_empty_state"
         android:layout_width="match_parent"
@@ -68,9 +66,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- CONTENT STATE: Shows subject attendance data -->
-    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- CONTENT STATE -->
     <LinearLayout
         android:id="@+id/attendance_widget_content"
         android:layout_width="match_parent"
@@ -81,53 +77,13 @@
         android:gravity="center_vertical"
         android:visibility="visible">
 
-        <!-- Left: Circular Progress Ring -->
+        <!-- Left: Large Percentage Text (replaces circular rings) -->
         <FrameLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:layout_marginEnd="12dp">
 
-            <!-- Green Ring (≥75%) -->
-            <ProgressBar
-                android:id="@+id/attendance_widget_progress_green"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:progressDrawable="@drawable/widget_circular_progress_green"
-                android:layout_gravity="center"
-                android:visibility="gone" />
-
-            <!-- Orange Ring (60-74%) -->
-            <ProgressBar
-                android:id="@+id/attendance_widget_progress_orange"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:progressDrawable="@drawable/widget_circular_progress_orange"
-                android:layout_gravity="center"
-                android:visibility="gone" />
-
-            <!-- Red Ring (<60%) -->
-            <ProgressBar
-                android:id="@+id/attendance_widget_progress_red"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:progressDrawable="@drawable/widget_circular_progress_red"
-                android:layout_gravity="center"
-                android:visibility="gone" />
-
-            <!-- Percentage Text -->
             <TextView
                 android:id="@+id/attendance_widget_percent"
                 android:layout_width="wrap_content"
@@ -135,7 +91,7 @@
                 android:layout_gravity="center"
                 android:text="0%"
                 android:textColor="#FFFFFF"
-                android:textSize="18sp"
+                android:textSize="36sp"
                 android:textStyle="bold" />
         </FrameLayout>
 
