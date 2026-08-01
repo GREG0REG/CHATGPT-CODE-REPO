@@ -47,6 +47,7 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                 val streakDays = widgetData.getInt("reading_streak_days", 0)
                 val readToday = widgetData.getBoolean("reading_read_today", false)
 
+                // CRITICAL FIX: Clear container before repopulating
                 views.removeAllViews(R.id.reading_widget_books_container)
 
                 if (bookCount <= 0) {
@@ -124,23 +125,14 @@ class ReadingWidgetProvider : AppWidgetProvider() {
 
                         bookViews.setProgressBar(R.id.book_item_progress, 100, progressPercent, false)
 
-                        // FIXED: Wrapped setBackgroundResource in try-catch to prevent crash
-                        // if drawable resources are missing or incompatible
-                        try {
-                            when {
-                                isUrgent || pagesPerDayNeeded > 50 -> {
-                                    bookViews.setInt(R.id.book_item_root, "setBackgroundResource", R.drawable.widget_book_item_urgent)
-                                }
-                                !readTodayThisBook && progressPercent < 100 -> {
-                                    bookViews.setInt(R.id.book_item_root, "setBackgroundResource", R.drawable.widget_book_item_warning)
-                                }
-                                else -> {
-                                    bookViews.setInt(R.id.book_item_root, "setBackgroundResource", R.drawable.widget_book_item_background)
-                                }
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.w("ReadingWidget", "Drawable missing for book item background, using default: ${e.message}")
+                        // CRITICAL FIX: Removed setBackgroundResource calls that crash when drawables are missing.
+                        // The XML now uses a safe default background. We only change text colors for urgency.
+                        val titleColor = when {
+                            isUrgent || pagesPerDayNeeded > 50 -> Color.parseColor("#FF1744")
+                            !readTodayThisBook && progressPercent < 100 -> Color.parseColor("#FFA726")
+                            else -> Color.WHITE
                         }
+                        bookViews.setTextColor(R.id.book_item_title, titleColor)
 
                         views.addView(R.id.reading_widget_books_container, bookViews)
                     }
