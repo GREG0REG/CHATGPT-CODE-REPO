@@ -21,7 +21,8 @@
             android:gravity="center_vertical"
             android:paddingHorizontal="14dp"
             android:paddingVertical="5dp"
-            android:background="#667EEA">
+            android:background="#667EEA"
+            android:visibility="gone">
 
             <TextView
                 android:id="@+id/neet_days_text"
@@ -47,83 +48,42 @@
             android:layout_height="0dp"
             android:layout_weight="1" />
 
-        <!-- Center: Ring + Timer -->
-        <FrameLayout
+        <!-- Timer -->
+        <TextView
+            android:id="@+id/pomodoro_widget_timer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Tap to Start"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF" />
+
+        <TextView
+            android:id="@+id/pomodoro_widget_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:text="Ready"
+            android:textSize="12sp"
+            android:textColor="#B0FFFFFF" />
+
+        <!-- Linear Progress Bar (replaces circular rings) -->
+        <ProgressBar
+            android:id="@+id/pomodoro_progress_bar"
+            style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="4"
-            android:gravity="center">
-
-            <ProgressBar
-                android:id="@+id/pomodoro_progress_ring_default"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_gravity="center"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:progressDrawable="@drawable/widget_circular_progress_teal"
-                android:rotation="-90"
-                android:visibility="visible" />
-
-            <ProgressBar
-                android:id="@+id/pomodoro_progress_ring_break"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_gravity="center"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:progressDrawable="@drawable/widget_circular_progress_green"
-                android:rotation="-90"
-                android:visibility="gone" />
-
-            <ProgressBar
-                android:id="@+id/pomodoro_progress_ring_paused"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_gravity="center"
-                android:indeterminate="false"
-                android:max="100"
-                android:progress="0"
-                android:progressDrawable="@drawable/widget_circular_progress_orange"
-                android:rotation="-90"
-                android:visibility="gone" />
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:orientation="vertical"
-                android:gravity="center">
-
-                <TextView
-                    android:id="@+id/pomodoro_widget_timer"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Tap to Start"
-                    android:textSize="28sp"
-                    android:textStyle="bold"
-                    android:textColor="#FFFFFF" />
-
-                <TextView
-                    android:id="@+id/pomodoro_widget_status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:text="Ready"
-                    android:textSize="12sp"
-                    android:textColor="#B0FFFFFF" />
-            </LinearLayout>
-        </FrameLayout>
+            android:layout_height="4dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginHorizontal="24dp"
+            android:max="100"
+            android:progress="0"
+            android:progressTint="#5B6EF5"
+            android:progressBackgroundTint="#20FFFFFF" />
 
         <View
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="0.5" />
+            android:layout_weight="1" />
 
         <!-- Phase Pill -->
         <TextView
@@ -139,7 +99,7 @@
             android:background="#155B6EF5"
             android:visibility="gone" />
 
-        <!-- Subject + Topic -->
+        <!-- Subject -->
         <TextView
             android:id="@+id/pomodoro_widget_subject"
             android:layout_width="match_parent"
@@ -306,7 +266,6 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- FIXED: Use built-in Android progress drawable instead of custom missing one -->
             <ProgressBar
                 android:id="@+id/daily_goal_progress"
                 style="?android:attr/progressBarStyleHorizontal"
