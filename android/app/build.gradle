@@ -52,13 +52,10 @@ android {
 
     signingConfigs {
         release {
-            def keystoreFile = file('release-key.jks')
-            if (keystoreFile.exists()) {
-                storeFile keystoreFile
-                storePassword 'releasepass'
-                keyAlias 'release'
-                keyPassword 'releasepass'
-            }
+            keyAlias 'release'
+            keyPassword 'releasepass'
+            storeFile file('release-key.jks')
+            storePassword 'releasepass'
         }
     }
 
