@@ -64,6 +64,20 @@ class DatabaseHelper {
     );
   }
 
+    Future<void> _addColumnIfNotExists(
+    Database db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final result = await db.rawQuery("PRAGMA table_info($table)");
+    final columns = result.map((c) => c['name'] as String).toList();
+    if (!columns.contains(column)) {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
+    }
+   
+    }
+
   Future<void> _createTables(Database db) async {
     // ---- EVENTS (with NEET fields v16) ----
         await db.execute("""
@@ -823,12 +837,6 @@ class DatabaseHelper {
   // ═══════════════════════════════════════════════════════════════
   Future<void> _migrateV15ToV16(Database db) async {
     // 1. Add NEET columns to 'events' table
-    await db.execute('ALTER TABLE events ADD COLUMN isNeetExam INTEGER DEFAULT 0');
-    await db.execute('ALTER TABLE events ADD COLUMN neetTotalMarks INTEGER');
-    await db.execute('ALTER TABLE events ADD COLUMN neetTargetScore INTEGER');
-    await db.execute('ALTER TABLE events ADD COLUMN neetSubjectFocus TEXT');
-
-    // 2. Migration: add missing NEET columns if table already exists
     await _addColumnIfNotExists(db, 'events', 'targetScore', 'INTEGER');
     await _addColumnIfNotExists(db, 'events', 'neetExamType', 'TEXT');
     await _addColumnIfNotExists(db, 'events', 'revisionRound', 'TEXT');
@@ -836,6 +844,7 @@ class DatabaseHelper {
     await _addColumnIfNotExists(db, 'events', 'difficulty', 'TEXT');
     await _addColumnIfNotExists(db, 'events', 'studyDuration', 'TEXT');
     await _addColumnIfNotExists(db, 'events', 'studyModeTagsJson', 'TEXT');
+    
     
 
     // 3. Add NEET columns to 'study_sessions' table
