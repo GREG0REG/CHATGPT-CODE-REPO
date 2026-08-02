@@ -1,6 +1,5 @@
 package com.example.event_countdown
 
-import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -8,17 +7,38 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
-import android.os.Build
-import android.os.SystemClock
 import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetPlugin
 
-class EventCountdownWidgetProvider : AppWidgetProvider() {
+class AttendanceWidgetProvider : AppWidgetProvider() {
 
     companion object {
-        private const val ACTION_EVENT_TICK = "com.example.event_countdown.EVENT_WIDGET_TICK"
-        private const val TICK_INTERVAL_MS = 60_000L
+        private const val KEY_SUBJECT_COUNT = "attendance_subject_count"
+        private const val KEY_PREFIX_SUBJECT_NAME = "attendance_subject_name_"
+        private const val KEY_PREFIX_SUBJECT_PERCENT = "attendance_subject_percent_"
+        private const val KEY_PREFIX_SUBJECT_PRESENT = "attendance_subject_present_"
+        private const val KEY_PREFIX_SUBJECT_ABSENT = "attendance_subject_absent_"
+        private const val KEY_PREFIX_SUBJECT_LATE = "attendance_subject_late_"
+        private const val KEY_PREFIX_SUBJECT_EXCUSED = "attendance_subject_excused_"
+        private const val KEY_PREFIX_SUBJECT_TOTAL = "attendance_subject_total_"
+        private const val KEY_PREFIX_SUBJECT_COLOR = "attendance_subject_color_"
+        private const val KEY_PREFIX_SUBJECT_STATUS = "attendance_subject_status_"
+        private const val KEY_PREFIX_SUBJECT_STREAK = "attendance_subject_streak_"
+
+        private const val MAX_SUBJECTS = 4
+
+        private val ROW_IDS = intArrayOf(0, R.id.subject_row_1, R.id.subject_row_2, R.id.subject_row_3)
+        private val DIVIDER_IDS = intArrayOf(R.id.divider_0, R.id.divider_1, R.id.divider_2, 0)
+        private val DOT_IDS = intArrayOf(0, R.id.dot_1, R.id.dot_2, R.id.dot_3)
+        private val NAME_IDS = intArrayOf(0, R.id.name_1, R.id.name_2, R.id.name_3)
+        private val PCT_IDS = intArrayOf(0, R.id.pct_1, R.id.pct_2, R.id.pct_3)
+        private val RATIO_IDS = intArrayOf(0, R.id.ratio_1, R.id.ratio_2, R.id.ratio_3)
+        private val P_IDS = intArrayOf(0, R.id.p1, R.id.p2, R.id.p3)
+        private val A_IDS = intArrayOf(0, R.id.a1, R.id.a2, R.id.a3)
+        private val L_IDS = intArrayOf(0, R.id.l1, R.id.l2, R.id.l3)
+        private val E_IDS = intArrayOf(0, R.id.e1, R.id.e2, R.id.e3)
+        private val STATUS_IDS = intArrayOf(0, R.id.status_1, R.id.status_2, R.id.status_3)
 
         fun updateWidgetDirectly(
             context: Context,
@@ -27,115 +47,166 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         ) {
             try {
                 val widgetData = HomeWidgetPlugin.getData(context)
+                val subjectCount = widgetData.getInt(KEY_SUBJECT_COUNT, 0)
 
-                val title = widgetData.getString("event_title", "No upcoming events")
-                    ?: "No upcoming events"
-                val countdownText = widgetData.getString("countdown_text", "") ?: ""
-                val progress = widgetData.getInt("widget_progress_percent", -1)
-                val isUrgent = widgetData.getBoolean("widget_is_urgent", false)
-                val textColorStr = widgetData.getString("widget_text_color", null)
+                val views = RemoteViews(context.packageName, R.layout.attendance_widget_layout)
 
-                val views = RemoteViews(context.packageName, R.layout.event_widget_layout)
+                if (subjectCount == 0) {
+                    views.setViewVisibility(R.id.attendance_widget_empty_state, View.VISIBLE)
+                    views.setViewVisibility(R.id.attendance_widget_content, View.GONE)
 
-                val textColor = try {
-                    if (textColorStr != null) Color.parseColor(textColorStr) else Color.WHITE
-                } catch (e: Exception) {
-                    Color.WHITE
-                }
+                    views.setTextViewText(R.id.attendance_widget_empty_title, "No Subjects")
+                    views.setTextViewText(R.id.attendance_widget_empty_subtitle, "0 / 0")
+                    views.setTextViewText(R.id.attendance_widget_empty_cta, "Add subjects to track attendance")
 
-                views.setTextViewText(R.id.widget_title, title)
-                views.setTextColor(R.id.widget_title, textColor)
+                    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                    if (launchIntent != null) {
+                        launchIntent.putExtra("route", "/attendance")
+                        val pendingIntent = PendingIntent.getActivity(
+                            context, widgetId + 3000, launchIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+                        views.setOnClickPendingIntent(R.id.attendance_widget_empty_state, pendingIntent)
+                    }
 
-                views.setTextViewText(R.id.widget_countdown, countdownText)
-                views.setTextColor(R.id.widget_countdown, textColor)
-
-                if (isUrgent && countdownText.isNotEmpty()) {
-                    views.setViewVisibility(R.id.widget_urgency_label, View.VISIBLE)
-                    views.setTextViewText(R.id.widget_urgency_label, "Less than 24 hours!")
                 } else {
-                    views.setViewVisibility(R.id.widget_urgency_label, View.GONE)
-                }
+                    views.setViewVisibility(R.id.attendance_widget_empty_state, View.GONE)
+                    views.setViewVisibility(R.id.attendance_widget_content, View.VISIBLE)
 
-                if (progress in 0..100) {
-                    views.setViewVisibility(R.id.widget_progress_bar, View.VISIBLE)
-                    views.setProgressBar(R.id.widget_progress_bar, 100, progress, false)
-                } else {
-                    views.setViewVisibility(R.id.widget_progress_bar, View.GONE)
-                }
+                    val name = widgetData.getString(KEY_PREFIX_SUBJECT_NAME + "0", "Subject") ?: "Subject"
+                    val percent = widgetData.getInt(KEY_PREFIX_SUBJECT_PERCENT + "0", 0)
+                    val present = widgetData.getInt(KEY_PREFIX_SUBJECT_PRESENT + "0", 0)
+                    val absent = widgetData.getInt(KEY_PREFIX_SUBJECT_ABSENT + "0", 0)
+                    val late = widgetData.getInt(KEY_PREFIX_SUBJECT_LATE + "0", 0)
+                    val excused = widgetData.getInt(KEY_PREFIX_SUBJECT_EXCUSED + "0", 0)
+                    val total = widgetData.getInt(KEY_PREFIX_SUBJECT_TOTAL + "0", 0)
+                    val colorHex = widgetData.getString(KEY_PREFIX_SUBJECT_COLOR + "0", "#4CAF50") ?: "#4CAF50"
+                    val statusText = widgetData.getString(KEY_PREFIX_SUBJECT_STATUS + "0", "No data") ?: "No data"
+                    val streak = widgetData.getInt(KEY_PREFIX_SUBJECT_STREAK + "0", 0)
 
-                val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                if (launchIntent != null) {
-                    val pendingIntent = PendingIntent.getActivity(
-                        context, widgetId, launchIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                    )
-                    views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+                    val percentColor = when {
+                        percent >= 75 -> Color.parseColor("#4CAF50")
+                        percent >= 60 -> Color.parseColor("#FF9800")
+                        else -> Color.parseColor("#F44336")
+                    }
+
+                    views.setTextViewText(R.id.attendance_widget_subject, name)
+                    views.setTextColor(R.id.attendance_widget_subject, Color.WHITE)
+
+                    views.setTextViewText(R.id.attendance_widget_percent, "$percent%")
+                    views.setTextColor(R.id.attendance_widget_percent, percentColor)
+
+                    val effectiveTotal = total - excused
+                    views.setTextViewText(R.id.attendance_widget_ratio, "$present / $effectiveTotal")
+                    views.setTextColor(R.id.attendance_widget_ratio, Color.parseColor("#CCFFFFFF"))
+
+                    views.setTextViewText(R.id.chip_present, "P:$present")
+                    views.setTextViewText(R.id.chip_absent, "A:$absent")
+                    views.setTextViewText(R.id.chip_late, "L:$late")
+                    views.setTextViewText(R.id.chip_excused, "E:$excused")
+
+                    views.setTextViewText(R.id.attendance_widget_status, statusText)
+                    views.setTextColor(R.id.attendance_widget_status, Color.WHITE)
+
+                    if (streak > 0) {
+                        views.setViewVisibility(R.id.attendance_widget_streak_chip, View.VISIBLE)
+                        views.setTextViewText(R.id.attendance_widget_streak_text, "$streak")
+                    } else {
+                        views.setViewVisibility(R.id.attendance_widget_streak_chip, View.GONE)
+                    }
+
+                    val subjectColor = try {
+                        Color.parseColor(colorHex)
+                    } catch (e: Exception) {
+                        Color.parseColor("#4CAF50")
+                    }
+                    views.setTextColor(R.id.attendance_widget_subject_dot, subjectColor)
+
+                    val displayCount = subjectCount.coerceAtMost(MAX_SUBJECTS)
+                    for (i in 1 until MAX_SUBJECTS) {
+                        val visible = i < displayCount
+                        views.setViewVisibility(ROW_IDS[i], if (visible) View.VISIBLE else View.GONE)
+                        views.setViewVisibility(STATUS_IDS[i], if (visible) View.VISIBLE else View.GONE)
+                        if (DIVIDER_IDS[i - 1] != 0) {
+                            views.setViewVisibility(DIVIDER_IDS[i - 1], if (visible && i < displayCount - 1) View.VISIBLE else View.GONE)
+                        }
+
+                        if (visible) {
+                            val sName = widgetData.getString(KEY_PREFIX_SUBJECT_NAME + "$i", "Subject") ?: "Subject"
+                            val sPercent = widgetData.getInt(KEY_PREFIX_SUBJECT_PERCENT + "$i", 0)
+                            val sPresent = widgetData.getInt(KEY_PREFIX_SUBJECT_PRESENT + "$i", 0)
+                            val sAbsent = widgetData.getInt(KEY_PREFIX_SUBJECT_ABSENT + "$i", 0)
+                            val sLate = widgetData.getInt(KEY_PREFIX_SUBJECT_LATE + "$i", 0)
+                            val sExcused = widgetData.getInt(KEY_PREFIX_SUBJECT_EXCUSED + "$i", 0)
+                            val sTotal = widgetData.getInt(KEY_PREFIX_SUBJECT_TOTAL + "$i", 0)
+                            val sColorHex = widgetData.getString(KEY_PREFIX_SUBJECT_COLOR + "$i", "#4CAF50") ?: "#4CAF50"
+                            val sStatus = widgetData.getString(KEY_PREFIX_SUBJECT_STATUS + "$i", "No data") ?: "No data"
+
+                            val sPercentColor = when {
+                                sPercent >= 75 -> Color.parseColor("#4CAF50")
+                                sPercent >= 60 -> Color.parseColor("#FF9800")
+                                else -> Color.parseColor("#F44336")
+                            }
+
+                            val sEffectiveTotal = sTotal - sExcused
+
+                            views.setTextViewText(NAME_IDS[i], sName)
+                            views.setTextColor(NAME_IDS[i], Color.WHITE)
+                            views.setTextViewText(PCT_IDS[i], "$sPercent%")
+                            views.setTextColor(PCT_IDS[i], sPercentColor)
+                            views.setTextViewText(RATIO_IDS[i], "$sPresent / $sEffectiveTotal")
+                            views.setTextColor(RATIO_IDS[i], Color.parseColor("#CCFFFFFF"))
+
+                            val sSubjectColor = try { Color.parseColor(sColorHex) } catch (e: Exception) { Color.parseColor("#4CAF50") }
+                            views.setTextColor(DOT_IDS[i], sSubjectColor)
+
+                            views.setTextViewText(P_IDS[i], "P:$sPresent")
+                            views.setTextViewText(A_IDS[i], "A:$sAbsent")
+                            views.setTextViewText(L_IDS[i], "L:$sLate")
+                            views.setTextViewText(E_IDS[i], "E:$sExcused")
+                            views.setTextViewText(STATUS_IDS[i], sStatus)
+                            views.setTextColor(STATUS_IDS[i], Color.WHITE)
+                        }
+                    }
+
+                    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                    if (launchIntent != null) {
+                        launchIntent.putExtra("route", "/attendance")
+                        val pendingIntent = PendingIntent.getActivity(
+                            context, widgetId + 3000, launchIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+                        views.setOnClickPendingIntent(R.id.attendance_widget_content, pendingIntent)
+                    }
                 }
 
                 appWidgetManager.updateAppWidget(widgetId, views)
-                android.util.Log.i("EventWidget", "Widget $widgetId updated: title=$title")
+                android.util.Log.i("AttendanceWidget", "Widget $widgetId updated: subjects=$subjectCount")
 
             } catch (e: Exception) {
-                android.util.Log.e("EventWidget", "Update failed", e)
-            }
-        }
-
-        fun scheduleTick(context: Context) {
-            try {
-                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                val intent = Intent(context, EventCountdownWidgetProvider::class.java).apply {
-                    action = ACTION_EVENT_TICK
-                }
-                val pendingIntent = PendingIntent.getBroadcast(
-                    context, 2, intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                alarmManager.cancel(pendingIntent)
-                val triggerAt = SystemClock.elapsedRealtime() + TICK_INTERVAL_MS
-
+                android.util.Log.e("AttendanceWidget", "Update failed for widget $widgetId", e)
                 try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        alarmManager.setExactAndAllowWhileIdle(
-                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                            triggerAt,
-                            pendingIntent
-                        )
-                    } else {
-                        alarmManager.setExact(
-                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                            triggerAt,
-                            pendingIntent
-                        )
-                    }
-                } catch (e: SecurityException) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        alarmManager.setAndAllowWhileIdle(
-                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                            triggerAt,
-                            pendingIntent
-                        )
-                    } else {
-                        alarmManager.set(
-                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                            triggerAt,
-                            pendingIntent
-                        )
-                    }
+                    val fallbackViews = RemoteViews(context.packageName, R.layout.attendance_widget_layout)
+                    fallbackViews.setViewVisibility(R.id.attendance_widget_empty_state, View.VISIBLE)
+                    fallbackViews.setViewVisibility(R.id.attendance_widget_content, View.GONE)
+                    fallbackViews.setTextViewText(R.id.attendance_widget_empty_title, "Attendance")
+                    fallbackViews.setTextViewText(R.id.attendance_widget_empty_subtitle, "Tap to open")
+                    fallbackViews.setTextViewText(R.id.attendance_widget_empty_cta, "Track your attendance")
+                    appWidgetManager.updateAppWidget(widgetId, fallbackViews)
+                } catch (e2: Exception) {
+                    android.util.Log.e("AttendanceWidget", "Fallback also failed", e2)
                 }
-            } catch (e: Exception) {
-                android.util.Log.e("EventWidget", "Schedule failed", e)
             }
         }
 
         fun updateAllWidgets(context: Context) {
             val appWidgetManager = AppWidgetManager.getInstance(context)
-            val componentName = ComponentName(context, EventCountdownWidgetProvider::class.java)
+            val componentName = ComponentName(context, AttendanceWidgetProvider::class.java)
             val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
-            android.util.Log.i("EventWidget", "Updating ${widgetIds.size} widgets")
+            android.util.Log.i("AttendanceWidget", "Updating ${widgetIds.size} widgets")
             for (widgetId in widgetIds) {
                 updateWidgetDirectly(context, appWidgetManager, widgetId)
             }
-            scheduleTick(context)
         }
     }
 
@@ -147,49 +218,29 @@ class EventCountdownWidgetProvider : AppWidgetProvider() {
         for (widgetId in appWidgetIds) {
             updateWidgetDirectly(context, appWidgetManager, widgetId)
         }
-        scheduleTick(context)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         when (intent.action) {
-            ACTION_EVENT_TICK -> updateAllWidgets(context)
-            Intent.ACTION_BOOT_COMPLETED -> updateAllWidgets(context)
-            Intent.ACTION_MY_PACKAGE_REPLACED -> updateAllWidgets(context)
-            Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> updateAllWidgets(context)
             AppWidgetManager.ACTION_APPWIDGET_UPDATE -> {
                 val widgetIds = intent.getIntArrayExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS)
                 if (widgetIds != null && widgetIds.isNotEmpty()) {
+                    val manager = AppWidgetManager.getInstance(context)
                     for (widgetId in widgetIds) {
-                        updateWidgetDirectly(context, AppWidgetManager.getInstance(context), widgetId)
+                        updateWidgetDirectly(context, manager, widgetId)
                     }
-                    scheduleTick(context)
                 } else {
                     updateAllWidgets(context)
                 }
             }
+            Intent.ACTION_BOOT_COMPLETED -> updateAllWidgets(context)
+            Intent.ACTION_MY_PACKAGE_REPLACED -> updateAllWidgets(context)
         }
     }
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
-        scheduleTick(context)
-    }
-
-    override fun onDisabled(context: Context) {
-        super.onDisabled(context)
-        try {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(context, EventCountdownWidgetProvider::class.java).apply {
-                action = ACTION_EVENT_TICK
-            }
-            val pendingIntent = PendingIntent.getBroadcast(
-                context, 2, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            alarmManager.cancel(pendingIntent)
-        } catch (e: Exception) {
-            android.util.Log.e("EventWidget", "Cancel alarm failed", e)
-        }
+        updateAllWidgets(context)
     }
 }
