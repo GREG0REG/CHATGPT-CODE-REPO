@@ -1,13 +1,10 @@
 // FILE: lib/screens/grade_calculator_screen.dart
-// COMBINED EDITION — Merges ALL features from both v3 versions
-// TAB 1 — Components: Grade ring, chapter presets, difficulty, hours, efficiency,
-//          what-if simulator, subject balance, weight budget, exam date, export
-// TAB 2 — NEET Simulator: Real-time score, percentile, AIR, college prediction,
-//          cutoff comparison, save to mock tests, celebration dialog
-// TAB 3 — Mock Tests: History, trend chart, CRUD, stats, empty state
-// TAB 4 — Analytics: Consistency, improvement, smart recommendations,
-//          target calculator, subject averages, rank predictor
-// PERSISTENCE: SQLite for components, SharedPreferences for mock tests + metadata
+// REDESIGNED v4 — NEET Edition
+// FIXED: Preset loading hang bug (guaranteed loading=false in finally block)
+// NEW: 5th "Tools" tab with Quick Score Calculator, Countdown, Daily Targets
+// NEW: Chapter Mastery, Revision Tracker, Weak Topics, PYQ Status
+// NEW: Subject Time Distribution, Weightage Visualizer
+// RETAINED: All original functionality (Components, Simulator, Mock Tests, Analytics)
 
 import 'dart:async';
 import 'dart:convert';
@@ -15,7 +12,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:event_countdown/database_helper.dart';
+import 'package:event_countdown/db/database_helper.dart';
 import '../services/settings_service.dart';
 import 'package:event_countdown/services/widget_service.dart';
 
@@ -223,6 +220,19 @@ class NeetData {
     }
     return rankRanges.last;
   }
+
+  static const List<String> motivationQuotes = [
+    'Consistency beats intensity. Every MCQ counts.',
+    'Your competition is with yourself, not others.',
+    'One chapter a day keeps low rank away.',
+    'Revision is the key to retention.',
+    'PYQs are your best teachers.',
+    'Biology is 50% of NEET — master it first.',
+    'Small daily improvements lead to stunning results.',
+    'Believe in yourself. You are closer than you think.',
+    'Every wrong answer is a step towards the right one.',
+    'The expert in anything was once a beginner.',
+  ];
 }
 
 class MockTestStorage {
@@ -264,13 +274,23 @@ class MockTestStorage {
 }
 
 class _GradeCalcPrefs {
-  static const String _prefix = 'grade_calc_';
+  static const String _prefix = 'grade_calc_v4_';
   static String diff(int id)     => '${_prefix}diff_$id';
   static String hours(int id)    => '${_prefix}hours_$id';
   static String chapter(int id)  => '${_prefix}chapter_$id';
   static String examDate(int id) => '${_prefix}examdate_$id';
+  static String revisionRound(int id) => '${_prefix}rev_$id';
+  static String pyqDone(int id)  => '${_prefix}pyq_$id';
   static String get whatIf       => '${_prefix}whatif';
   static String get lastPreset   => '${_prefix}last_preset';
+  static String get neetExamDate => '${_prefix}neet_exam_date';
+  static String get dailyPhyTarget => '${_prefix}daily_phy_target';
+  static String get dailyChemTarget => '${_prefix}daily_chem_target';
+  static String get dailyBioTarget => '${_prefix}daily_bio_target';
+  static String get dailyPhyDone => '${_prefix}daily_phy_done';
+  static String get dailyChemDone => '${_prefix}daily_chem_done';
+  static String get dailyBioDone => '${_prefix}daily_bio_done';
+  static String get dailyDate    => '${_prefix}daily_date';
 }
 
 class GradeCalculatorScreen extends StatefulWidget {
@@ -297,6 +317,16 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   final _chemistryMarksController = TextEditingController();
   final _biologyMarksController = TextEditingController();
 
+  // NEW: Quick Score Calculator controllers
+  final _correctController = TextEditingController();
+  final _wrongController = TextEditingController();
+  final _leftController = TextEditingController();
+
+  // NEW: Daily target controllers
+  final _dailyPhyTargetController = TextEditingController(text: '50');
+  final _dailyChemTargetController = TextEditingController(text: '50');
+  final _dailyBioTargetController = TextEditingController(text: '100');
+
   String _selectedDifficulty = 'Medium';
   String _selectedChapterTag = '';
   bool _showWhatIf = false;
@@ -313,13 +343,20 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   List<MockTestResult> _mockTests = [];
   bool _loadingMocks = true;
 
+  // NEW: State variables
+  DateTime? _neetExamDate;
+  int _dailyPhyDone = 0;
+  int _dailyChemDone = 0;
+  int _dailyBioDone = 0;
+  int _dailyPhyTarget = 50;
+  int _dailyChemTarget = 50;
+  int _dailyBioTarget = 100;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-    _loadComponents();
-    _loadMockTests();
-    _loadWhatIfValues();
+    _tabController = TabController(length: 5, vsync: this);
+    _loadAllData();
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) { if (mounted) setState(() {}); });
@@ -338,11 +375,21 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     _physicsMarksController.dispose();
     _chemistryMarksController.dispose();
     _biologyMarksController.dispose();
+    _correctController.dispose();
+    _wrongController.dispose();
+    _leftController.dispose();
+    _dailyPhyTargetController.dispose();
+    _dailyChemTargetController.dispose();
+    _dailyBioTargetController.dispose();
     super.dispose();
   }
 
   Future<SharedPreferences> get _prefs async =>
       await SharedPreferences.getInstance();
+
+  // ═════════════════════════════════════════════════════════════════
+  // PERSISTENCE HELPERS
+  // ═════════════════════════════════════════════════════════════════
 
   Future<void> _setDifficulty(int id, String d) async {
     (await _prefs).setString(_GradeCalcPrefs.diff(id), d);
@@ -373,6 +420,18 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   Future<int?> _getExamDate(int id) async {
     return (await _prefs).getInt(_GradeCalcPrefs.examDate(id));
   }
+  Future<void> _setRevisionRound(int id, int round) async {
+    (await _prefs).setInt(_GradeCalcPrefs.revisionRound(id), round);
+  }
+  Future<int> _getRevisionRound(int id) async {
+    return (await _prefs).getInt(_GradeCalcPrefs.revisionRound(id)) ?? 0;
+  }
+  Future<void> _setPyqDone(int id, bool done) async {
+    (await _prefs).setBool(_GradeCalcPrefs.pyqDone(id), done);
+  }
+  Future<bool> _getPyqDone(int id) async {
+    return (await _prefs).getBool(_GradeCalcPrefs.pyqDone(id)) ?? false;
+  }
   Future<void> _saveWhatIfValues() async {
     final p = await _prefs;
     final map = _whatIfScores.map((k, v) => MapEntry(k.toString(), v));
@@ -388,18 +447,108 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   Future<void> _setLastPreset(String preset) async {
     (await _prefs).setString(_GradeCalcPrefs.lastPreset, preset);
   }
+  Future<void> _setNeetExamDate(int millis) async {
+    (await _prefs).setInt(_GradeCalcPrefs.neetExamDate, millis);
+  }
+  Future<int?> _getNeetExamDate() async {
+    return (await _prefs).getInt(_GradeCalcPrefs.neetExamDate);
+  }
+  Future<void> _loadDailyTargets() async {
+    final p = await _prefs;
+    final savedDate = p.getString(_GradeCalcPrefs.dailyDate);
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    if (savedDate != today) {
+      // Reset daily progress for new day
+      await p.setInt(_GradeCalcPrefs.dailyPhyDone, 0);
+      await p.setInt(_GradeCalcPrefs.dailyChemDone, 0);
+      await p.setInt(_GradeCalcPrefs.dailyBioDone, 0);
+      await p.setString(_GradeCalcPrefs.dailyDate, today);
+    }
+    _dailyPhyTarget = p.getInt(_GradeCalcPrefs.dailyPhyTarget) ?? 50;
+    _dailyChemTarget = p.getInt(_GradeCalcPrefs.dailyChemTarget) ?? 50;
+    _dailyBioTarget = p.getInt(_GradeCalcPrefs.dailyBioTarget) ?? 100;
+    _dailyPhyDone = p.getInt(_GradeCalcPrefs.dailyPhyDone) ?? 0;
+    _dailyChemDone = p.getInt(_GradeCalcPrefs.dailyChemDone) ?? 0;
+    _dailyBioDone = p.getInt(_GradeCalcPrefs.dailyBioDone) ?? 0;
+    _dailyPhyTargetController.text = _dailyPhyTarget.toString();
+    _dailyChemTargetController.text = _dailyChemTarget.toString();
+    _dailyBioTargetController.text = _dailyBioTarget.toString();
+  }
+  Future<void> _saveDailyTargets() async {
+    final p = await _prefs;
+    await p.setInt(_GradeCalcPrefs.dailyPhyTarget, int.tryParse(_dailyPhyTargetController.text) ?? 50);
+    await p.setInt(_GradeCalcPrefs.dailyChemTarget, int.tryParse(_dailyChemTargetController.text) ?? 50);
+    await p.setInt(_GradeCalcPrefs.dailyBioTarget, int.tryParse(_dailyBioTargetController.text) ?? 100);
+  }
+  Future<void> _incrementDailyDone(String subject) async {
+    final p = await _prefs;
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    await p.setString(_GradeCalcPrefs.dailyDate, today);
+    if (subject == 'Physics') {
+      _dailyPhyDone++;
+      await p.setInt(_GradeCalcPrefs.dailyPhyDone, _dailyPhyDone);
+    } else if (subject == 'Chemistry') {
+      _dailyChemDone++;
+      await p.setInt(_GradeCalcPrefs.dailyChemDone, _dailyChemDone);
+    } else if (subject == 'Biology') {
+      _dailyBioDone++;
+      await p.setInt(_GradeCalcPrefs.dailyBioDone, _dailyBioDone);
+    }
+    setState(() {});
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // DATA LOADING — FIXED: Guaranteed loading=false with try/finally
+  // ═════════════════════════════════════════════════════════════════
+
+  Future<void> _loadAllData() async {
+    await _loadComponents();
+    await _loadMockTests();
+    await _loadWhatIfValues();
+    await _loadDailyTargets();
+    final examMillis = await _getNeetExamDate();
+    if (examMillis != null) {
+      _neetExamDate = DateTime.fromMillisecondsSinceEpoch(examMillis);
+    }
+  }
 
   Future<void> _loadComponents() async {
-    setState(() => _loading = true);
-    final components = await DatabaseHelper.instance.getAllGradeComponents();
-    for (final c in components) {
-      final id = c['id'] as int;
-      c['difficulty'] = await _getDifficulty(id);
-      c['hoursStudied'] = await _getHours(id);
-      c['chapterTag'] = await _getChapterTag(id);
-      c['examDateMillis'] = await _getExamDate(id);
+    if (mounted) setState(() => _loading = true);
+    try {
+      final components = await DatabaseHelper.instance.getAllGradeComponents();
+      for (final c in components) {
+        final id = c['id'] as int;
+        try {
+          c['difficulty'] = await _getDifficulty(id);
+          c['hoursStudied'] = await _getHours(id);
+          c['chapterTag'] = await _getChapterTag(id);
+          c['examDateMillis'] = await _getExamDate(id);
+          c['revisionRound'] = await _getRevisionRound(id);
+          c['pyqDone'] = await _getPyqDone(id);
+        } catch (e) {
+          // If prefs fail for one component, continue with defaults
+          c['difficulty'] = 'Medium';
+          c['hoursStudied'] = 0.0;
+          c['chapterTag'] = '';
+          c['examDateMillis'] = null;
+          c['revisionRound'] = 0;
+          c['pyqDone'] = false;
+        }
+      }
+      if (mounted) {
+        setState(() { _components = components; });
+      }
+    } catch (e) {
+      debugPrint('Error loading components: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading data: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+        );
+      }
+    } finally {
+      // GUARANTEED: loading is always set to false
+      if (mounted) setState(() => _loading = false);
     }
-    setState(() { _components = components; _loading = false; });
   }
 
   Future<void> _addComponent() async {
@@ -436,6 +585,8 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     await p.remove(_GradeCalcPrefs.hours(id));
     await p.remove(_GradeCalcPrefs.chapter(id));
     await p.remove(_GradeCalcPrefs.examDate(id));
+    await p.remove(_GradeCalcPrefs.revisionRound(id));
+    await p.remove(_GradeCalcPrefs.pyqDone(id));
     HapticFeedback.mediumImpact();
     await _loadComponents();
     await WidgetService.refreshWidget();
@@ -444,7 +595,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   Future<void> _clearAllComponents() async {
     await DatabaseHelper.instance.clearGradeComponents();
     final p = await _prefs;
-    for (final k in p.getKeys().where((k) => k.startsWith('grade_calc_'))) {
+    for (final k in p.getKeys().where((k) => k.startsWith('grade_calc_v4_'))) {
       await p.remove(k);
     }
     _whatIfScores.clear();
@@ -452,69 +603,99 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     await WidgetService.refreshWidget();
   }
 
-  Future<void> _loadPreset(String subject) async {
-    final preset = NeetData.chapterPresets[subject];
-    if (preset == null) return;
-    await DatabaseHelper.instance.clearGradeComponents();
-    final p = await _prefs;
-    for (final k in p.getKeys().where((k) => k.startsWith('grade_calc_'))) {
-      await p.remove(k);
-    }
-    for (final chapter in preset) {
-      final id = await DatabaseHelper.instance.insertGradeComponent({
-        'name': chapter['name'] as String,
-        'weight': (chapter['weight'] as num).toDouble(),
-        'score': 0,
-        'totalPoints': (chapter['total'] as num).toDouble(),
-      });
-      await _setDifficulty(id, 'Medium');
-      await _setChapterTag(id, chapter['name'] as String);
-    }
-    await _setLastPreset(subject);
-    HapticFeedback.mediumImpact();
-    await _loadComponents();
-    await WidgetService.refreshWidget();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$subject preset loaded — ${preset.length} chapters'),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    }
-  }
+  // ═════════════════════════════════════════════════════════════════
+  // FIXED: Preset loading with guaranteed completion
+  // ═════════════════════════════════════════════════════════════════
 
-  Future<void> _loadFullNeetPreset() async {
-    await DatabaseHelper.instance.clearGradeComponents();
-    final p = await _prefs;
-    for (final k in p.getKeys().where((k) => k.startsWith('grade_calc_'))) {
-      await p.remove(k);
-    }
-    for (final entry in NeetData.chapterPresets.entries) {
-      final subject = entry.key;
-      for (final chapter in entry.value) {
+  Future<void> _loadPreset(String subject) async {
+    if (mounted) setState(() => _loading = true);
+    try {
+      final preset = NeetData.chapterPresets[subject];
+      if (preset == null) return;
+
+      await DatabaseHelper.instance.clearGradeComponents();
+      final p = await _prefs;
+      for (final k in p.getKeys().where((k) => k.startsWith('grade_calc_v4_'))) {
+        await p.remove(k);
+      }
+
+      for (final chapter in preset) {
         final id = await DatabaseHelper.instance.insertGradeComponent({
-          'name': '$subject — ${chapter['name']}',
-          'weight': ((chapter['weight'] as num) * NeetData.subjectMarks[subject]! / 100).toDouble(),
+          'name': chapter['name'] as String,
+          'weight': (chapter['weight'] as num).toDouble(),
           'score': 0,
           'totalPoints': (chapter['total'] as num).toDouble(),
         });
         await _setDifficulty(id, 'Medium');
         await _setChapterTag(id, chapter['name'] as String);
       }
+      await _setLastPreset(subject);
+      HapticFeedback.mediumImpact();
+      await _loadComponents();
+      await WidgetService.refreshWidget();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$subject preset loaded — ${preset.length} chapters'),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error loading preset: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading preset: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-    await _setLastPreset('Full NEET');
-    HapticFeedback.mediumImpact();
-    await _loadComponents();
-    await WidgetService.refreshWidget();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Full NEET preset loaded — all 15 chapters'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+  }
+
+  Future<void> _loadFullNeetPreset() async {
+    if (mounted) setState(() => _loading = true);
+    try {
+      await DatabaseHelper.instance.clearGradeComponents();
+      final p = await _prefs;
+      for (final k in p.getKeys().where((k) => k.startsWith('grade_calc_v4_'))) {
+        await p.remove(k);
+      }
+      for (final entry in NeetData.chapterPresets.entries) {
+        final subject = entry.key;
+        for (final chapter in entry.value) {
+          final id = await DatabaseHelper.instance.insertGradeComponent({
+            'name': '$subject — ${chapter['name']}',
+            'weight': ((chapter['weight'] as num) * NeetData.subjectMarks[subject]! / 100).toDouble(),
+            'score': 0,
+            'totalPoints': (chapter['total'] as num).toDouble(),
+          });
+          await _setDifficulty(id, 'Medium');
+          await _setChapterTag(id, chapter['name'] as String);
+        }
+      }
+      await _setLastPreset('Full NEET');
+      HapticFeedback.mediumImpact();
+      await _loadComponents();
+      await WidgetService.refreshWidget();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Full NEET preset loaded — all 15 chapters'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error loading full preset: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading preset: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -758,6 +939,144 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     }
   }
 
+  // NEW: Quick score calculator
+  Map<String, dynamic> _calculateQuickScore() {
+    final correct = int.tryParse(_correctController.text) ?? 0;
+    final wrong = int.tryParse(_wrongController.text) ?? 0;
+    final left = int.tryParse(_leftController.text) ?? 0;
+    final total = correct + wrong + left;
+    if (total == 0) return {'score': 0, 'percentile': 0.0, 'air': 0, 'rankRange': '—'};
+    final score = (correct * 4) - wrong;
+    final percentile = NeetData.getPercentile(score);
+    final air = NeetData.getAir(percentile);
+    final rank = NeetData.predictRank(score.toDouble());
+    return {
+      'score': score,
+      'percentile': percentile,
+      'air': air,
+      'rankRange': rank['rank'],
+      'tier': rank['tier'],
+    };
+  }
+
+  // NEW: Get weak topics
+  List<Map<String, dynamic>> _getWeakTopics() {
+    final weak = <Map<String, dynamic>>[];
+    for (final c in _components) {
+      final score = (c['score'] as num).toDouble();
+      final total = (c['totalPoints'] as num).toDouble();
+      final percent = total > 0 ? (score / total) * 100 : 0.0;
+      if (percent < 60) {
+        weak.add({
+          'name': c['name'],
+          'percent': percent,
+          'weight': c['weight'],
+          'subject': _detectSubject(c['name'] as String),
+        });
+      }
+    }
+    weak.sort((a, b) => (a['percent'] as double).compareTo(b['percent'] as double));
+    return weak;
+  }
+
+  String _detectSubject(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('physics') || lower.contains('mechanics') || lower.contains('electro') || lower.contains('magnet') || lower.contains('optics') || lower.contains('modern phys')) return 'Physics';
+    if (lower.contains('chem')) return 'Chemistry';
+    if (lower.contains('bio') || lower.contains('zoology') || lower.contains('botany') || lower.contains('physiology') || lower.contains('ecology') || lower.contains('genetics') || lower.contains('cell')) return 'Biology';
+    return 'Other';
+  }
+
+  // NEW: Get chapter mastery data
+  List<Map<String, dynamic>> _getChapterMastery() {
+    return _components.map((c) {
+      final score = (c['score'] as num).toDouble();
+      final total = (c['totalPoints'] as num).toDouble();
+      final percent = total > 0 ? (score / total) * 100 : 0.0;
+      final revisionRound = (c['revisionRound'] as int?) ?? 0;
+      final pyqDone = (c['pyqDone'] as bool?) ?? false;
+      
+      Color masteryColor;
+      String masteryLabel;
+      if (percent >= 80 && revisionRound >= 2 && pyqDone) {
+        masteryColor = const Color(0xFF4CAF50);
+        masteryLabel = 'Mastered';
+      } else if (percent >= 60 && revisionRound >= 1) {
+        masteryColor = const Color(0xFFFFC107);
+        masteryLabel = 'Proficient';
+      } else if (percent > 0) {
+        masteryColor = const Color(0xFFFF9800);
+        masteryLabel = 'Learning';
+      } else {
+        masteryColor = const Color(0xFFF44336);
+        masteryLabel = 'Not Started';
+      }
+      
+      return {
+        'name': c['name'],
+        'percent': percent,
+        'color': masteryColor,
+        'label': masteryLabel,
+        'revisionRound': revisionRound,
+        'pyqDone': pyqDone,
+        'subject': _detectSubject(c['name'] as String),
+      };
+    }).toList();
+  }
+
+  // NEW: Get revision stats
+  Map<String, dynamic> _getRevisionStats() {
+    if (_components.isEmpty) return {'first': 0.0, 'second': 0.0, 'third': 0.0, 'pyq': 0.0};
+    int first = 0, second = 0, third = 0, pyq = 0;
+    for (final c in _components) {
+      final round = (c['revisionRound'] as int?) ?? 0;
+      final done = (c['pyqDone'] as bool?) ?? false;
+      if (round >= 1) first++;
+      if (round >= 2) second++;
+      if (round >= 3) third++;
+      if (done) pyq++;
+    }
+    final total = _components.length;
+    return {
+      'first': (first / total * 100),
+      'second': (second / total * 100),
+      'third': (third / total * 100),
+      'pyq': (pyq / total * 100),
+      'firstCount': first,
+      'secondCount': second,
+      'thirdCount': third,
+      'pyqCount': pyq,
+      'total': total,
+    };
+  }
+
+  // NEW: Get subject time distribution
+  Map<String, double> _getSubjectTimeDistribution() {
+    final dist = <String, double>{'Physics': 0, 'Chemistry': 0, 'Biology': 0, 'Other': 0};
+    for (final c in _components) {
+      final hours = (c['hoursStudied'] as num?)?.toDouble() ?? 0;
+      final subject = _detectSubject(c['name'] as String);
+      dist[subject] = (dist[subject] ?? 0) + hours;
+    }
+    return dist;
+  }
+
+  // NEW: Get today's motivation quote
+  String _getTodayQuote() {
+    final day = DateTime.now().day;
+    return NeetData.motivationQuotes[day % NeetData.motivationQuotes.length];
+  }
+
+  // NEW: Get days until NEET
+  String _getNeetCountdown() {
+    if (_neetExamDate == null) return 'Set exam date';
+    final now = DateTime.now();
+    final diff = _neetExamDate!.difference(DateTime(now.year, now.month, now.day)).inDays;
+    if (diff < 0) return 'Exam passed';
+    if (diff == 0) return 'Today!';
+    return '$diff';
+  }
+
   String _generateStudyPlan() {
     final buffer = StringBuffer();
     buffer.writeln('📊 NEET STUDY PLAN — Generated ${DateTime.now().toString().substring(0, 16)}');
@@ -776,6 +1095,15 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
       buffer.writeln('   $smart');
       buffer.writeln('');
     }
+    // NEW: Add weak topics to export
+    final weak = _getWeakTopics();
+    if (weak.isNotEmpty) {
+      buffer.writeln('⚠️ Priority Weak Topics:');
+      for (final w in weak.take(5)) {
+        buffer.writeln('   • ${w['name']} — ${(w['percent'] as double).toStringAsFixed(1)}%');
+      }
+      buffer.writeln('');
+    }
     buffer.writeln('📚 Component Breakdown:');
     for (final c in _components) {
       final name = c['name'] as String;
@@ -786,17 +1114,20 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
       final diff = c['difficulty'] as String? ?? 'Medium';
       final hours = (c['hoursStudied'] as num?)?.toDouble() ?? 0;
       final eff = _getEfficiencyScore(c);
+      final revRound = (c['revisionRound'] as int?) ?? 0;
+      final pyq = (c['pyqDone'] as bool?) ?? false;
       buffer.writeln('');
       buffer.writeln('   ▶ $name');
       buffer.writeln('      Score: ${score.toStringAsFixed(1)}/${total.toStringAsFixed(0)} (${percent.toStringAsFixed(1)}%)');
       buffer.writeln('      Weight: ${weight.toStringAsFixed(1)}% | Difficulty: $diff');
       buffer.writeln('      Hours: ${hours.toStringAsFixed(1)}h | Efficiency: ${eff.toStringAsFixed(2)} pts/hr');
+      buffer.writeln('      Revision: Round $revRound | PYQ: ${pyq ? 'Done' : 'Pending'}');
       if (percent < 60) buffer.writeln('      ⚠️ WEAK — needs focus!');
       else if (percent >= 85) buffer.writeln('      ✅ STRONG — maintain!');
     }
     buffer.writeln('');
     buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    buffer.writeln('Generated by Event Countdown App');
+    buffer.writeln('Generated by StudyFlow NEET Calculator');
     return buffer.toString();
   }
 
@@ -865,6 +1196,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
             Tab(icon: Icon(Icons.psychology), text: 'NEET Simulator'),
             Tab(icon: Icon(Icons.history), text: 'Mock Tests'),
             Tab(icon: Icon(Icons.analytics), text: 'Analytics'),
+            Tab(icon: Icon(Icons.bolt), text: 'Tools'),
           ],
         ),
       ),
@@ -877,10 +1209,15 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
                 _buildNeetSimulatorTab(cs),
                 _buildMockTestsTab(cs),
                 _buildAnalyticsTab(cs),
+                _buildToolsTab(cs),
               ],
             ),
     );
   }
+
+  // ═════════════════════════════════════════════════════════════════
+  // TAB 1: COMPONENTS (REDESIGNED)
+  // ═════════════════════════════════════════════════════════════════
 
   Widget _buildComponentsTab(ColorScheme cs) {
     final grade = _currentGrade;
@@ -890,6 +1227,9 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     final rankPrediction = _predictNeetRank();
     final subjectBalance = _getSubjectBalance();
     final smartTarget = _getSmartTarget();
+    final weakTopics = _getWeakTopics();
+    final chapterMastery = _getChapterMastery();
+    final revisionStats = _getRevisionStats();
 
     return CustomScrollView(
       slivers: [
@@ -897,94 +1237,40 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
           child: Column(
             children: [
               const SizedBox(height: 16),
-              Center(
-                child: SizedBox(
-                  width: 220, height: 220,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 220, height: 220,
-                        child: CircularProgressIndicator(
-                          value: 1.0, strokeWidth: 16,
-                          backgroundColor: cs.surfaceContainerHighest,
-                          valueColor: const AlwaysStoppedAnimation(Colors.transparent),
-                        ),
-                      ),
-                      TweenAnimationBuilder<double>(
-                        tween: Tween<double>(begin: 0, end: (grade / 100).clamp(0.0, 1.0)),
-                        duration: const Duration(milliseconds: 1000),
-                        curve: Curves.easeOutCubic,
-                        builder: (context, value, child) => SizedBox(
-                          width: 220, height: 220,
-                          child: CircularProgressIndicator(
-                            value: value, strokeWidth: 16,
-                            backgroundColor: Colors.transparent,
-                            valueColor: AlwaysStoppedAnimation(gradeColor),
-                            strokeCap: StrokeCap.round,
-                          ),
-                        ),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('${grade.toStringAsFixed(1)}%', style: TextStyle(fontSize: 42, fontWeight: FontWeight.bold, color: gradeColor)),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                            decoration: BoxDecoration(color: gradeColor.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
-                            child: Text(_letterGrade, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: gradeColor)),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              
+              // NEW: NEET Countdown Banner
+              if (_neetExamDate != null)
+                _buildCountdownBanner(cs),
+              
+              const SizedBox(height: 12),
+              
+              // REDESIGNED: Grade Ring with glow
+              _buildGradeRing(cs, grade, gradeColor),
+              
               const SizedBox(height: 16),
+              
+              // NEW: Chapter Mastery Overview (compact)
+              if (_components.isNotEmpty)
+                _buildChapterMasteryOverview(cs, chapterMastery),
+              
+              // NEW: Revision & PYQ Tracker
+              if (_components.isNotEmpty)
+                _buildRevisionTracker(cs, revisionStats),
+              
+              // NEW: Weak Topics Alert
+              if (weakTopics.isNotEmpty)
+                _buildWeakTopicsAlert(cs, weakTopics),
+              
               if (_components.isNotEmpty)
                 _buildRankPredictor(cs, rankPrediction, grade),
               if (smartTarget != null)
                 _buildSmartTarget(cs, smartTarget),
               if (subjectBalance.isNotEmpty)
                 _buildSubjectBalance(cs, subjectBalance),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Weight Budget', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                        Text('${totalWeight.toStringAsFixed(1)}% / 100%', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isOverWeight ? cs.error : cs.primary)),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(
-                        value: (totalWeight / 100).clamp(0.0, 1.0), minHeight: 10,
-                        backgroundColor: cs.surfaceContainerHighest,
-                        valueColor: AlwaysStoppedAnimation(isOverWeight ? cs.error : cs.primary),
-                      ),
-                    ),
-                    if (isOverWeight)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Row(children: [
-                          Icon(Icons.warning_amber, size: 14, color: cs.error),
-                          const SizedBox(width: 4),
-                          Text('Total weight exceeds 100%', style: TextStyle(fontSize: 12, color: cs.error, fontWeight: FontWeight.w500)),
-                        ]),
-                      )
-                    else if (_remainingWeight > 0)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text('${_remainingWeight.toStringAsFixed(1)}% remaining', style: TextStyle(fontSize: 12, color: cs.outline)),
-                      ),
-                  ],
-                ),
-              ),
+              
+              // REDESIGNED: Weight Budget
+              _buildWeightBudget(cs, totalWeight, isOverWeight),
+              
               const SizedBox(height: 20),
               _buildPresetButtons(cs),
               const SizedBox(height: 20),
@@ -1026,19 +1312,375 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     );
   }
 
+  // NEW: Countdown Banner
+  Widget _buildCountdownBanner(ColorScheme cs) {
+    final daysStr = _getNeetCountdown();
+    final days = int.tryParse(daysStr) ?? 0;
+    final urgencyColor = days <= 30 ? Colors.red : days <= 90 ? Colors.orange : cs.primary;
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [urgencyColor.withOpacity(0.15), cs.surfaceContainerHighest.withOpacity(0.3)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: urgencyColor.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('⏰ NEET Countdown', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 4),
+                Text(
+                  daysStr == 'Today!' ? 'Exam is TODAY!' : '$daysStr days left',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: urgencyColor),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('Daily Motivation', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+                const SizedBox(height: 4),
+                Text(
+                  _getTodayQuote(),
+                  style: TextStyle(fontSize: 11, color: cs.onSurface, fontStyle: FontStyle.italic, height: 1.4),
+                  textAlign: TextAlign.right,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // REDESIGNED: Grade Ring with glow effect
+  Widget _buildGradeRing(ColorScheme cs, double grade, Color gradeColor) {
+    return Center(
+      child: Container(
+        width: 240,
+        height: 240,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: gradeColor.withOpacity(0.15),
+              blurRadius: 30,
+              spreadRadius: 5,
+            ),
+          ],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: 220, height: 220,
+              child: CircularProgressIndicator(
+                value: 1.0, strokeWidth: 18,
+                backgroundColor: cs.surfaceContainerHighest.withOpacity(0.5),
+                valueColor: const AlwaysStoppedAnimation(Colors.transparent),
+              ),
+            ),
+            TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0, end: (grade / 100).clamp(0.0, 1.0)),
+              duration: const Duration(milliseconds: 1200),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, child) => SizedBox(
+                width: 220, height: 220,
+                child: CircularProgressIndicator(
+                  value: value, strokeWidth: 18,
+                  backgroundColor: Colors.transparent,
+                  valueColor: AlwaysStoppedAnimation(gradeColor),
+                  strokeCap: StrokeCap.round,
+                ),
+              ),
+            ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('${grade.toStringAsFixed(1)}%', style: TextStyle(fontSize: 44, fontWeight: FontWeight.w800, color: gradeColor)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: gradeColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: gradeColor.withOpacity(0.2)),
+                  ),
+                  child: Text(_letterGrade, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: gradeColor)),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '${((grade / 100) * 720).toStringAsFixed(0)}/720 est.',
+                  style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // NEW: Chapter Mastery Overview
+  Widget _buildChapterMasteryOverview(ColorScheme cs, List<Map<String, dynamic>> mastery) {
+    final mastered = mastery.where((m) => m['label'] == 'Mastered').length;
+    final proficient = mastery.where((m) => m['label'] == 'Proficient').length;
+    final learning = mastery.where((m) => m['label'] == 'Learning').length;
+    final notStarted = mastery.where((m) => m['label'] == 'Not Started').length;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.emoji_events, size: 16, color: cs.primary),
+              const SizedBox(width: 6),
+              Text('Chapter Mastery', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurface)),
+              const Spacer(),
+              Text('$mastered/${mastery.length} mastered', style: TextStyle(fontSize: 11, color: cs.outline)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: mastery.map((m) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: (m['color'] as Color).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: (m['color'] as Color).withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6, height: 6,
+                      decoration: BoxDecoration(color: m['color'] as Color, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${m['name']}',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: cs.onSurface),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${(m['percent'] as double).toStringAsFixed(0)}%',
+                      style: TextStyle(fontSize: 9, color: cs.outline),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildMasteryLegend('Mastered', const Color(0xFF4CAF50), cs),
+              const SizedBox(width: 12),
+              _buildMasteryLegend('Proficient', const Color(0xFFFFC107), cs),
+              const SizedBox(width: 12),
+              _buildMasteryLegend('Learning', const Color(0xFFFF9800), cs),
+              const SizedBox(width: 12),
+              _buildMasteryLegend('Not Started', const Color(0xFFF44336), cs),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMasteryLegend(String label, Color color, ColorScheme cs) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 7, height: 7, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+        const SizedBox(width: 3),
+        Text(label, style: TextStyle(fontSize: 9, color: cs.outline)),
+      ],
+    );
+  }
+
+  // NEW: Revision Tracker
+  Widget _buildRevisionTracker(ColorScheme cs, Map<String, dynamic> stats) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+                            Icon(Icons.sync, size: 16, color: cs.primary),
+              const SizedBox(width: 6),
+              Text('Revision & PYQ Tracker', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: _buildRevisionStat('1st Rev', stats['first'] as double, cs.primary, cs)),
+              const SizedBox(width: 8),
+              Expanded(child: _buildRevisionStat('2nd Rev', stats['second'] as double, cs.secondary, cs)),
+              const SizedBox(width: 8),
+              Expanded(child: _buildRevisionStat('3rd Rev', stats['third'] as double, const Color(0xFF9C27B0), cs)),
+              const SizedBox(width: 8),
+              Expanded(child: _buildRevisionStat('PYQs', stats['pyq'] as double, const Color(0xFF00BCD4), cs)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRevisionStat(String label, double pct, Color color, ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 44, height: 44,
+                child: CircularProgressIndicator(
+                  value: (pct / 100).clamp(0.0, 1.0),
+                  strokeWidth: 4,
+                  backgroundColor: cs.surfaceContainerHighest,
+                  valueColor: AlwaysStoppedAnimation(color),
+                ),
+              ),
+              Text('${pct.toStringAsFixed(0)}%', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(label, style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+
+  // NEW: Weak Topics Alert
+  Widget _buildWeakTopicsAlert(ColorScheme cs, List<Map<String, dynamic>> weakTopics) {
+    final topWeak = weakTopics.take(3).toList();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.errorContainer.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.error.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, size: 16, color: cs.error),
+              const SizedBox(width: 6),
+              Text('Priority Revision List', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.error)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(color: cs.error.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+                child: Text('${weakTopics.length} weak', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: cs.error)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...topWeak.map((w) => Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Container(
+                  width: 6, height: 6,
+                  decoration: BoxDecoration(color: cs.error, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${w['name']} — ${(w['percent'] as double).toStringAsFixed(1)}%',
+                    style: TextStyle(fontSize: 11, color: cs.onSurface, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _subjectColor(w['subject'] as String).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    w['subject'] as String,
+                    style: TextStyle(fontSize: 9, color: _subjectColor(w['subject'] as String), fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          )),
+          if (weakTopics.length > 3)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('+${weakTopics.length - 3} more weak topics', style: TextStyle(fontSize: 10, color: cs.outline)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Color _subjectColor(String subject) {
+    switch (subject) {
+      case 'Physics': return const Color(0xFF1565C0);
+      case 'Chemistry': return const Color(0xFF2E7D32);
+      case 'Biology': return const Color(0xFFC62828);
+      default: return Colors.grey;
+    }
+  }
+
   Widget _buildRankPredictor(ColorScheme cs, Map<String, dynamic> rank, double grade) {
     final neetScore = (grade / 100) * 720;
     final tierColor = neetScore >= 650 ? Colors.green : neetScore >= 550 ? Colors.orange : Colors.red;
     return Container(
-      margin: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [tierColor.withOpacity(0.15), cs.surfaceContainerHighest.withOpacity(0.3)],
+          colors: [tierColor.withOpacity(0.12), cs.surfaceContainerHighest.withOpacity(0.3)],
           begin: Alignment.topLeft, end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: tierColor.withOpacity(0.3)),
+        border: Border.all(color: tierColor.withOpacity(0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1050,8 +1692,8 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
               Text('NEET Rank Predictor', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: cs.onSurface)),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: tierColor.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: tierColor.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
                 child: Text('${neetScore.toStringAsFixed(0)}/720', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: tierColor)),
               ),
             ],
@@ -1097,7 +1739,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
 
   Widget _buildSmartTarget(ColorScheme cs, String target) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: cs.primaryContainer.withOpacity(0.2),
@@ -1136,7 +1778,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     else if (phyPct > 40) warning = 'Too much weight on Physics. Balance with Biology.';
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+      margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cs.surfaceContainerHighest.withOpacity(0.4),
@@ -1163,10 +1805,10 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
                   final pct = (e.value / total).clamp(0.0, 1.0);
                   final color = colors[e.key] ?? Colors.grey;
                   return Expanded(
-                    flex: (pct * 100).round(),
+                    flex: (pct * 100).round().clamp(1, 100),
                     child: Container(
                       color: color.withOpacity(0.8),
-                      child: pct > 0.15
+                      child: pct > 0.12
                           ? Center(child: Text('${(pct * 100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)))
                           : null,
                     ),
@@ -1209,9 +1851,59 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     );
   }
 
+  Widget _buildWeightBudget(ColorScheme cs, double totalWeight, bool isOverWeight) {
+    final remaining = _remainingWeight;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Weight Budget', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                Text('${totalWeight.toStringAsFixed(1)}% / 100%', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isOverWeight ? cs.error : cs.primary)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: (totalWeight / 100).clamp(0.0, 1.0), minHeight: 10,
+                backgroundColor: cs.surfaceContainerHighest,
+                valueColor: AlwaysStoppedAnimation(isOverWeight ? cs.error : cs.primary),
+              ),
+            ),
+            if (isOverWeight)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(children: [
+                  Icon(Icons.warning_amber, size: 14, color: cs.error),
+                  const SizedBox(width: 4),
+                  Text('Total weight exceeds 100%', style: TextStyle(fontSize: 12, color: cs.error, fontWeight: FontWeight.w500)),
+                ]),
+              )
+            else if (remaining > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('${remaining.toStringAsFixed(1)}% remaining', style: TextStyle(fontSize: 12, color: cs.outline)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPresetButtons(ColorScheme cs) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1233,7 +1925,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
 
   Widget _buildWhatIfToggle(ColorScheme cs) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: InkWell(
         onTap: () => setState(() => _showWhatIf = !_showWhatIf),
         borderRadius: BorderRadius.circular(12),
@@ -1264,7 +1956,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
 
   Widget _buildTargetPredictor(ColorScheme cs) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -1311,7 +2003,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
 
   Widget _buildAddComponentSection(ColorScheme cs) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -1448,6 +2140,8 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     final whatIfVal = _whatIfScores[id];
     final displayPercent = whatIfVal ?? percent;
     final displayColor = _gradeColor(displayPercent);
+    final revisionRound = (c['revisionRound'] as int?) ?? 0;
+    final pyqDone = (c['pyqDone'] as bool?) ?? false;
 
     return Dismissible(
       key: ValueKey('grade_comp_$id'),
@@ -1517,6 +2211,20 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
                               decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(4)),
                               child: Text('${hours.toStringAsFixed(1)}h', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
                             ),
+                          // NEW: Revision round badge
+                          if (revisionRound > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: const Color(0xFF9C27B0).withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
+                              child: Text('Rev $revisionRound', style: TextStyle(fontSize: 9, color: const Color(0xFF9C27B0), fontWeight: FontWeight.w600)),
+                            ),
+                          // NEW: PYQ badge
+                          if (pyqDone)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: const Color(0xFF00BCD4).withOpacity(0.12), borderRadius: BorderRadius.circular(4)),
+                              child: Text('PYQ ✓', style: TextStyle(fontSize: 9, color: const Color(0xFF00BCD4), fontWeight: FontWeight.w600)),
+                            ),
                         ],
                       ),
                     ],
@@ -1568,6 +2276,30 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
                 backgroundColor: cs.surfaceContainerHighest,
                 valueColor: AlwaysStoppedAnimation(displayColor),
               ),
+            ),
+            // NEW: Quick action buttons for revision and PYQ
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: () async {
+                    final current = await _getRevisionRound(id);
+                    await _setRevisionRound(id, (current + 1) % 4);
+                    await _loadComponents();
+                  },
+                  icon: const Icon(Icons.sync, size: 14),
+                  label: Text('Rev: $revisionRound', style: const TextStyle(fontSize: 11)),
+                  style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: Size.zero),
+                ),
+                TextButton.icon(
+                  onPressed: () async {
+                    await _setPyqDone(id, !pyqDone);
+                    await _loadComponents();
+                  },
+                  icon: Icon(pyqDone ? Icons.check_circle : Icons.circle_outlined, size: 14, color: pyqDone ? const Color(0xFF00BCD4) : null),
+                  label: Text(pyqDone ? 'PYQ Done' : 'Mark PYQ', style: const TextStyle(fontSize: 11)),
+                  style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: Size.zero),
+                ),
+              ],
             ),
             if (_showWhatIf) ...[
               const SizedBox(height: 10),
@@ -1624,7 +2356,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   }
 
   // ═════════════════════════════════════════════════════════════════
-  // TAB 2: NEET SIMULATOR
+  // TAB 2: NEET SIMULATOR (PRESERVED + ENHANCED)
   // ═════════════════════════════════════════════════════════════════
 
   Widget _buildNeetSimulatorTab(ColorScheme cs) {
@@ -1824,7 +2556,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   }
 
   // ═════════════════════════════════════════════════════════════════
-  // TAB 3: MOCK TESTS
+  // TAB 3: MOCK TESTS (PRESERVED)
   // ═════════════════════════════════════════════════════════════════
 
   Widget _buildMockTestsTab(ColorScheme cs) {
@@ -2096,7 +2828,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   }
 
   // ═════════════════════════════════════════════════════════════════
-  // TAB 4: ANALYTICS
+  // TAB 4: ANALYTICS (PRESERVED + ENHANCED)
   // ═════════════════════════════════════════════════════════════════
 
   Widget _buildAnalyticsTab(ColorScheme cs) {
@@ -2125,6 +2857,10 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     final improvement = lastScore - firstScore;
     final testsCount = allTests.length;
     final improvementPerTest = testsCount > 1 ? improvement / (testsCount - 1) : 0;
+
+    // NEW: Subject time distribution
+    final timeDist = _getSubjectTimeDistribution();
+    final totalHours = timeDist.values.fold(0.0, (a, b) => a + b);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -2158,6 +2894,13 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
             ),
           ),
           const SizedBox(height: 20),
+          
+          // NEW: Subject Time Distribution
+          if (totalHours > 0)
+            _buildTimeDistributionCard(cs, timeDist, totalHours),
+          
+          const SizedBox(height: 20),
+          
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -2262,6 +3005,92 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
             ),
           ),
           const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  // NEW: Time Distribution Card
+  Widget _buildTimeDistributionCard(ColorScheme cs, Map<String, double> timeDist, double totalHours) {
+    final idealDist = {'Biology': 0.50, 'Physics': 0.25, 'Chemistry': 0.25};
+    final colors = {
+      'Physics': const Color(0xFF1565C0),
+      'Chemistry': const Color(0xFF2E7D32),
+      'Biology': const Color(0xFFC62828),
+      'Other': Colors.grey,
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.schedule, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Text('Study Time Distribution', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text('Total: ${totalHours.toStringAsFixed(1)}h recorded', style: TextStyle(fontSize: 11, color: cs.outline)),
+          const SizedBox(height: 12),
+          ...timeDist.entries.where((e) => e.value > 0).map((e) {
+            final actualPct = (e.value / totalHours * 100);
+            final idealPct = (idealDist[e.key] ?? 0) * 100;
+            final diff = actualPct - idealPct;
+            final color = colors[e.key] ?? Colors.grey;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(e.key, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurface)),
+                      Text('${e.value.toStringAsFixed(1)}h (${actualPct.toStringAsFixed(0)}%)', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: (actualPct / 100).clamp(0.0, 1.0),
+                          minHeight: 8,
+                          backgroundColor: cs.surfaceContainerHighest,
+                          valueColor: AlwaysStoppedAnimation(color),
+                        ),
+                      ),
+                      // Ideal marker
+                      Positioned(
+                        left: (idealPct / 100) * MediaQuery.of(context).size.width * 0.75,
+                        child: Container(
+                          width: 2,
+                          height: 8,
+                          color: Colors.white.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    diff > 5 ? '+${diff.toStringAsFixed(0)}% over ideal' : diff < -5 ? '${diff.toStringAsFixed(0)}% under ideal' : 'On track',
+                    style: TextStyle(fontSize: 9, color: diff.abs() > 5 ? Colors.orange : Colors.green),
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 6),
+          Text('White line = ideal NEET distribution', style: TextStyle(fontSize: 9, color: cs.outline, fontStyle: FontStyle.italic)),
         ],
       ),
     );
@@ -2415,6 +3244,648 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
           ],
         ),
       ),
+    );
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // TAB 5: TOOLS (NEW — Quick Score, Daily Targets, Exam Date)
+  // ═════════════════════════════════════════════════════════════════
+
+    Widget _buildToolsTab(ColorScheme cs) {
+    final quickResult = _calculateQuickScore();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // NEET Exam Date Setting
+          _buildExamDateCard(cs),
+          const SizedBox(height: 16),
+
+          // Quick Score Calculator
+          _buildQuickScoreCard(cs, quickResult),
+          const SizedBox(height: 16),
+
+          // Daily MCQ Targets
+          _buildDailyTargetsCard(cs),
+          const SizedBox(height: 16),
+
+          // Chapter Weightage Visualizer
+          _buildWeightageVisualizer(cs),
+          const SizedBox(height: 16),
+
+          // Subject Time Distribution Summary
+          _buildTimeSummaryCard(cs),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExamDateCard(ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [cs.primary.withOpacity(0.12), cs.surfaceContainerHighest.withOpacity(0.3)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.primary.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.calendar_today, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Text('NEET Exam Date', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_neetExamDate != null) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_neetExamDate!.day}/${_neetExamDate!.month}/${_neetExamDate!.year}',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${_getNeetCountdown()} days remaining',
+                        style: TextStyle(fontSize: 12, color: cs.primary, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton.tonal(
+                  onPressed: () => _pickExamDate(),
+                  child: const Text('Change'),
+                ),
+              ],
+            ),
+          ] else ...[
+            Text(
+              'Set your NEET exam date to see countdown and daily motivation',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => _pickExamDate(),
+                icon: const Icon(Icons.calendar_month),
+                label: const Text('Set Exam Date'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickExamDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _neetExamDate ?? DateTime(now.year + 1, 5, 4),
+      firstDate: now,
+      lastDate: DateTime(now.year + 2, 12, 31),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _neetExamDate = picked);
+      await _setNeetExamDate(picked.millisecondsSinceEpoch);
+    }
+  }
+
+  Widget _buildQuickScoreCard(ColorScheme cs, Map<String, dynamic> result) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.bolt, size: 18, color: const Color(0xFFFFC107)),
+              const SizedBox(width: 8),
+              Text('Quick NEET Score Calculator', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Enter correct, wrong & left questions to instantly calculate score & rank',
+            style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuickInput('Correct', '+4 each', Icons.check_circle, const Color(0xFF4CAF50), _correctController),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildQuickInput('Wrong', '-1 each', Icons.cancel, const Color(0xFFF44336), _wrongController),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildQuickInput('Left', '0 marks', Icons.help_outline, cs.outline, _leftController),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ValueListenableBuilder(
+            valueListenable: _correctController,
+            builder: (context, _, __) => ValueListenableBuilder(
+              valueListenable: _wrongController,
+              builder: (context, _, __) => ValueListenableBuilder(
+                valueListenable: _leftController,
+                builder: (context, _, __) {
+                  final res = _calculateQuickScore();
+                  final totalQs = (int.tryParse(_correctController.text) ?? 0) +
+                      (int.tryParse(_wrongController.text) ?? 0) +
+                      (int.tryParse(_leftController.text) ?? 0);
+                  if (totalQs == 0) return const SizedBox.shrink();
+                  final scoreColor = NeetData.getMarksColor(res['score'] as int);
+                  return Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: scoreColor.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: scoreColor.withOpacity(0.2)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '${res['score']}',
+                              style: TextStyle(fontSize: 36, fontWeight: FontWeight.w800, color: scoreColor),
+                            ),
+                            const SizedBox(width: 6),
+                            Text('/ 720', style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 16,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            _buildQuickStat('Percentile', '${(res['percentile'] as double).toStringAsFixed(2)}%', cs.primary),
+                            _buildQuickStat('Est. AIR', '${res['air']}', cs.secondary),
+                            _buildQuickStat('Rank', '${res['rankRange']}', scoreColor),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: scoreColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${res['tier']}',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: scoreColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickInput(String label, String hint, IconData icon, Color color, TextEditingController controller) {
+    return TextField(
+      controller: controller,
+      keyboardType: TextInputType.number,
+      textAlign: TextAlign.center,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: Icon(icon, size: 18, color: color),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        isDense: true,
+      ),
+    );
+  }
+
+  Widget _buildQuickStat(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+      ],
+    );
+  }
+
+  Widget _buildDailyTargetsCard(ColorScheme cs) {
+    final phyPct = (_dailyPhyTarget > 0) ? (_dailyPhyDone / _dailyPhyTarget).clamp(0.0, 1.0) : 0.0;
+    final chemPct = (_dailyChemTarget > 0) ? (_dailyChemDone / _dailyChemTarget).clamp(0.0, 1.0) : 0.0;
+    final bioPct = (_dailyBioTarget > 0) ? (_dailyBioDone / _dailyBioTarget).clamp(0.0, 1.0) : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.track_changes, size: 18, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Text('Daily MCQ Targets', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                ],
+              ),
+              TextButton(
+                onPressed: () => _showTargetSettings(cs),
+                child: const Text('Edit', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Tap +1 after solving MCQs to track daily progress',
+            style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _buildTargetRing(
+                  'Physics',
+                  _dailyPhyDone,
+                  _dailyPhyTarget,
+                  phyPct,
+                  const Color(0xFF1565C0),
+                  cs,
+                  () => _incrementDailyDone('Physics'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildTargetRing(
+                  'Chemistry',
+                  _dailyChemDone,
+                  _dailyChemTarget,
+                  chemPct,
+                  const Color(0xFF2E7D32),
+                  cs,
+                  () => _incrementDailyDone('Chemistry'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildTargetRing(
+                  'Biology',
+                  _dailyBioDone,
+                  _dailyBioTarget,
+                  bioPct,
+                  const Color(0xFFC62828),
+                  cs,
+                  () => _incrementDailyDone('Biology'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTargetRing(String label, int done, int target, double pct, Color color, ColorScheme cs, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.15)),
+        ),
+        child: Column(
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: CircularProgressIndicator(
+                    value: 1.0,
+                    strokeWidth: 5,
+                    backgroundColor: cs.surfaceContainerHighest,
+                    valueColor: const AlwaysStoppedAnimation(Colors.transparent),
+                  ),
+                ),
+                SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0, end: pct),
+                    duration: const Duration(milliseconds: 500),
+                    builder: (context, value, child) => CircularProgressIndicator(
+                      value: value,
+                      strokeWidth: 5,
+                      backgroundColor: Colors.transparent,
+                      valueColor: AlwaysStoppedAnimation(color),
+                      strokeCap: StrokeCap.round,
+                    ),
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('$done', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+                    Text('/$target', style: TextStyle(fontSize: 9, color: cs.outline)),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '+1 MCQ',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTargetSettings(ColorScheme cs) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Edit Daily Targets', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+            const SizedBox(height: 16),
+            _buildTargetEditField('Physics MCQs', _dailyPhyTargetController, const Color(0xFF1565C0)),
+            const SizedBox(height: 10),
+            _buildTargetEditField('Chemistry MCQs', _dailyChemTargetController, const Color(0xFF2E7D32)),
+            const SizedBox(height: 10),
+            _buildTargetEditField('Biology MCQs', _dailyBioTargetController, const Color(0xFFC62828)),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () async {
+                  await _saveDailyTargets();
+                  await _loadDailyTargets();
+                  if (mounted) Navigator.pop(ctx);
+                },
+                child: const Text('Save Targets'),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTargetEditField(String label, TextEditingController controller, Color color) {
+    return TextField(
+      controller: controller,
+      keyboardType: TextInputType.number,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Container(
+          margin: const EdgeInsets.all(12),
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  Widget _buildWeightageVisualizer(ColorScheme cs) {
+    final allChapters = <Map<String, dynamic>>[];
+    for (final entry in NeetData.chapterPresets.entries) {
+      final subject = entry.key;
+      final color = subject == 'Physics' ? const Color(0xFF1565C0) :
+                    subject == 'Chemistry' ? const Color(0xFF2E7D32) :
+                    const Color(0xFFC62828);
+      for (final chapter in entry.value) {
+        allChapters.add({
+          'subject': subject,
+          'name': chapter['name'],
+          'weight': chapter['weight'],
+          'color': color,
+        });
+      }
+    }
+    allChapters.sort((a, b) => (b['weight'] as int).compareTo(a['weight'] as int));
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.bar_chart, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Text('NEET Chapter Weightage', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'High-weight chapters should be your top priority',
+            style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          ...allChapters.take(8).map((c) {
+            final weight = c['weight'] as int;
+            final maxWeight = allChapters.first['weight'] as int;
+            final pct = weight / maxWeight;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(color: c['color'] as Color, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      '${c['subject']} — ${c['name']}',
+                      style: TextStyle(fontSize: 11, color: cs.onSurface),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: pct.clamp(0.0, 1.0),
+                        minHeight: 6,
+                        backgroundColor: cs.surfaceContainerHighest,
+                        valueColor: AlwaysStoppedAnimation((c['color'] as Color).withOpacity(0.7)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$weight%',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: c['color'] as Color),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeSummaryCard(ColorScheme cs) {
+    final timeDist = _getSubjectTimeDistribution();
+    final totalHours = timeDist.values.fold(0.0, (a, b) => a + b);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [cs.secondary.withOpacity(0.1), cs.surfaceContainerHighest.withOpacity(0.3)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.secondary.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.access_time, size: 18, color: cs.secondary),
+              const SizedBox(width: 8),
+              Text('Study Time Summary', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (totalHours > 0) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildTimeStat('Physics', timeDist['Physics'] ?? 0, const Color(0xFF1565C0), cs),
+                _buildTimeStat('Chemistry', timeDist['Chemistry'] ?? 0, const Color(0xFF2E7D32), cs),
+                _buildTimeStat('Biology', timeDist['Biology'] ?? 0, const Color(0xFFC62828), cs),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Total: ${totalHours.toStringAsFixed(1)} hours recorded',
+              style: TextStyle(fontSize: 11, color: cs.outline, fontStyle: FontStyle.italic),
+              textAlign: TextAlign.center,
+            ),
+          ] else ...[
+            Center(
+              child: Column(
+                children: [
+                  Icon(Icons.timer_off, size: 32, color: cs.outline),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No study time recorded yet',
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Add hours in component cards to track',
+                    style: TextStyle(fontSize: 11, color: cs.outline),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeStat(String subject, double hours, Color color, ColorScheme cs) {
+    return Column(
+      children: [
+        Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            shape: BoxShape.circle,
+            border: Border.all(color: color.withOpacity(0.2)),
+          ),
+          child: Center(
+            child: Text(
+              '${hours.toStringAsFixed(0)}h',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(subject, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+      ],
     );
   }
 }
