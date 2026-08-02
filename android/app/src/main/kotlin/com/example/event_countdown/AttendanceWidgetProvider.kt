@@ -31,12 +31,6 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
         private val ROW_IDS = arrayOf(
             R.id.subject_row_0, R.id.subject_row_1, R.id.subject_row_2, R.id.subject_row_3
         )
-        private val CHIPS_IDS = arrayOf(
-            R.id.chips_row_0, R.id.chips_row_1, R.id.chips_row_2, R.id.chips_row_3
-        )
-        private val STATUS_IDS = arrayOf(
-            R.id.attendance_widget_status, R.id.status_1, R.id.status_2, R.id.status_3
-        )
         private val DIVIDER_IDS = arrayOf(
             R.id.divider_0, R.id.divider_1, R.id.divider_2, 0
         )
@@ -64,6 +58,9 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
         private val E_IDS = arrayOf(
             R.id.chip_excused, R.id.e1, R.id.e2, R.id.e3
         )
+        private val STATUS_IDS = arrayOf(
+            R.id.attendance_widget_status, R.id.status_1, R.id.status_2, R.id.status_3
+        )
 
         fun updateWidgetDirectly(
             context: Context,
@@ -81,7 +78,8 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.attendance_widget_content, View.GONE)
 
                     views.setTextViewText(R.id.attendance_widget_empty_title, "No Subjects")
-                    views.setTextViewText(R.id.attendance_widget_empty_subtitle, "Tap to add subjects")
+                    views.setTextViewText(R.id.attendance_widget_empty_subtitle, "0 / 0")
+                    views.setTextViewText(R.id.attendance_widget_empty_cta, "Add subjects to track attendance")
 
                     val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                     if (launchIntent != null) {
@@ -97,65 +95,100 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.attendance_widget_empty_state, View.GONE)
                     views.setViewVisibility(R.id.attendance_widget_content, View.VISIBLE)
 
-                    var anyStreak = false
-                    var maxStreak = 0
-                    for (i in 0 until subjectCount.coerceAtMost(MAX_SUBJECTS)) {
-                        val streak = widgetData.getInt(KEY_PREFIX_SUBJECT_STREAK + "$i", 0)
-                        if (streak > maxStreak) maxStreak = streak
-                        if (streak > 0) anyStreak = true
+                    val name = widgetData.getString(KEY_PREFIX_SUBJECT_NAME + "0", "Subject") ?: "Subject"
+                    val percent = widgetData.getInt(KEY_PREFIX_SUBJECT_PERCENT + "0", 0)
+                    val present = widgetData.getInt(KEY_PREFIX_SUBJECT_PRESENT + "0", 0)
+                    val absent = widgetData.getInt(KEY_PREFIX_SUBJECT_ABSENT + "0", 0)
+                    val late = widgetData.getInt(KEY_PREFIX_SUBJECT_LATE + "0", 0)
+                    val excused = widgetData.getInt(KEY_PREFIX_SUBJECT_EXCUSED + "0", 0)
+                    val total = widgetData.getInt(KEY_PREFIX_SUBJECT_TOTAL + "0", 0)
+                    val colorHex = widgetData.getString(KEY_PREFIX_SUBJECT_COLOR + "0", "#4CAF50") ?: "#4CAF50"
+                    val statusText = widgetData.getString(KEY_PREFIX_SUBJECT_STATUS + "0", "No data") ?: "No data"
+                    val streak = widgetData.getInt(KEY_PREFIX_SUBJECT_STREAK + "0", 0)
+
+                    val percentColor = when {
+                        percent >= 75 -> Color.parseColor("#4CAF50")
+                        percent >= 60 -> Color.parseColor("#FF9800")
+                        else -> Color.parseColor("#F44336")
                     }
 
-                    if (anyStreak && maxStreak > 0) {
+                    views.setTextViewText(R.id.attendance_widget_subject, name)
+                    views.setTextColor(R.id.attendance_widget_subject, Color.WHITE)
+
+                    views.setTextViewText(R.id.attendance_widget_percent, "$percent%")
+                    views.setTextColor(R.id.attendance_widget_percent, percentColor)
+
+                    val effectiveTotal = total - excused
+                    views.setTextViewText(R.id.attendance_widget_ratio, "$present / $effectiveTotal")
+                    views.setTextColor(R.id.attendance_widget_ratio, Color.parseColor("#CCFFFFFF"))
+
+                    views.setTextViewText(R.id.chip_present, "P:$present")
+                    views.setTextViewText(R.id.chip_absent, "A:$absent")
+                    views.setTextViewText(R.id.chip_late, "L:$late")
+                    views.setTextViewText(R.id.chip_excused, "E:$excused")
+
+                    views.setTextViewText(R.id.attendance_widget_status, statusText)
+                    views.setTextColor(R.id.attendance_widget_status, Color.WHITE)
+
+                    if (streak > 0) {
                         views.setViewVisibility(R.id.attendance_widget_streak_chip, View.VISIBLE)
-                        views.setTextViewText(R.id.attendance_widget_streak_text, "$maxStreak")
+                        views.setTextViewText(R.id.attendance_widget_streak_text, "$streak")
                     } else {
                         views.setViewVisibility(R.id.attendance_widget_streak_chip, View.GONE)
                     }
 
-                    val displayCount = subjectCount.coerceAtMost(MAX_SUBJECTS)
-                    for (i in 0 until MAX_SUBJECTS) {
-                        val rowVisible = i < displayCount
+                    // CRITICAL FIX: setTextColor on bullet TextView (100% safe in RemoteViews)
+                    val subjectColor = try {
+                        Color.parseColor(colorHex)
+                    } catch (e: Exception) {
+                        Color.parseColor("#4CAF50")
+                    }
+                    views.setTextColor(R.id.attendance_widget_subject_dot, subjectColor)
 
+                    // === SUBJECTS 1-3 ===
+                    val displayCount = subjectCount.coerceAtMost(MAX_SUBJECTS)
+                    for (i in 1 until MAX_SUBJECTS) {
+                        val rowVisible = i < displayCount
                         views.setViewVisibility(ROW_IDS[i], if (rowVisible) View.VISIBLE else View.GONE)
-                        views.setViewVisibility(CHIPS_IDS[i], if (rowVisible) View.VISIBLE else View.GONE)
                         views.setViewVisibility(STATUS_IDS[i], if (rowVisible) View.VISIBLE else View.GONE)
-                        if (DIVIDER_IDS[i] != 0) {
-                            views.setViewVisibility(DIVIDER_IDS[i], if (rowVisible && i < displayCount - 1) View.VISIBLE else View.GONE)
+                        if (DIVIDER_IDS[i - 1] != 0) {
+                            views.setViewVisibility(DIVIDER_IDS[i - 1], if (rowVisible) View.VISIBLE else View.GONE)
                         }
 
                         if (rowVisible) {
-                            val name = widgetData.getString(KEY_PREFIX_SUBJECT_NAME + "$i", "Subject") ?: "Subject"
-                            val percent = widgetData.getInt(KEY_PREFIX_SUBJECT_PERCENT + "$i", 0)
-                            val present = widgetData.getInt(KEY_PREFIX_SUBJECT_PRESENT + "$i", 0)
-                            val absent = widgetData.getInt(KEY_PREFIX_SUBJECT_ABSENT + "$i", 0)
-                            val late = widgetData.getInt(KEY_PREFIX_SUBJECT_LATE + "$i", 0)
-                            val excused = widgetData.getInt(KEY_PREFIX_SUBJECT_EXCUSED + "$i", 0)
-                            val total = widgetData.getInt(KEY_PREFIX_SUBJECT_TOTAL + "$i", 0)
-                            val colorHex = widgetData.getString(KEY_PREFIX_SUBJECT_COLOR + "$i", "#4CAF50") ?: "#4CAF50"
-                            val statusText = widgetData.getString(KEY_PREFIX_SUBJECT_STATUS + "$i", "No data") ?: "No data"
+                            val sName = widgetData.getString(KEY_PREFIX_SUBJECT_NAME + "$i", "Subject") ?: "Subject"
+                            val sPercent = widgetData.getInt(KEY_PREFIX_SUBJECT_PERCENT + "$i", 0)
+                            val sPresent = widgetData.getInt(KEY_PREFIX_SUBJECT_PRESENT + "$i", 0)
+                            val sAbsent = widgetData.getInt(KEY_PREFIX_SUBJECT_ABSENT + "$i", 0)
+                            val sLate = widgetData.getInt(KEY_PREFIX_SUBJECT_LATE + "$i", 0)
+                            val sExcused = widgetData.getInt(KEY_PREFIX_SUBJECT_EXCUSED + "$i", 0)
+                            val sTotal = widgetData.getInt(KEY_PREFIX_SUBJECT_TOTAL + "$i", 0)
+                            val sColorHex = widgetData.getString(KEY_PREFIX_SUBJECT_COLOR + "$i", "#4CAF50") ?: "#4CAF50"
+                            val sStatus = widgetData.getString(KEY_PREFIX_SUBJECT_STATUS + "$i", "No data") ?: "No data"
 
-                            val percentColor = when {
-                                percent >= 75 -> Color.parseColor("#81C784")
-                                percent >= 60 -> Color.parseColor("#FFB74D")
-                                else -> Color.parseColor("#E57373")
+                            val sPercentColor = when {
+                                sPercent >= 75 -> Color.parseColor("#4CAF50")
+                                sPercent >= 60 -> Color.parseColor("#FF9800")
+                                else -> Color.parseColor("#F44336")
                             }
 
-                            val effectiveTotal = total - excused
+                            val sEffectiveTotal = sTotal - sExcused
 
-                            views.setTextViewText(NAME_IDS[i], name)
-                            views.setTextViewText(PCT_IDS[i], "$percent%")
-                            views.setTextColor(PCT_IDS[i], percentColor)
-                            views.setTextViewText(RATIO_IDS[i], "$present / $effectiveTotal sessions")
-                            views.setTextColor(RATIO_IDS[i], Color.parseColor("#B0FFFFFF"))
+                            views.setTextViewText(NAME_IDS[i], sName)
+                            views.setTextColor(NAME_IDS[i], Color.WHITE)
+                            views.setTextViewText(PCT_IDS[i], "$sPercent%")
+                            views.setTextColor(PCT_IDS[i], sPercentColor)
+                            views.setTextViewText(RATIO_IDS[i], "$sPresent / $sEffectiveTotal")
+                            views.setTextColor(RATIO_IDS[i], Color.parseColor("#CCFFFFFF"))
 
-                            val subjectColor = try { Color.parseColor(colorHex) } catch (e: Exception) { Color.parseColor("#4CAF50") }
-                            views.setInt(DOT_IDS[i], "setBackgroundColor", subjectColor)
+                            val sSubjectColor = try { Color.parseColor(sColorHex) } catch (e: Exception) { Color.parseColor("#4CAF50") }
+                            views.setTextColor(DOT_IDS[i], sSubjectColor)
 
-                            views.setTextViewText(P_IDS[i], "P:$present")
-                            views.setTextViewText(A_IDS[i], "A:$absent")
-                            views.setTextViewText(L_IDS[i], "L:$late")
-                            views.setTextViewText(E_IDS[i], "E:$excused")
-                            views.setTextViewText(STATUS_IDS[i], statusText)
+                            views.setTextViewText(P_IDS[i], "P:$sPresent")
+                            views.setTextViewText(A_IDS[i], "A:$sAbsent")
+                            views.setTextViewText(L_IDS[i], "L:$sLate")
+                            views.setTextViewText(E_IDS[i], "E:$sExcused")
+                            views.setTextViewText(STATUS_IDS[i], sStatus)
                             views.setTextColor(STATUS_IDS[i], Color.WHITE)
                         }
                     }
@@ -182,6 +215,7 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     fallbackViews.setViewVisibility(R.id.attendance_widget_content, View.GONE)
                     fallbackViews.setTextViewText(R.id.attendance_widget_empty_title, "Attendance")
                     fallbackViews.setTextViewText(R.id.attendance_widget_empty_subtitle, "Tap to open")
+                    fallbackViews.setTextViewText(R.id.attendance_widget_empty_cta, "Track your attendance")
                     appWidgetManager.updateAppWidget(widgetId, fallbackViews)
                 } catch (e2: Exception) {
                     android.util.Log.e("AttendanceWidget", "Fallback also failed", e2)
