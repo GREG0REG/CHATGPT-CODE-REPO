@@ -14,6 +14,7 @@ import es.antonborri.home_widget.HomeWidgetPlugin
 class ReadingWidgetProvider : AppWidgetProvider() {
 
     companion object {
+        private const val TAG = "ReadingWidget"
         private const val MAX_BOOKS = 10
         private const val REQUEST_CODE_BASE = 5000
 
@@ -45,6 +46,7 @@ class ReadingWidgetProvider : AppWidgetProvider() {
             "general" to "reading_progress_gray"
         )
 
+        @JvmStatic
         fun updateWidgetDirectly(
             context: Context,
             appWidgetManager: AppWidgetManager,
@@ -117,12 +119,16 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                         // Set accent bar color
                         bookViews.setInt(R.id.book_item_accent_bar, "setBackgroundColor", accentColor)
 
-                        // Set progress bar drawable
+                        // Set progress bar drawable using reflection-safe approach
                         val progressDrawableId = context.resources.getIdentifier(
                             progressDrawableName, "drawable", context.packageName
                         )
                         if (progressDrawableId != 0) {
-                            bookViews.setInt(R.id.book_item_progress, "setProgressDrawable", progressDrawableId)
+                            try {
+                                bookViews.setInt(R.id.book_item_progress, "setProgressDrawable", progressDrawableId)
+                            } catch (e: Exception) {
+                                android.util.Log.w(TAG, "Could not set progress drawable for $progressDrawableName", e)
+                            }
                         }
 
                         // Title with emoji
@@ -197,10 +203,10 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                 }
 
                 appWidgetManager.updateAppWidget(widgetId, views)
-                android.util.Log.i("ReadingWidget", "Widget $widgetId updated: $bookCount books")
+                android.util.Log.i(TAG, "Widget $widgetId updated: $bookCount books")
 
             } catch (e: Exception) {
-                android.util.Log.e("ReadingWidget", "Update failed for widget $widgetId", e)
+                android.util.Log.e(TAG, "Update failed for widget $widgetId", e)
                 tryFallback(context, appWidgetManager, widgetId)
             }
         }
@@ -217,7 +223,7 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                 fallbackViews.setTextViewText(R.id.reading_widget_empty_hint, "Add books to track progress")
                 appWidgetManager.updateAppWidget(widgetId, fallbackViews)
             } catch (e2: Exception) {
-                android.util.Log.e("ReadingWidget", "Fallback also failed", e2)
+                android.util.Log.e(TAG, "Fallback also failed", e2)
             }
         }
 
@@ -225,7 +231,7 @@ class ReadingWidgetProvider : AppWidgetProvider() {
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val componentName = ComponentName(context, ReadingWidgetProvider::class.java)
             val widgetIds = appWidgetManager.getAppWidgetIds(componentName)
-            android.util.Log.i("ReadingWidget", "Updating ${widgetIds.size} widgets")
+            android.util.Log.i(TAG, "Updating ${widgetIds.size} widgets")
             for (widgetId in widgetIds) {
                 updateWidgetDirectly(context, appWidgetManager, widgetId)
             }
@@ -264,7 +270,7 @@ class ReadingWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        android.util.Log.i("ReadingWidget", "onUpdate: ${appWidgetIds.size} widgets")
+        android.util.Log.i(TAG, "onUpdate: ${appWidgetIds.size} widgets")
         for (widgetId in appWidgetIds) {
             updateWidgetDirectly(context, appWidgetManager, widgetId)
         }
@@ -272,7 +278,7 @@ class ReadingWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        android.util.Log.i("ReadingWidget", "onReceive: ${intent.action}")
+        android.util.Log.i(TAG, "onReceive: ${intent.action}")
         when (intent.action) {
             AppWidgetManager.ACTION_APPWIDGET_UPDATE -> {
                 val widgetIds = intent.getIntArrayExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS)
@@ -285,6 +291,7 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                     updateAllWidgets(context)
                 }
             }
+            "com.example.event_countdown.READING_WIDGET_REFRESH" -> updateAllWidgets(context)
             Intent.ACTION_BOOT_COMPLETED -> updateAllWidgets(context)
             Intent.ACTION_MY_PACKAGE_REPLACED -> updateAllWidgets(context)
         }
@@ -292,11 +299,11 @@ class ReadingWidgetProvider : AppWidgetProvider() {
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
-        android.util.Log.i("ReadingWidget", "Widget enabled")
+        android.util.Log.i(TAG, "Widget enabled")
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
-        android.util.Log.i("ReadingWidget", "Widget disabled")
+        android.util.Log.i(TAG, "Widget disabled")
     }
 }
