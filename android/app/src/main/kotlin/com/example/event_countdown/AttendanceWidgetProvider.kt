@@ -42,8 +42,7 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.attendance_widget_content, View.GONE)
 
                     views.setTextViewText(R.id.attendance_widget_empty_title, "No Subjects")
-                    views.setTextViewText(R.id.attendance_widget_empty_subtitle, "0 / 0")
-                    views.setTextViewText(R.id.attendance_widget_empty_cta, "Add subjects to track attendance")
+                    views.setTextViewText(R.id.attendance_widget_empty_subtitle, "Tap to add")
 
                     val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                     if (launchIntent != null) {
@@ -71,9 +70,9 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     val streak = widgetData.getInt(KEY_PREFIX_SUBJECT_STREAK + "0", 0)
 
                     val percentColor = when {
-                        percent >= 75 -> Color.parseColor("#4CAF50")
-                        percent >= 60 -> Color.parseColor("#FF9800")
-                        else -> Color.parseColor("#F44336")
+                        percent >= 75 -> Color.parseColor("#81C784")
+                        percent >= 60 -> Color.parseColor("#FFB74D")
+                        else -> Color.parseColor("#E57373")
                     }
 
                     views.setTextViewText(R.id.attendance_widget_subject, name)
@@ -83,8 +82,8 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     views.setTextColor(R.id.attendance_widget_percent, percentColor)
 
                     val effectiveTotal = total - excused
-                    views.setTextViewText(R.id.attendance_widget_ratio, "$present / $effectiveTotal")
-                    views.setTextColor(R.id.attendance_widget_ratio, Color.parseColor("#CCFFFFFF"))
+                    views.setTextViewText(R.id.attendance_widget_ratio, "$present / $effectiveTotal sessions")
+                    views.setTextColor(R.id.attendance_widget_ratio, Color.parseColor("#B0FFFFFF"))
 
                     views.setTextViewText(R.id.chip_present, "P:$present")
                     views.setTextViewText(R.id.chip_absent, "A:$absent")
@@ -101,15 +100,15 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                         views.setViewVisibility(R.id.attendance_widget_streak_chip, View.GONE)
                     }
 
-                    // CRITICAL FIX: Replaced unsafe setInt(setBackgroundColor) with setTextColor on the dot.
-                    // The dot is now a TextView in XML (changed below) that uses a bullet character.
-                    // We color the text instead of the background, which is 100% safe in RemoteViews.
+                    // SAFE: Use setInt with "setBackgroundColor" for the dot's background
+                    // This works because we use a View with android:background in XML
                     val subjectColor = try {
                         Color.parseColor(colorHex)
                     } catch (e: Exception) {
                         Color.parseColor("#4CAF50")
                     }
-                    views.setTextColor(R.id.attendance_widget_subject_dot, subjectColor)
+                    // For the colored left border, we use the dot's background
+                    views.setInt(R.id.attendance_widget_subject_dot, "setBackgroundColor", subjectColor)
 
                     val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                     if (launchIntent != null) {
@@ -133,7 +132,6 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     fallbackViews.setViewVisibility(R.id.attendance_widget_content, View.GONE)
                     fallbackViews.setTextViewText(R.id.attendance_widget_empty_title, "Attendance")
                     fallbackViews.setTextViewText(R.id.attendance_widget_empty_subtitle, "Tap to open")
-                    fallbackViews.setTextViewText(R.id.attendance_widget_empty_cta, "Track your attendance")
                     appWidgetManager.updateAppWidget(widgetId, fallbackViews)
                 } catch (e2: Exception) {
                     android.util.Log.e("AttendanceWidget", "Fallback also failed", e2)
