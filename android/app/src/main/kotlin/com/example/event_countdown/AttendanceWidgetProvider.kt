@@ -176,7 +176,7 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                             context, widgetId + 3000, launchIntent,
                             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                         )
-                        views.setOnClickPendingIntent(R.id.attendance_widget_content, pendingIntent)
+                                                views.setOnClickPendingIntent(R.id.attendance_widget_content, pendingIntent)
                     }
                 }
 
