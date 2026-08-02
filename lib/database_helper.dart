@@ -66,7 +66,7 @@ class DatabaseHelper {
 
   Future<void> _createTables(Database db) async {
     // ---- EVENTS (with NEET fields v16) ----
-    await db.execute("""
+        await db.execute("""
       CREATE TABLE events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
@@ -86,7 +86,14 @@ class DatabaseHelper {
         isNeetExam INTEGER DEFAULT 0,
         neetTotalMarks INTEGER,
         neetTargetScore INTEGER,
-        neetSubjectFocus TEXT
+        neetSubjectFocus TEXT,
+        targetScore INTEGER,
+        neetExamType TEXT,
+        revisionRound TEXT,
+        isPyqSession INTEGER DEFAULT 0,
+        difficulty TEXT,
+        studyDuration TEXT,
+        studyModeTagsJson TEXT
       )
     """);
 
