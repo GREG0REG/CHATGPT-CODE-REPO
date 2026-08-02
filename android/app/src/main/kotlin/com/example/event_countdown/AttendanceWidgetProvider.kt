@@ -26,7 +26,44 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
         private const val KEY_PREFIX_SUBJECT_STATUS = "attendance_subject_status_"
         private const val KEY_PREFIX_SUBJECT_STREAK = "attendance_subject_streak_"
 
-        private const val MAX_SUBJECTS = 3
+        private const val MAX_SUBJECTS = 4
+
+        private val ROW_IDS = arrayOf(
+            R.id.subject_row_0, R.id.subject_row_1, R.id.subject_row_2, R.id.subject_row_3
+        )
+        private val CHIPS_IDS = arrayOf(
+            R.id.chips_row_0, R.id.chips_row_1, R.id.chips_row_2, R.id.chips_row_3
+        )
+        private val STATUS_IDS = arrayOf(
+            R.id.attendance_widget_status, R.id.status_1, R.id.status_2, R.id.status_3
+        )
+        private val DIVIDER_IDS = arrayOf(
+            R.id.divider_0, R.id.divider_1, R.id.divider_2, 0
+        )
+        private val DOT_IDS = arrayOf(
+            R.id.attendance_widget_subject_dot, R.id.dot_1, R.id.dot_2, R.id.dot_3
+        )
+        private val NAME_IDS = arrayOf(
+            R.id.attendance_widget_subject, R.id.name_1, R.id.name_2, R.id.name_3
+        )
+        private val PCT_IDS = arrayOf(
+            R.id.attendance_widget_percent, R.id.pct_1, R.id.pct_2, R.id.pct_3
+        )
+        private val RATIO_IDS = arrayOf(
+            R.id.attendance_widget_ratio, R.id.ratio_1, R.id.ratio_2, R.id.ratio_3
+        )
+        private val P_IDS = arrayOf(
+            R.id.chip_present, R.id.p1, R.id.p2, R.id.p3
+        )
+        private val A_IDS = arrayOf(
+            R.id.chip_absent, R.id.a1, R.id.a2, R.id.a3
+        )
+        private val L_IDS = arrayOf(
+            R.id.chip_late, R.id.l1, R.id.l2, R.id.l3
+        )
+        private val E_IDS = arrayOf(
+            R.id.chip_excused, R.id.e1, R.id.e2, R.id.e3
+        )
 
         fun updateWidgetDirectly(
             context: Context,
@@ -79,34 +116,12 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     for (i in 0 until MAX_SUBJECTS) {
                         val rowVisible = i < displayCount
 
-                        val rowId = when (i) {
-                            0 -> R.id.subject_row_0
-                            1 -> R.id.subject_row_1
-                            2 -> R.id.subject_row_2
-                            else -> 0
+                        views.setViewVisibility(ROW_IDS[i], if (rowVisible) View.VISIBLE else View.GONE)
+                        views.setViewVisibility(CHIPS_IDS[i], if (rowVisible) View.VISIBLE else View.GONE)
+                        views.setViewVisibility(STATUS_IDS[i], if (rowVisible) View.VISIBLE else View.GONE)
+                        if (DIVIDER_IDS[i] != 0) {
+                            views.setViewVisibility(DIVIDER_IDS[i], if (rowVisible && i < displayCount - 1) View.VISIBLE else View.GONE)
                         }
-                        val chipsId = when (i) {
-                            0 -> R.id.chips_row_0
-                            1 -> R.id.chips_row_1
-                            2 -> R.id.chips_row_2
-                            else -> 0
-                        }
-                        val statusId = when (i) {
-                            0 -> R.id.status_0
-                            1 -> R.id.status_1
-                            2 -> R.id.status_2
-                            else -> 0
-                        }
-                        val dividerId = when (i) {
-                            0 -> R.id.divider_0
-                            1 -> R.id.divider_1
-                            else -> 0
-                        }
-
-                        if (rowId != 0) views.setViewVisibility(rowId, if (rowVisible) View.VISIBLE else View.GONE)
-                        if (chipsId != 0) views.setViewVisibility(chipsId, if (rowVisible) View.VISIBLE else View.GONE)
-                        if (statusId != 0) views.setViewVisibility(statusId, if (rowVisible) View.VISIBLE else View.GONE)
-                        if (dividerId != 0) views.setViewVisibility(dividerId, if (rowVisible && i < displayCount - 1) View.VISIBLE else View.GONE)
 
                         if (rowVisible) {
                             val name = widgetData.getString(KEY_PREFIX_SUBJECT_NAME + "$i", "Subject") ?: "Subject"
@@ -127,36 +142,21 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
 
                             val effectiveTotal = total - excused
 
-                            val nameId = when (i) { 0 -> R.id.name_0; 1 -> R.id.name_1; 2 -> R.id.name_2; else -> 0 }
-                            val pctId = when (i) { 0 -> R.id.pct_0; 1 -> R.id.pct_1; 2 -> R.id.pct_2; else -> 0 }
-                            val ratioId = when (i) { 0 -> R.id.ratio_0; 1 -> R.id.ratio_1; 2 -> R.id.ratio_2; else -> 0 }
-                            val dotId = when (i) { 0 -> R.id.dot_0; 1 -> R.id.dot_1; 2 -> R.id.dot_2; else -> 0 }
-                            val pId = when (i) { 0 -> R.id.p0; 1 -> R.id.p1; 2 -> R.id.p2; else -> 0 }
-                            val aId = when (i) { 0 -> R.id.a0; 1 -> R.id.a1; 2 -> R.id.a2; else -> 0 }
-                            val lId = when (i) { 0 -> R.id.l0; 1 -> R.id.l1; 2 -> R.id.l2; else -> 0 }
-                            val eId = when (i) { 0 -> R.id.e0; 1 -> R.id.e1; 2 -> R.id.e2; else -> 0 }
+                            views.setTextViewText(NAME_IDS[i], name)
+                            views.setTextViewText(PCT_IDS[i], "$percent%")
+                            views.setTextColor(PCT_IDS[i], percentColor)
+                            views.setTextViewText(RATIO_IDS[i], "$present / $effectiveTotal sessions")
+                            views.setTextColor(RATIO_IDS[i], Color.parseColor("#B0FFFFFF"))
 
-                            if (nameId != 0) views.setTextViewText(nameId, name)
-                            if (pctId != 0) {
-                                views.setTextViewText(pctId, "$percent%")
-                                views.setTextColor(pctId, percentColor)
-                            }
-                            if (ratioId != 0) {
-                                views.setTextViewText(ratioId, "$present / $effectiveTotal sessions")
-                                views.setTextColor(ratioId, Color.parseColor("#B0FFFFFF"))
-                            }
-                            if (dotId != 0) {
-                                val subjectColor = try { Color.parseColor(colorHex) } catch (e: Exception) { Color.parseColor("#4CAF50") }
-                                views.setInt(dotId, "setBackgroundColor", subjectColor)
-                            }
-                            if (pId != 0) views.setTextViewText(pId, "P:$present")
-                            if (aId != 0) views.setTextViewText(aId, "A:$absent")
-                            if (lId != 0) views.setTextViewText(lId, "L:$late")
-                            if (eId != 0) views.setTextViewText(eId, "E:$excused")
-                            if (statusId != 0) {
-                                views.setTextViewText(statusId, statusText)
-                                views.setTextColor(statusId, Color.WHITE)
-                            }
+                            val subjectColor = try { Color.parseColor(colorHex) } catch (e: Exception) { Color.parseColor("#4CAF50") }
+                            views.setInt(DOT_IDS[i], "setBackgroundColor", subjectColor)
+
+                            views.setTextViewText(P_IDS[i], "P:$present")
+                            views.setTextViewText(A_IDS[i], "A:$absent")
+                            views.setTextViewText(L_IDS[i], "L:$late")
+                            views.setTextViewText(E_IDS[i], "E:$excused")
+                            views.setTextViewText(STATUS_IDS[i], statusText)
+                            views.setTextColor(STATUS_IDS[i], Color.WHITE)
                         }
                     }
 
