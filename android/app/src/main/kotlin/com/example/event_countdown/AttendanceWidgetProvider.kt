@@ -203,16 +203,16 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
             }
         }
 
-        private fun updateSubjectRow(views: RemoteViews, widgetData: HomeWidgetPlugin.HomeWidgetData, index: Int) {
-            val name = widgetData.getString(KEY_PREFIX_NAME + "$index", "Subject") ?: "Subject"
-            val percent = widgetData.getInt(KEY_PREFIX_PERCENT + "$index", 0)
-            val present = widgetData.getInt(KEY_PREFIX_PRESENT + "$index", 0)
-            val absent = widgetData.getInt(KEY_PREFIX_ABSENT + "$index", 0)
-            val late = widgetData.getInt(KEY_PREFIX_LATE + "$index", 0)
-            val excused = widgetData.getInt(KEY_PREFIX_EXCUSED + "$index", 0)
-            val total = widgetData.getInt(KEY_PREFIX_TOTAL + "$index", 0)
-            val colorHex = widgetData.getString(KEY_PREFIX_COLOR + "$index", "#4CAF50") ?: "#4CAF50"
-            val status = widgetData.getString(KEY_PREFIX_STATUS + "$index", "No data") ?: "No data"
+        private fun updateSubjectRow(views: RemoteViews, widgetData: Any, index: Int) {
+            val name = getStringFromWidgetData(widgetData, KEY_PREFIX_NAME + "$index", "Subject")
+            val percent = getIntFromWidgetData(widgetData, KEY_PREFIX_PERCENT + "$index", 0)
+            val present = getIntFromWidgetData(widgetData, KEY_PREFIX_PRESENT + "$index", 0)
+            val absent = getIntFromWidgetData(widgetData, KEY_PREFIX_ABSENT + "$index", 0)
+            val late = getIntFromWidgetData(widgetData, KEY_PREFIX_LATE + "$index", 0)
+            val excused = getIntFromWidgetData(widgetData, KEY_PREFIX_EXCUSED + "$index", 0)
+            val total = getIntFromWidgetData(widgetData, KEY_PREFIX_TOTAL + "$index", 0)
+            val colorHex = getStringFromWidgetData(widgetData, KEY_PREFIX_COLOR + "$index", "#4CAF50")
+            val status = getStringFromWidgetData(widgetData, KEY_PREFIX_STATUS + "$index", "No data")
 
             val percentColor = getPercentColor(percent)
             val effectiveTotal = (total - excused).coerceAtLeast(0)
@@ -238,6 +238,25 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
 
             views.setTextViewText(STATUS_IDS[index], status)
             views.setTextColor(STATUS_IDS[index], Color.WHITE)
+        }
+
+        // Use reflection to call getString/getInt on the anonymous object returned by HomeWidgetPlugin.getData()
+        private fun getStringFromWidgetData(widgetData: Any, key: String, defaultValue: String): String {
+            return try {
+                val method = widgetData.javaClass.getMethod("getString", String::class.java, String::class.java)
+                method.invoke(widgetData, key, defaultValue) as? String ?: defaultValue
+            } catch (e: Exception) {
+                defaultValue
+            }
+        }
+
+        private fun getIntFromWidgetData(widgetData: Any, key: String, defaultValue: Int): Int {
+            return try {
+                val method = widgetData.javaClass.getMethod("getInt", String::class.java, Int::class.javaPrimitiveType)
+                method.invoke(widgetData, key, defaultValue) as? Int ?: defaultValue
+            } catch (e: Exception) {
+                defaultValue
+            }
         }
 
         private fun getPercentColor(percent: Int): Int {
