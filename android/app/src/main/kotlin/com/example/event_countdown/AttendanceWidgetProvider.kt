@@ -28,39 +28,17 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
 
         private const val MAX_SUBJECTS = 4
 
-        private val ROW_IDS = arrayOf(
-            R.id.subject_row_0, R.id.subject_row_1, R.id.subject_row_2, R.id.subject_row_3
-        )
-        private val DIVIDER_IDS = arrayOf(
-            R.id.divider_0, R.id.divider_1, R.id.divider_2, 0
-        )
-        private val DOT_IDS = arrayOf(
-            R.id.attendance_widget_subject_dot, R.id.dot_1, R.id.dot_2, R.id.dot_3
-        )
-        private val NAME_IDS = arrayOf(
-            R.id.attendance_widget_subject, R.id.name_1, R.id.name_2, R.id.name_3
-        )
-        private val PCT_IDS = arrayOf(
-            R.id.attendance_widget_percent, R.id.pct_1, R.id.pct_2, R.id.pct_3
-        )
-        private val RATIO_IDS = arrayOf(
-            R.id.attendance_widget_ratio, R.id.ratio_1, R.id.ratio_2, R.id.ratio_3
-        )
-        private val P_IDS = arrayOf(
-            R.id.chip_present, R.id.p1, R.id.p2, R.id.p3
-        )
-        private val A_IDS = arrayOf(
-            R.id.chip_absent, R.id.a1, R.id.a2, R.id.a3
-        )
-        private val L_IDS = arrayOf(
-            R.id.chip_late, R.id.l1, R.id.l2, R.id.l3
-        )
-        private val E_IDS = arrayOf(
-            R.id.chip_excused, R.id.e1, R.id.e2, R.id.e3
-        )
-        private val STATUS_IDS = arrayOf(
-            R.id.attendance_widget_status, R.id.status_1, R.id.status_2, R.id.status_3
-        )
+        private val ROW_IDS = intArrayOf(0, R.id.subject_row_1, R.id.subject_row_2, R.id.subject_row_3)
+        private val DIVIDER_IDS = intArrayOf(R.id.divider_0, R.id.divider_1, R.id.divider_2, 0)
+        private val DOT_IDS = intArrayOf(0, R.id.dot_1, R.id.dot_2, R.id.dot_3)
+        private val NAME_IDS = intArrayOf(0, R.id.name_1, R.id.name_2, R.id.name_3)
+        private val PCT_IDS = intArrayOf(0, R.id.pct_1, R.id.pct_2, R.id.pct_3)
+        private val RATIO_IDS = intArrayOf(0, R.id.ratio_1, R.id.ratio_2, R.id.ratio_3)
+        private val P_IDS = intArrayOf(0, R.id.p1, R.id.p2, R.id.p3)
+        private val A_IDS = intArrayOf(0, R.id.a1, R.id.a2, R.id.a3)
+        private val L_IDS = intArrayOf(0, R.id.l1, R.id.l2, R.id.l3)
+        private val E_IDS = intArrayOf(0, R.id.e1, R.id.e2, R.id.e3)
+        private val STATUS_IDS = intArrayOf(0, R.id.status_1, R.id.status_2, R.id.status_3)
 
         fun updateWidgetDirectly(
             context: Context,
@@ -137,7 +115,6 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                         views.setViewVisibility(R.id.attendance_widget_streak_chip, View.GONE)
                     }
 
-                    // CRITICAL FIX: setTextColor on bullet TextView (100% safe in RemoteViews)
                     val subjectColor = try {
                         Color.parseColor(colorHex)
                     } catch (e: Exception) {
@@ -145,17 +122,16 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     }
                     views.setTextColor(R.id.attendance_widget_subject_dot, subjectColor)
 
-                    // === SUBJECTS 1-3 ===
                     val displayCount = subjectCount.coerceAtMost(MAX_SUBJECTS)
                     for (i in 1 until MAX_SUBJECTS) {
-                        val rowVisible = i < displayCount
-                        views.setViewVisibility(ROW_IDS[i], if (rowVisible) View.VISIBLE else View.GONE)
-                        views.setViewVisibility(STATUS_IDS[i], if (rowVisible) View.VISIBLE else View.GONE)
+                        val visible = i < displayCount
+                        views.setViewVisibility(ROW_IDS[i], if (visible) View.VISIBLE else View.GONE)
+                        views.setViewVisibility(STATUS_IDS[i], if (visible) View.VISIBLE else View.GONE)
                         if (DIVIDER_IDS[i - 1] != 0) {
-                            views.setViewVisibility(DIVIDER_IDS[i - 1], if (rowVisible) View.VISIBLE else View.GONE)
+                            views.setViewVisibility(DIVIDER_IDS[i - 1], if (visible && i < displayCount - 1) View.VISIBLE else View.GONE)
                         }
 
-                        if (rowVisible) {
+                        if (visible) {
                             val sName = widgetData.getString(KEY_PREFIX_SUBJECT_NAME + "$i", "Subject") ?: "Subject"
                             val sPercent = widgetData.getInt(KEY_PREFIX_SUBJECT_PERCENT + "$i", 0)
                             val sPresent = widgetData.getInt(KEY_PREFIX_SUBJECT_PRESENT + "$i", 0)
