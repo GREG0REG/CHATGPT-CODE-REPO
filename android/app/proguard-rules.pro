@@ -74,3 +74,30 @@
     public static int d(...);
     public static int e(...);
 }
+# ============================================
+# Widget Resources - Prevent R8 from stripping
+# ============================================
+
+# Keep ALL widget-related resources (R8 shrinkResources can't trace RemoteViews usage)
+-keepresources layout/reading_widget_*
+-keepresources layout/attendance_widget_*
+-keepresources layout/event_widget_*
+-keepresources layout/pomodoro_widget_*
+-keepresources layout/timetable_widget_*
+-keepresources layout/habit_widget_*
+-keepresources layout/widget_*
+
+-keepresources drawable/reading_*
+-keepresources drawable/attendance_*
+-keepresources drawable/event_*
+-keepresources drawable/pomodoro_*
+-keepresources drawable/timetable_*
+-keepresources drawable/habit_*
+-keepresources drawable/widget_*
+-keepresources drawable/streak_*
+-keepresources drawable/circle_*
+-keepresources drawable/ic_*
+-keepresources drawable/launch_*
+-keepresources drawable/urgency_*
+
+-keepresources xml/*_widget_info.xml
