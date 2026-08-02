@@ -135,38 +135,6 @@ class DatabaseHelper {
         mockTestRank INTEGER
       )
     """);
-
-        // ---- EVENTS TABLE (with NEET fields) ----
-    await db.execute("""
-      CREATE TABLE IF NOT EXISTS events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        dateMillis INTEGER NOT NULL,
-        startTimeMillis INTEGER,
-        deadlineMillis INTEGER,
-        notes TEXT,
-        recurrence INTEGER DEFAULT 0,
-        recurrenceInterval INTEGER DEFAULT 1,
-        yearlyUseSpecificDates INTEGER DEFAULT 0,
-        yearlySpecificDatesJson TEXT,
-        excludedDatesJson TEXT,
-        iconName TEXT,
-        priority INTEGER DEFAULT 2,
-        subjectTag TEXT,
-        isCompleted INTEGER DEFAULT 0,
-        isNeetExam INTEGER DEFAULT 0,
-        neetTotalMarks INTEGER,
-        neetTargetScore INTEGER,
-        neetSubjectFocus TEXT,
-        targetScore INTEGER,
-        neetExamType TEXT,
-        revisionRound TEXT,
-        isPyqSession INTEGER DEFAULT 0,
-        difficulty TEXT,
-        studyDuration TEXT,
-        studyModeTagsJson TEXT
-      )
-    """);
     
 
     // ---- SUBTASKS ----
@@ -216,6 +184,38 @@ class DatabaseHelper {
       )
     """);
 
+     // ---- EVENTS TABLE (with NEET fields) ----
+    await db.execute("""
+      CREATE TABLE IF NOT EXISTS events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        dateMillis INTEGER NOT NULL,
+        startTimeMillis INTEGER,
+        deadlineMillis INTEGER,
+        notes TEXT,
+        recurrence INTEGER DEFAULT 0,
+        recurrenceInterval INTEGER DEFAULT 1,
+        yearlyUseSpecificDates INTEGER DEFAULT 0,
+        yearlySpecificDatesJson TEXT,
+        excludedDatesJson TEXT,
+        iconName TEXT,
+        priority INTEGER DEFAULT 2,
+        subjectTag TEXT,
+        isCompleted INTEGER DEFAULT 0,
+        isNeetExam INTEGER DEFAULT 0,
+        neetTotalMarks INTEGER,
+        neetTargetScore INTEGER,
+        neetSubjectFocus TEXT,
+        targetScore INTEGER,
+        neetExamType TEXT,
+        revisionRound TEXT,
+        isPyqSession INTEGER DEFAULT 0,
+        difficulty TEXT,
+        studyDuration TEXT,
+        studyModeTagsJson TEXT
+      )
+    """);
+    
     // ---- DAILY GOALS ----
     await db.execute("""
       CREATE TABLE daily_goals (
