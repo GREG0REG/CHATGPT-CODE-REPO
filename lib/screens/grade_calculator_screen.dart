@@ -12,7 +12,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:event_countdown/db/database_helper.dart';
+import '../database_helper.dart';
 import '../services/settings_service.dart';
 import '../database_helper.dart';
 
