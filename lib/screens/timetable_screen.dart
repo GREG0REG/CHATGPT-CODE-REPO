@@ -1,17 +1,13 @@
 // FILE: lib/screens/timetable_screen.dart
-// COMPLETE REPLACEMENT — NEET Timetable v5.0 (MAJOR FIX)
-// FIXED: Drag-resize now works with proper gesture handling and visual feedback
-// FIXED: Tasks now show properly alongside classes in unified timeline
-// FIXED: Class block UI completely redesigned — no more overflow, clean layout
-// FIXED: Conflict display is now subtle, not ugly red mess
-// FIXED: Edit class actually updates the database
-// FIXED: Pomodoro redirect passes correct arguments
-// NEW: Unified timeline renders classes + tasks together, sorted by time
-// NEW: Visual drag feedback — block highlights while dragging
-// NEW: Clean card design with proper text handling
-// NEW: Tasks have dashed border to distinguish from classes
-// NEW: All-day tasks show as compact banners above timeline
-// NEW: Smooth animations on add/delete
+// COMPLETE REPLACEMENT — NEET Timetable v6.0 (REDESIGNED)
+// FIXED: Conflicts render side-by-side, not stacked
+// FIXED: Drag handles work with proper gesture zones
+// FIXED: Tasks render in unified timeline alongside classes
+// FIXED: No text overflow — flex layout with auto-hide secondary text
+// FIXED: Time text never pops out of card
+// NEW: Gradient card backgrounds, better shadows, cleaner typography
+// NEW: Conflict groups split width dynamically (2=50/50, 3=33/33/33)
+// ALL original features preserved: week view, drawer, suggestions, pomodoro, etc.
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -31,6 +27,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
   bool _loading = true;
   int _selectedDay = DateTime.now().weekday - 1;
   final List<String> _dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  final List<String> _dayFullNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   List<Map<String, dynamic>> _classes = [];
   List<Map<String, dynamic>> _tasks = [];
   bool _weekView = false;
@@ -101,6 +98,10 @@ class _TimetableScreenState extends State<TimetableScreen> {
     setState(() => _tasks = rows);
   }
 
+  // ============================================
+  // UNIFIED ITEMS + CONFLICT GROUPING (NEW)
+  // ============================================
+
   List<Map<String, dynamic>> _getUnifiedItemsForDay(int dayIndex) {
     final items = <Map<String, dynamic>>[];
     for (final c in _classes.where((c) => c['dayOfWeek'] == dayIndex + 1)) {
@@ -136,6 +137,40 @@ class _TimetableScreenState extends State<TimetableScreen> {
     }).toList();
   }
 
+  /// NEW: Groups overlapping items so they can render side-by-side
+  /// Returns list of groups, where each group is a list of items that overlap with each other
+  List<List<Map<String, dynamic>>> _buildConflictGroups(List<Map<String, dynamic>> items) {
+    final timeItems = items.where((i) => i['startTimeMinutes'] != null).toList()
+      ..sort((a, b) => (a['startTimeMinutes'] as int).compareTo(b['startTimeMinutes'] as int));
+
+    final groups = <List<Map<String, dynamic>>>[];
+
+    for (final item in timeItems) {
+      final itemStart = (item['startTimeMinutes'] as int?) ?? 0;
+      final itemEnd = (item['endTimeMinutes'] as int?) ?? (itemStart + 60);
+
+      bool placed = false;
+      for (final group in groups) {
+        // Check if this item overlaps with ANY item in the group
+        final overlaps = group.any((g) {
+          final gStart = (g['startTimeMinutes'] as int?) ?? 0;
+          final gEnd = (g['endTimeMinutes'] as int?) ?? (gStart + 60);
+          return itemStart < gEnd && gStart < itemEnd;
+        });
+        if (overlaps) {
+          group.add(item);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        groups.add([item]);
+      }
+    }
+
+    return groups;
+  }
+
   List<Map<String, dynamic>> _detectConflicts(List<Map<String, dynamic>> items) {
     final conflicts = <Map<String, dynamic>>[];
     final timeItems = items.where((i) => i['startTimeMinutes'] != null).toList();
@@ -147,7 +182,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
         final aEnd = (a['endTimeMinutes'] as int?) ?? (aStart + 60);
         final bStart = (b['startTimeMinutes'] as int?) ?? 0;
         final bEnd = (b['endTimeMinutes'] as int?) ?? (bStart + 60);
-        if (aStart < bEnd && bStart < aEnd) conflicts.add({'a': a, 'b': b});
+        if (aStart < bEnd && bStart < aEnd) {
+          conflicts.add({'a': a, 'b': b});
+        }
       }
     }
     return conflicts;
@@ -177,6 +214,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     return freeSlots;
   }
 
+  // ============================================
+  // EDIT CLASS
+  // ============================================
   Future<void> _editClass(Map<String, dynamic> existing) async {
     final nameController = TextEditingController(text: existing['subjectName']?.toString() ?? '');
     final roomController = TextEditingController(text: existing['room']?.toString() ?? '');
@@ -377,6 +417,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     }
   }
 
+  // ============================================
+  // DRAG HANDLING (FIXED)
+  // ============================================
   void _onDragStart(int id, bool isTop, int currentStart, int currentEnd, bool isTask) {
     HapticFeedback.lightImpact();
     setState(() {
@@ -425,6 +468,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     await _loadData();
   }
 
+  // ============================================
+  // DELETE
+  // ============================================
   Future<void> _deleteClass(int id) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -471,6 +517,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     await _loadData();
   }
 
+  // ============================================
+  // ADD CLASS FROM DRAWER
+  // ============================================
   Future<void> _addClassFromDrawer() async {
     final nameController = TextEditingController();
     final roomController = TextEditingController();
@@ -661,6 +710,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     }
   }
 
+  // ============================================
+  // ADD TASK FROM DRAWER
+  // ============================================
   Future<void> _addTaskFromDrawer() async {
     final titleController = TextEditingController();
     final subjectController = TextEditingController();
@@ -828,6 +880,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     }
   }
 
+  // ============================================
+  // SUGGEST STUDY BLOCK
+  // ============================================
   Future<void> _suggestStudyBlock() async {
     final freeSlots = _getFreeSlotsForDay(_selectedDay);
     if (freeSlots.isEmpty) {
@@ -958,6 +1013,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     }
   }
 
+  // ============================================
+  // POMODORO REDIRECT
+  // ============================================
   void _goToPomodoro(String subject, {int? durationMinutes}) {
     String preset = 'neetSprint';
     if (durationMinutes != null) {
@@ -974,6 +1032,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
+  // ============================================
+  // HELPERS
+  // ============================================
   String _formatMinutes(int minutes) {
     final h = minutes ~/ 60;
     final m = minutes % 60;
@@ -1050,6 +1111,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     return (durationMinutes / 60.0) * _hourHeight;
   }
 
+  // ============================================
+  // BUILD
+  // ============================================
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -1103,6 +1167,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
+  // ============================================
+  // DAY SELECTOR
+  // ============================================
   Widget _buildDaySelector(ColorScheme cs) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
@@ -1168,6 +1235,9 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
+  // ============================================
+  // BANNERS
+  // ============================================
   Widget _buildConflictBanner(ColorScheme cs, List<Map<String, dynamic>> conflicts) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -1273,18 +1343,24 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
+  // ============================================
+  // TIMELINE (REDESIGNED)
+  // ============================================
   Widget _buildTimeline(
     ColorScheme cs,
     List<Map<String, dynamic>> items,
     List<Map<String, dynamic>> conflicts,
     List<Map<String, dynamic>> freeSlots,
   ) {
+    final conflictGroups = _buildConflictGroups(items);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 16),
       child: IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Time column
             SizedBox(
               width: _timelineWidth,
               child: Column(
@@ -1312,9 +1388,11 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 }),
               ),
             ),
+            // Timeline body
             Expanded(
               child: Stack(
                 children: [
+                  // Grid lines
                   Column(
                     children: List.generate(_timelineEndHour - _timelineStartHour + 1, (i) {
                       return Container(
@@ -1325,9 +1403,12 @@ class _TimetableScreenState extends State<TimetableScreen> {
                       );
                     }),
                   ),
+                  // Current time indicator
                   _buildCurrentTimeIndicator(),
+                  // Free time slots
                   ...freeSlots.map((slot) => _buildFreeTimeSlot(slot, cs)),
-                  ...items.map((item) => _buildTimelineItem(item, conflicts, cs)),
+                  // Conflict groups (side-by-side rendering)
+                  ...conflictGroups.expand((group) => _buildConflictGroupRow(group, conflicts, cs)),
                 ],
               ),
             ),
@@ -1385,34 +1466,95 @@ class _TimetableScreenState extends State<TimetableScreen> {
     );
   }
 
-  Widget _buildTimelineItem(Map<String, dynamic> item, List<Map<String, dynamic>> conflicts, ColorScheme cs) {
-    final isTask = item['_type'] == 'task';
-    final start = (item['startTimeMinutes'] as int?) ?? 0;
-    final end = (item['endTimeMinutes'] as int?) ?? (start + 60);
-    final isDragging = _draggingId == item['id'] && _isTaskDrag == isTask;
-    final displayStart = isDragging ? _dragCurrentStart : start;
-    final displayEnd = isDragging ? _dragCurrentEnd : end;
-    final top = _minutesToPixels(displayStart);
-    final rawHeight = _durationToPixels(displayEnd - displayStart);
-    final height = math.max(40.0, rawHeight);
-    final isConflict = _isInConflict(item, conflicts);
-    final storedColor = item['colorHex'] as String? ?? '#2196F3';
-    final color = _hexToColor(storedColor);
-    if (isTask) {
-      return _buildTaskBlock(item, top, height, color, cs, isConflict, isDragging);
-    } else {
-      return _buildClassBlock(item, top, height, color, cs, isConflict, isDragging, start, end);
+  // ============================================
+  // CONFLICT GROUP RENDERING (NEW - SIDE BY SIDE)
+  // ============================================
+  List<Widget> _buildConflictGroupRow(List<Map<String, dynamic>> group, List<Map<String, dynamic>> allConflicts, ColorScheme cs) {
+    if (group.isEmpty) return [];
+
+    // If only 1 item in group, render normally
+    if (group.length == 1) {
+      final item = group.first;
+      final isTask = item['_type'] == 'task';
+      final start = (item['startTimeMinutes'] as int?) ?? 0;
+      final end = (item['endTimeMinutes'] as int?) ?? (start + 60);
+      final isDragging = _draggingId == item['id'] && _isTaskDrag == isTask;
+      final displayStart = isDragging ? _dragCurrentStart : start;
+      final displayEnd = isDragging ? _dragCurrentEnd : end;
+      final top = _minutesToPixels(displayStart);
+      final rawHeight = _durationToPixels(displayEnd - displayStart);
+      final height = math.max(48.0, rawHeight);
+      final isConflict = _isInConflict(item, allConflicts);
+      final storedColor = item['colorHex'] as String? ?? '#2196F3';
+      final color = _hexToColor(storedColor);
+
+      return [
+        Positioned(
+          top: top,
+          left: 4,
+          right: 4,
+          height: height,
+          child: isTask
+              ? _buildTaskCard(item, color, cs, isConflict, isDragging, height)
+              : _buildClassCard(item, color, cs, isConflict, isDragging, height, start, end),
+        ),
+      ];
     }
+
+    // Multiple items — render side by side in a Row
+    final firstItem = group.first;
+    final start = (firstItem['startTimeMinutes'] as int?) ?? 0;
+    final top = _minutesToPixels(start);
+
+    // Find the max end time in the group for height
+    int maxEnd = start;
+    for (final item in group) {
+      final itemStart = (item['startTimeMinutes'] as int?) ?? 0;
+      final itemEnd = (item['endTimeMinutes'] as int?) ?? (itemStart + 60);
+      if (itemEnd > maxEnd) maxEnd = itemEnd;
+    }
+    final height = _durationToPixels(maxEnd - start);
+
+    return [
+      Positioned(
+        top: top,
+        left: 4,
+        right: 4,
+        height: height,
+        child: Row(
+          children: group.map((item) {
+            final isTask = item['_type'] == 'task';
+            final isDragging = _draggingId == item['id'] && _isTaskDrag == isTask;
+            final storedColor = item['colorHex'] as String? ?? '#2196F3';
+            final color = _hexToColor(storedColor);
+            final itemStart = (item['startTimeMinutes'] as int?) ?? 0;
+            final itemEnd = (item['endTimeMinutes'] as int?) ?? (itemStart + 60);
+            final isConflict = true; // All items in a group are conflicting
+
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: isTask
+                    ? _buildTaskCard(item, color, cs, isConflict, isDragging, _durationToPixels(itemEnd - itemStart))
+                    : _buildClassCard(item, color, cs, isConflict, isDragging, _durationToPixels(itemEnd - itemStart), itemStart, itemEnd),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    ];
   }
 
-  Widget _buildClassBlock(
+  // ============================================
+  // CLASS CARD (REDESIGNED)
+  // ============================================
+  Widget _buildClassCard(
     Map<String, dynamic> c,
-    double top,
-    double height,
     Color color,
     ColorScheme cs,
     bool isConflict,
     bool isDragging,
+    double height,
     int originalStart,
     int originalEnd,
   ) {
@@ -1422,615 +1564,641 @@ class _TimetableScreenState extends State<TimetableScreen> {
     final duration = originalEnd - originalStart;
     final isSmall = height < 55;
 
-    return Positioned(
-      top: top,
-      left: 4,
-      right: 4,
-      height: height,
-      child: AnimatedContainer(
-        duration: isDragging ? Duration.zero : const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        child: Material(
-          color: isDragging ? color.withOpacity(0.25) : color.withOpacity(0.15),
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      elevation: isDragging ? 8 : (isConflict ? 3 : 1),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color.withOpacity(isDragging ? 0.3 : 0.18),
+              color.withOpacity(isDragging ? 0.2 : 0.1),
+            ],
+          ),
           borderRadius: BorderRadius.circular(10),
-          elevation: isDragging ? 8 : (isConflict ? 3 : 1),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isConflict ? Colors.red.shade400 : color.withOpacity(0.4),
-                width: isConflict ? 2 : 1,
+          border: Border.all(
+            color: isConflict ? Colors.red.shade400 : color.withOpacity(0.5),
+            width: isConflict ? 2 : 1.2,
+          ),
+        ),
+        child: Column(
+          children: [
+            // TOP DRAG HANDLE
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onVerticalDragStart: (_) => _onDragStart(c['id'] as int, true, originalStart, originalEnd, false),
+              onVerticalDragUpdate: (d) => _onDragUpdate(d, c['id'] as int, true, originalStart, originalEnd),
+              onVerticalDragEnd: (_) => _onDragEnd(c['id'] as int, false),
+              child: Container(
+                height: 16,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.4),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(9)),
+                ),
+                child: Center(
+                  child: Container(
+                    width: 28,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
               ),
             ),
-            child: Column(
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onVerticalDragStart: (_) => _onDragStart(c['id'] as int, true, originalStart, originalEnd, false),
-                  onVerticalDragUpdate: (d) => _onDragUpdate(d, c['id'] as int, true, originalStart, originalEnd),
-                  onVerticalDragEnd: (_) => _onDragEnd(c['id'] as int, false),
-                  child: Container(
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.35),
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(9)),
-                    ),
-                    child: Center(
-                      child: Container(
-                        width: 24,
-                        height: 3,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _editClass(c),
-                    onLongPress: () => _deleteClass(c['id'] as int),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
+            // CARD BODY (tap to edit)
+            Expanded(
+              child: InkWell(
+                onTap: () => _editClass(c),
+                onLongPress: () => _deleteClass(c['id'] as int),
+                borderRadius: BorderRadius.circular(10),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header row: icon + title + conflict badge
+                      Row(
                         children: [
-                          Row(
-                            children: [
-                              Icon(_typeIcon(type), size: 13, color: color),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  subject,
-                                  style: TextStyle(
-                                    fontSize: isSmall ? 11 : 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: color.withOpacity(0.95),
-                                    height: 1.2,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                          Icon(_typeIcon(type), size: 12, color: color),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              subject,
+                              style: TextStyle(
+                                fontSize: isSmall ? 10 : 12,
+                                fontWeight: FontWeight.bold,
+                                color: color.withOpacity(0.95),
+                                height: 1.1,
                               ),
-                              if (isConflict)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.shade100,
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  child: Text(
-                                    '!',
-                                    style: TextStyle(color: Colors.red.shade700, fontSize: 10, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          if (!isSmall)
-                            Text(
-                              _typeLabel(type),
-                              style: TextStyle(fontSize: 10, color: color.withOpacity(0.6), height: 1.3),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          const Spacer(),
-                          Row(
-                            children: [
-                              if (room.isNotEmpty && !isSmall)
-                                Expanded(
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.place, size: 9, color: cs.outline.withOpacity(0.6)),
-                                      const SizedBox(width: 2),
-                                      Expanded(
-                                        child: Text(
-                                          room,
-                                          style: TextStyle(fontSize: 9, color: cs.outline.withOpacity(0.6)),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              if (_isNeetSubject(subject) && !isSmall)
-                                InkWell(
-                                  onTap: () => _goToPomodoro(subject, durationMinutes: duration),
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: Colors.deepPurple.withOpacity(0.12),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: Colors.deepPurple.withOpacity(0.25)),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.timer, size: 9, color: Colors.deepPurple.shade600),
-                                        const SizedBox(width: 3),
-                                        Text(
-                                          duration >= 60 ? '${duration ~/ 60}h' : '${duration}m',
-                                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.deepPurple.shade600),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                            ],
                           ),
-                          Text(
-                            '${_formatMinutes24(originalStart)} – ${_formatMinutes24(originalEnd)}',
-                            style: TextStyle(fontSize: 9, color: cs.outline.withOpacity(0.5)),
-                          ),
+                          if (isConflict)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade100,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '!',
+                                style: TextStyle(color: Colors.red.shade700, fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ),
                         ],
                       ),
-                    ),
+                      // Type label (hidden when small)
+                      if (!isSmall)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            _typeLabel(type),
+                            style: TextStyle(fontSize: 9, color: color.withOpacity(0.6), height: 1.2),
+                          ),
+                        ),
+                      // Spacer pushes footer to bottom
+                      const Spacer(),
+                      // Footer: time + room + pomo button
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${_formatMinutes24(originalStart)} – ${_formatMinutes24(originalEnd)}',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: cs.outline.withOpacity(0.6),
+                                    fontWeight: FontWeight.w500,
+                                    fontFeatures: const [FontFeature.tabularFigures()],
+                                  ),
+                                ),
+                                if (!isSmall && room.isNotEmpty)
+                                  Text(
+                                    room,
+                                    style: TextStyle(fontSize: 8, color: cs.outline.withOpacity(0.4)),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (_isNeetSubject(subject) && !isSmall)
+                            InkWell(
+                              onTap: () => _goToPomodoro(subject, durationMinutes: duration),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.deepPurple.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: Colors.deepPurple.withOpacity(0.3)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.play_arrow, size: 9, color: Colors.deepPurple.shade600),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      duration >= 60 ? '${duration ~/ 60}h' : '${duration}m',
+                                      style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.deepPurple.shade600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onVerticalDragStart: (_) => _onDragStart(c['id'] as int, false, originalStart, originalEnd, false),
-                  onVerticalDragUpdate: (d) => _onDragUpdate(d, c['id'] as int, false, originalStart, originalEnd),
-                  onVerticalDragEnd: (_) => _onDragEnd(c['id'] as int, false),
-                  child: Container(
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.35),
-                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(9)),
-                    ),
-                    child: Center(
-                      child: Container(
-                        width: 24,
-                        height: 3,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+              ),
+            ),
+            // BOTTOM DRAG HANDLE
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onVerticalDragStart: (_) => _onDragStart(c['id'] as int, false, originalStart, originalEnd, false),
+              onVerticalDragUpdate: (d) => _onDragUpdate(d, c['id'] as int, false, originalStart, originalEnd),
+              onVerticalDragEnd: (_) => _onDragEnd(c['id'] as int, false),
+              child: Container(
+                height: 16,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.4),
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(9)),
+                ),
+                child: Center(
+                                      child: Container(
+                      width: 28,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
                 ),
-              ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // ============================================
+    // TASK CARD (REDESIGNED)
+    // ============================================
+    Widget _buildTaskCard(
+      Map<String, dynamic> t,
+      Color color,
+      ColorScheme cs,
+      bool isConflict,
+      bool isDragging,
+      double height,
+    ) {
+      final title = t['title'] as String? ?? '';
+      final type = t['taskType'] as String? ?? 'assignment';
+      final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
+      final subject = t['subjectName'] as String? ?? '';
+      final isStudyBlock = type == 'study_block';
+      final isSmall = height < 50;
+
+      return Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        elevation: isDragging ? 6 : 0,
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDragging
+                ? color.withOpacity(0.2)
+                : (isCompleted ? Colors.grey.withOpacity(0.06) : color.withOpacity(0.08)),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isCompleted ? Colors.grey.withOpacity(0.3) : color.withOpacity(0.5),
+              width: 1.2,
+              style: BorderStyle.solid,
+            ),
+          ),
+          child: InkWell(
+            onTap: () => _showTaskDetails(t),
+            onLongPress: () => _deleteTask(t['id'] as int),
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(_typeIcon(type), size: 11, color: isCompleted ? Colors.grey : color),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: isSmall ? 10 : 11,
+                            fontWeight: FontWeight.w600,
+                            color: isCompleted ? Colors.grey : color.withOpacity(0.9),
+                            decoration: isCompleted ? TextDecoration.lineThrough : null,
+                            height: 1.1,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${_formatMinutes24((t['startTimeMinutes'] as int?) ?? 0)} – ${_formatMinutes24((t['endTimeMinutes'] as int?) ?? 60)}',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: cs.outline.withOpacity(0.5),
+                            fontWeight: FontWeight.w500,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                      if (isStudyBlock && !isSmall)
+                        InkWell(
+                          onTap: () => _goToPomodoro(subject.isNotEmpty ? subject : 'Study'),
+                          borderRadius: BorderRadius.circular(5),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.deepPurple.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(color: Colors.deepPurple.withOpacity(0.25)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.play_arrow, size: 9, color: Colors.deepPurple.shade600),
+                                const SizedBox(width: 2),
+                                Text('Start', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.deepPurple.shade600)),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
-  }
+      );
+    }
 
-  Widget _buildTaskBlock(
-    Map<String, dynamic> t,
-    double top,
-    double height,
-    Color color,
-    ColorScheme cs,
-    bool isConflict,
-    bool isDragging,
-  ) {
-    final title = t['title'] as String? ?? '';
-    final type = t['taskType'] as String? ?? 'assignment';
-    final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
-    final subject = t['subjectName'] as String? ?? '';
-    final isStudyBlock = type == 'study_block';
-    final isSmall = height < 45;
-
-    return Positioned(
-      top: top,
-      left: 4,
-      right: 4,
-      height: height,
-      child: AnimatedContainer(
-        duration: isDragging ? Duration.zero : const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        child: Material(
-          color: isDragging
-              ? color.withOpacity(0.2)
-              : (isCompleted ? Colors.grey.withOpacity(0.06) : color.withOpacity(0.08)),
-          borderRadius: BorderRadius.circular(10),
-          elevation: isDragging ? 6 : 0,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isCompleted ? Colors.grey.withOpacity(0.3) : color.withOpacity(0.45),
-                width: 1.2,
+    // ============================================
+    // ENTRY DRAWER
+    // ============================================
+    Widget _buildEntryDrawerHandle(ColorScheme cs) {
+      return GestureDetector(
+        onTap: () => setState(() => _showEntryDrawer = !_showEntryDrawer),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withOpacity(0.5),
+            border: Border(top: BorderSide(color: cs.outline.withOpacity(0.15))),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedRotation(
+                turns: _showEntryDrawer ? 0.5 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: Icon(Icons.keyboard_arrow_up, color: cs.outline),
               ),
+              Text(
+                _showEntryDrawer ? 'Tap to close' : 'Add Class or Task',
+                style: TextStyle(fontSize: 11, color: cs.outline, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget _buildEntryDrawer(ColorScheme cs) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          border: Border(top: BorderSide(color: cs.outline.withOpacity(0.15))),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, -2))],
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setState(() => _entryTab = 0),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: _entryTab == 0 ? cs.primaryContainer : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.school, size: 18, color: _entryTab == 0 ? cs.onPrimaryContainer : cs.outline),
+                              const SizedBox(width: 8),
+                              Text('Add Class', style: TextStyle(fontWeight: _entryTab == 0 ? FontWeight.bold : FontWeight.w500, color: _entryTab == 0 ? cs.onPrimaryContainer : cs.outline)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setState(() => _entryTab = 1),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: _entryTab == 1 ? cs.primaryContainer : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.assignment, size: 18, color: _entryTab == 1 ? cs.onPrimaryContainer : cs.outline),
+                              const SizedBox(width: 8),
+                              Text('Add Task', style: TextStyle(fontWeight: _entryTab == 1 ? FontWeight.bold : FontWeight.w500, color: _entryTab == 1 ? cs.onPrimaryContainer : cs.outline)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        if (_entryTab == 0) {
+                          _addClassFromDrawer();
+                        } else {
+                          _addTaskFromDrawer();
+                        }
+                      },
+                      icon: Icon(_entryTab == 0 ? Icons.school : Icons.assignment),
+                      label: Text(_entryTab == 0 ? 'Add New Class' : 'Add New Task'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_entryTab == 0)
+                OutlinedButton.icon(
+                  onPressed: _suggestStudyBlock,
+                  icon: const Icon(Icons.auto_fix_high),
+                  label: const Text('Suggest Study Block'),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // ============================================
+    // TASK DETAILS BOTTOM SHEET
+    // ============================================
+    void _showTaskDetails(Map<String, dynamic> t) {
+      final typeColor = _typeColor(t['taskType'] as String);
+      final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
+      final dueDate = DateTime.fromMillisecondsSinceEpoch(t['dueDateMillis'] as int);
+      final daysLeft = dueDate.difference(DateTime.now()).inDays;
+      final subject = t['subjectName'] as String? ?? '';
+      final isStudyBlock = t['taskType'] == 'study_block';
+
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(color: typeColor.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                    child: Icon(_typeIcon(t['taskType'] as String), color: typeColor),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(t['title'] as String, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text(_typeLabel(t['taskType'] as String), style: TextStyle(fontSize: 14, color: typeColor)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _detailRow(Icons.calendar_today, 'Due Date', '${dueDate.day}/${dueDate.month}/${dueDate.year}'),
+              _detailRow(Icons.hourglass_bottom, 'Days Left',
+                daysLeft < 0 ? 'Overdue!' : daysLeft == 0 ? 'Due today!' : '$daysLeft days left',
+                valueColor: daysLeft <= 1 ? Colors.red : null,
+              ),
+              if (t['startTimeMinutes'] != null)
+                _detailRow(Icons.access_time, 'Time', '${_formatMinutes(t['startTimeMinutes'] as int)} - ${_formatMinutes(t['endTimeMinutes'] as int)}'),
+              if ((t['subjectName'] as String?)?.isNotEmpty == true)
+                _detailRow(Icons.book, 'Subject', t['subjectName'] as String),
+              if ((t['note'] as String?)?.isNotEmpty == true)
+                _detailRow(Icons.notes, 'Note', t['note'] as String),
+              const SizedBox(height: 16),
+              if (isStudyBlock)
+                FilledButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _goToPomodoro(subject.isNotEmpty ? subject : 'Study');
+                  },
+                  icon: const Icon(Icons.timer),
+                  label: const Text('Start Pomodoro'),
+                  style: FilledButton.styleFrom(backgroundColor: Colors.deepPurple, minimumSize: const Size(double.infinity, 48)),
+                ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _toggleTaskComplete(t['id'] as int, isCompleted);
+                      },
+                      icon: Icon(isCompleted ? Icons.check_box_outline_blank : Icons.check_box),
+                      label: Text(isCompleted ? 'Mark Incomplete' : 'Mark Complete'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _deleteTask(t['id'] as int);
+                      },
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget _detailRow(IconData icon, String label, String value, {Color? valueColor}) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: Colors.grey),
+            const SizedBox(width: 10),
+            Text('$label: ', style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w500)),
+            Expanded(
+              child: Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: valueColor), maxLines: 2, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ============================================
+    // WEEK VIEW
+    // ============================================
+    Widget _buildWeekView(ColorScheme cs) {
+      final now = DateTime.now();
+      final weekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+
+      return ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: 7,
+        itemBuilder: (context, dayIndex) {
+          final dayDate = weekStart.add(Duration(days: dayIndex));
+          final dayItems = _getUnifiedItemsForDay(dayIndex);
+          final dayAllDay = _getAllDayTasksForDay(dayIndex);
+          final isToday = dayIndex == (now.weekday - 1);
+          final conflicts = _detectConflicts(dayItems);
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            elevation: isToday ? 2 : 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: isToday ? cs.primary : cs.outlineVariant.withOpacity(0.25), width: isToday ? 2 : 1),
             ),
             child: InkWell(
-              onTap: () => _showTaskDetails(t),
-              onLongPress: () => _deleteTask(t['id'] as int),
-              borderRadius: BorderRadius.circular(10),
+              onTap: () {
+                setState(() {
+                  _selectedDay = dayIndex;
+                  _weekView = false;
+                });
+              },
+              borderRadius: BorderRadius.circular(14),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.all(14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
                       children: [
-                        Icon(_typeIcon(type), size: 12, color: isCompleted ? Colors.grey : color),
-                        const SizedBox(width: 5),
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: TextStyle(
-                              fontSize: isSmall ? 11 : 12,
-                              fontWeight: FontWeight.w600,
-                              color: isCompleted ? Colors.grey : color.withOpacity(0.9),
-                              decoration: isCompleted ? TextDecoration.lineThrough : null,
-                              height: 1.2,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                        Container(width: 10, height: 10, decoration: BoxDecoration(color: isToday ? cs.primary : cs.outline, shape: BoxShape.circle)),
+                        const SizedBox(width: 8),
+                        Text('${_dayNames[dayIndex]} ${dayDate.day}/${dayDate.month}', style: TextStyle(fontWeight: isToday ? FontWeight.bold : FontWeight.w600, color: isToday ? cs.primary : cs.onSurface)),
+                        const Spacer(),
+                        if (conflicts.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                            child: Text('${conflicts.length} conflict${conflicts.length == 1 ? '' : 's'}', style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.w600)),
                           ),
-                        ),
-                        if (isStudyBlock && !isSmall)
-                          InkWell(
-                            onTap: () => _goToPomodoro(subject.isNotEmpty ? subject : 'Study'),
-                            borderRadius: BorderRadius.circular(5),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.deepPurple.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(5),
-                                border: Border.all(color: Colors.deepPurple.withOpacity(0.25)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.play_arrow, size: 10, color: Colors.deepPurple.shade600),
-                                  const SizedBox(width: 2),
-                                  Text('Start', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.deepPurple.shade600)),
-                                ],
-                              ),
-                            ),
-                          ),
+                        const SizedBox(width: 8),
+                        Text('${dayItems.length + dayAllDay.length} items', style: TextStyle(fontSize: 12, color: cs.outline)),
                       ],
                     ),
-                    if (!isSmall)
-                      Text(
-                        '${_formatMinutes24((t['startTimeMinutes'] as int?) ?? 0)} – ${_formatMinutes24((t['endTimeMinutes'] as int?) ?? 60)}',
-                        style: TextStyle(fontSize: 9, color: cs.outline.withOpacity(0.5)),
+                    const SizedBox(height: 10),
+                    if (dayItems.isEmpty && dayAllDay.isEmpty)
+                      Text('No classes or tasks', style: TextStyle(fontSize: 13, color: cs.outline.withOpacity(0.6)))
+                    else
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          ...dayAllDay.map((t) {
+                            final color = _typeColor(t['taskType'] as String);
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: color.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: color.withOpacity(0.3)),
+                              ),
+                              child: Text('${t['title']} (all-day)', style: TextStyle(fontSize: 10, color: color.withOpacity(0.9), fontWeight: FontWeight.w500)),
+                            );
+                          }),
+                          ...dayItems.map((item) {
+                            final isTask = item['_type'] == 'task';
+                            final color = isTask
+                                ? _typeColor(item['taskType'] as String)
+                                : _hexToColor(item['colorHex'] as String? ?? '#2196F3');
+                            final label = isTask
+                                ? item['title'] as String
+                                : '${item['subjectName']} • ${_formatMinutes24(item['startTimeMinutes'] as int)}';
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: color.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: color.withOpacity(0.3)),
+                              ),
+                              child: Text(label, style: TextStyle(fontSize: 10, color: color.withOpacity(0.9), fontWeight: FontWeight.w500)),
+                            );
+                          }),
+                        ],
                       ),
                   ],
                 ),
               ),
             ),
-          ),
-        ),
-      ),
-    );
+          );
+        },
+      );
+    }
   }
 
-  Widget _buildEntryDrawerHandle(ColorScheme cs) {
-    return GestureDetector(
-      onTap: () => setState(() => _showEntryDrawer = !_showEntryDrawer),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withOpacity(0.5),
-          border: Border(top: BorderSide(color: cs.outline.withOpacity(0.15))),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedRotation(
-              turns: _showEntryDrawer ? 0.5 : 0,
-              duration: const Duration(milliseconds: 200),
-              child: Icon(Icons.keyboard_arrow_up, color: cs.outline),
-            ),
-            Text(
-              _showEntryDrawer ? 'Tap to close' : 'Add Class or Task',
-              style: TextStyle(fontSize: 11, color: cs.outline, fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEntryDrawer(ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        border: Border(top: BorderSide(color: cs.outline.withOpacity(0.15))),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, -2))],
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => setState(() => _entryTab = 0),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: _entryTab == 0 ? cs.primaryContainer : Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.school, size: 18, color: _entryTab == 0 ? cs.onPrimaryContainer : cs.outline),
-                            const SizedBox(width: 8),
-                            Text('Add Class', style: TextStyle(fontWeight: _entryTab == 0 ? FontWeight.bold : FontWeight.w500, color: _entryTab == 0 ? cs.onPrimaryContainer : cs.outline)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => setState(() => _entryTab = 1),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: _entryTab == 1 ? cs.primaryContainer : Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.assignment, size: 18, color: _entryTab == 1 ? cs.onPrimaryContainer : cs.outline),
-                            const SizedBox(width: 8),
-                            Text('Add Task', style: TextStyle(fontWeight: _entryTab == 1 ? FontWeight.bold : FontWeight.w500, color: _entryTab == 1 ? cs.onPrimaryContainer : cs.outline)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () {
-                      if (_entryTab == 0) {
-                        _addClassFromDrawer();
-                      } else {
-                        _addTaskFromDrawer();
-                      }
-                    },
-                    icon: Icon(_entryTab == 0 ? Icons.school : Icons.assignment),
-                    label: Text(_entryTab == 0 ? 'Add New Class' : 'Add New Task'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (_entryTab == 0)
-              OutlinedButton.icon(
-                onPressed: _suggestStudyBlock,
-                icon: const Icon(Icons.auto_fix_high),
-                label: const Text('Suggest Study Block'),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showTaskDetails(Map<String, dynamic> t) {
-    final typeColor = _typeColor(t['taskType'] as String);
-    final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
-    final dueDate = DateTime.fromMillisecondsSinceEpoch(t['dueDateMillis'] as int);
-    final daysLeft = dueDate.difference(DateTime.now()).inDays;
-    final subject = t['subjectName'] as String? ?? '';
-    final isStudyBlock = t['taskType'] == 'study_block';
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(color: typeColor.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-                  child: Icon(_typeIcon(t['taskType'] as String), color: typeColor),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(t['title'] as String, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      Text(_typeLabel(t['taskType'] as String), style: TextStyle(fontSize: 14, color: typeColor)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _detailRow(Icons.calendar_today, 'Due Date', '${dueDate.day}/${dueDate.month}/${dueDate.year}'),
-            _detailRow(Icons.hourglass_bottom, 'Days Left',
-              daysLeft < 0 ? 'Overdue!' : daysLeft == 0 ? 'Due today!' : '$daysLeft days left',
-              valueColor: daysLeft <= 1 ? Colors.red : null,
-            ),
-            if (t['startTimeMinutes'] != null)
-              _detailRow(Icons.access_time, 'Time', '${_formatMinutes(t['startTimeMinutes'] as int)} - ${_formatMinutes(t['endTimeMinutes'] as int)}'),
-            if ((t['subjectName'] as String?)?.isNotEmpty == true)
-              _detailRow(Icons.book, 'Subject', t['subjectName'] as String),
-            if ((t['note'] as String?)?.isNotEmpty == true)
-              _detailRow(Icons.notes, 'Note', t['note'] as String),
-            const SizedBox(height: 16),
-            if (isStudyBlock)
-              FilledButton.icon(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  _goToPomodoro(subject.isNotEmpty ? subject : 'Study');
-                },
-                icon: const Icon(Icons.timer),
-                label: const Text('Start Pomodoro'),
-                style: FilledButton.styleFrom(backgroundColor: Colors.deepPurple, minimumSize: const Size(double.infinity, 48)),
-              ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _toggleTaskComplete(t['id'] as int, isCompleted);
-                    },
-                    icon: Icon(isCompleted ? Icons.check_box_outline_blank : Icons.check_box),
-                    label: Text(isCompleted ? 'Mark Incomplete' : 'Mark Complete'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _deleteTask(t['id'] as int);
-                    },
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    label: const Text('Delete', style: TextStyle(color: Colors.red)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _detailRow(IconData icon, String label, String value, {Color? valueColor}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: Colors.grey),
-          const SizedBox(width: 10),
-          Text('$label: ', style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w500)),
-          Expanded(
-            child: Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: valueColor), maxLines: 2, overflow: TextOverflow.ellipsis),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWeekView(ColorScheme cs) {
-    final now = DateTime.now();
-    final weekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: 7,
-      itemBuilder: (context, dayIndex) {
-        final dayDate = weekStart.add(Duration(days: dayIndex));
-        final dayItems = _getUnifiedItemsForDay(dayIndex);
-        final dayAllDay = _getAllDayTasksForDay(dayIndex);
-        final isToday = dayIndex == (now.weekday - 1);
-        final conflicts = _detectConflicts(dayItems);
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          elevation: isToday ? 2 : 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: BorderSide(color: isToday ? cs.primary : cs.outlineVariant.withOpacity(0.25), width: isToday ? 2 : 1),
-          ),
-          child: InkWell(
-            onTap: () {
-              setState(() {
-                _selectedDay = dayIndex;
-                _weekView = false;
-              });
-            },
-            borderRadius: BorderRadius.circular(14),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(width: 10, height: 10, decoration: BoxDecoration(color: isToday ? cs.primary : cs.outline, shape: BoxShape.circle)),
-                      const SizedBox(width: 8),
-                      Text('${_dayNames[dayIndex]} ${dayDate.day}/${dayDate.month}', style: TextStyle(fontWeight: isToday ? FontWeight.bold : FontWeight.w600, color: isToday ? cs.primary : cs.onSurface)),
-                      const Spacer(),
-                      if (conflicts.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                          child: Text('${conflicts.length} conflict${conflicts.length == 1 ? '' : 's'}', style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.w600)),
-                        ),
-                      const SizedBox(width: 8),
-                      Text('${dayItems.length + dayAllDay.length} items', style: TextStyle(fontSize: 12, color: cs.outline)),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  if (dayItems.isEmpty && dayAllDay.isEmpty)
-                    Text('No classes or tasks', style: TextStyle(fontSize: 13, color: cs.outline.withOpacity(0.6)))
-                  else
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        ...dayAllDay.map((t) {
-                          final color = _typeColor(t['taskType'] as String);
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: color.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: color.withOpacity(0.3)),
-                            ),
-                            child: Text('${t['title']} (all-day)', style: TextStyle(fontSize: 10, color: color.withOpacity(0.9), fontWeight: FontWeight.w500)),
-                          );
-                        }),
-                        ...dayItems.map((item) {
-                          final isTask = item['_type'] == 'task';
-                          final color = isTask
-                              ? _typeColor(item['taskType'] as String)
-                              : _hexToColor(item['colorHex'] as String? ?? '#2196F3');
-                          final label = isTask
-                              ? item['title'] as String
-                              : '${item['subjectName']} • ${_formatMinutes24(item['startTimeMinutes'] as int)}';
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: color.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: color.withOpacity(0.3)),
-                            ),
-                            child: Text(label, style: TextStyle(fontSize: 10, color: color.withOpacity(0.9), fontWeight: FontWeight.w500)),
-                          );
-                        }),
-                      ],
-                    ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
