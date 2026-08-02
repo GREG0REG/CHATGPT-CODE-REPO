@@ -6,7 +6,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.graphics.Color
 import android.view.View
 import android.widget.RemoteViews
@@ -31,92 +30,100 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
         private const val KEY_PREFIX_STATUS = "attendance_subject_status_"
         private const val KEY_PREFIX_STREAK = "attendance_subject_streak_"
 
-        // Subject 0 IDs (always visible when data exists)
-        private val S0_PERCENT = R.id.attendance_widget_percent
-        private val S0_DOT = R.id.attendance_widget_subject_dot
-        private val S0_NAME = R.id.attendance_widget_subject
-        private val S0_RATIO = R.id.attendance_widget_ratio
-        private val S0_PROGRESS = R.id.attendance_widget_progress
-        private val S0_P = R.id.chip_present
-        private val S0_A = R.id.chip_absent
-        private val S0_L = R.id.chip_late
-        private val S0_E = R.id.chip_excused
-        private val S0_STATUS = R.id.attendance_widget_status
-
-        // Subject 1-3 IDs
+        // Row IDs (0-3)
         private val ROW_IDS = intArrayOf(
+            R.id.subject_row_0,
             R.id.subject_row_1,
             R.id.subject_row_2,
             R.id.subject_row_3
         )
+
+        // Divider IDs (0-2, between rows)
         private val DIVIDER_IDS = intArrayOf(
             R.id.divider_0,
             R.id.divider_1,
             R.id.divider_2
         )
+
+        // Percent text IDs
         private val PCT_IDS = intArrayOf(
+            R.id.pct_0,
             R.id.pct_1,
             R.id.pct_2,
             R.id.pct_3
         )
+
+        // Dot IDs
         private val DOT_IDS = intArrayOf(
+            R.id.dot_0,
             R.id.dot_1,
             R.id.dot_2,
             R.id.dot_3
         )
+
+        // Name IDs
         private val NAME_IDS = intArrayOf(
+            R.id.name_0,
             R.id.name_1,
             R.id.name_2,
             R.id.name_3
         )
+
+        // ProgressBar IDs
         private val PROGRESS_IDS = intArrayOf(
+            R.id.progress_0,
             R.id.progress_1,
             R.id.progress_2,
             R.id.progress_3
         )
+
+        // Ratio text IDs
         private val RATIO_IDS = intArrayOf(
+            R.id.ratio_0,
             R.id.ratio_1,
             R.id.ratio_2,
             R.id.ratio_3
         )
+
+        // Present chip IDs
         private val P_IDS = intArrayOf(
+            R.id.p0,
             R.id.p1,
             R.id.p2,
             R.id.p3
         )
+
+        // Absent chip IDs
         private val A_IDS = intArrayOf(
+            R.id.a0,
             R.id.a1,
             R.id.a2,
             R.id.a3
         )
+
+        // Late chip IDs
         private val L_IDS = intArrayOf(
+            R.id.l0,
             R.id.l1,
             R.id.l2,
             R.id.l3
         )
+
+        // Excused chip IDs
         private val E_IDS = intArrayOf(
+            R.id.e0,
             R.id.e1,
             R.id.e2,
             R.id.e3
         )
+
+        // Status text IDs
         private val STATUS_IDS = intArrayOf(
+            R.id.status_0,
             R.id.status_1,
             R.id.status_2,
             R.id.status_3
         )
-
-        // FIXED: Use SharedPreferences directly instead of HomeWidgetData
-        private fun getWidgetPrefs(context: Context): SharedPreferences {
-            return context.getSharedPreferences("HomeWidgetPreferences", Context.MODE_PRIVATE)
-        }
-
-        private fun getStringPref(prefs: SharedPreferences, key: String, defaultValue: String): String {
-            return prefs.getString(key, defaultValue) ?: defaultValue
-        }
-
-        private fun getIntPref(prefs: SharedPreferences, key: String, defaultValue: Int): Int {
-            return prefs.getInt(key, defaultValue)
-        }
 
         @JvmStatic
         fun updateWidgetDirectly(
@@ -125,8 +132,8 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
             widgetId: Int
         ) {
             try {
-                val prefs = getWidgetPrefs(context)
-                val subjectCount = getIntPref(prefs, KEY_SUBJECT_COUNT, 0)
+                val widgetData = HomeWidgetPlugin.getData(context)
+                val subjectCount = widgetData.getInt(KEY_SUBJECT_COUNT, 0)
 
                 val views = RemoteViews(context.packageName, R.layout.attendance_widget_layout)
 
@@ -148,11 +155,8 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
 
                     val displayCount = subjectCount.coerceAtMost(MAX_SUBJECTS)
 
-                    // Update Subject 0 (always shown if we have data)
-                    updateSubject0(views, prefs)
-
                     // Update streak chip for subject 0
-                    val streak = getIntPref(prefs, KEY_PREFIX_STREAK + "0", 0)
+                    val streak = widgetData.getInt(KEY_PREFIX_STREAK + "0", 0)
                     if (streak > 0) {
                         views.setViewVisibility(R.id.attendance_widget_streak_chip, View.VISIBLE)
                         views.setTextViewText(R.id.attendance_widget_streak_text, "$streak")
@@ -160,17 +164,19 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                         views.setViewVisibility(R.id.attendance_widget_streak_chip, View.GONE)
                     }
 
-                    // Update Subjects 1-3
-                    for (i in 1 until MAX_SUBJECTS) {
+                    // Update all subject rows
+                    for (i in 0 until MAX_SUBJECTS) {
                         val visible = i < displayCount
-                        views.setViewVisibility(ROW_IDS[i - 1], if (visible) View.VISIBLE else View.GONE)
+                        views.setViewVisibility(ROW_IDS[i], if (visible) View.VISIBLE else View.GONE)
 
-                        // Show divider before this row if visible and not the last one
-                        val showDivider = visible && (i < displayCount - 1)
-                        views.setViewVisibility(DIVIDER_IDS[i - 1], if (showDivider) View.VISIBLE else View.GONE)
+                        // Show divider after this row if visible and not the last visible row
+                        if (i < MAX_SUBJECTS - 1) {
+                            val showDivider = visible && (i < displayCount - 1)
+                            views.setViewVisibility(DIVIDER_IDS[i], if (showDivider) View.VISIBLE else View.GONE)
+                        }
 
                         if (visible) {
-                            updateSubjectN(views, prefs, i)
+                            updateSubjectRow(views, widgetData, i)
                         }
                     }
 
@@ -197,78 +203,41 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
             }
         }
 
-        private fun updateSubject0(views: RemoteViews, prefs: SharedPreferences) {
-            val name = getStringPref(prefs, KEY_PREFIX_NAME + "0", "Subject")
-            val percent = getIntPref(prefs, KEY_PREFIX_PERCENT + "0", 0)
-            val present = getIntPref(prefs, KEY_PREFIX_PRESENT + "0", 0)
-            val absent = getIntPref(prefs, KEY_PREFIX_ABSENT + "0", 0)
-            val late = getIntPref(prefs, KEY_PREFIX_LATE + "0", 0)
-            val excused = getIntPref(prefs, KEY_PREFIX_EXCUSED + "0", 0)
-            val total = getIntPref(prefs, KEY_PREFIX_TOTAL + "0", 0)
-            val colorHex = getStringPref(prefs, KEY_PREFIX_COLOR + "0", "#4CAF50")
-            val status = getStringPref(prefs, KEY_PREFIX_STATUS + "0", "No data")
+        private fun updateSubjectRow(views: RemoteViews, widgetData: HomeWidgetPlugin.HomeWidgetData, index: Int) {
+            val name = widgetData.getString(KEY_PREFIX_NAME + "$index", "Subject") ?: "Subject"
+            val percent = widgetData.getInt(KEY_PREFIX_PERCENT + "$index", 0)
+            val present = widgetData.getInt(KEY_PREFIX_PRESENT + "$index", 0)
+            val absent = widgetData.getInt(KEY_PREFIX_ABSENT + "$index", 0)
+            val late = widgetData.getInt(KEY_PREFIX_LATE + "$index", 0)
+            val excused = widgetData.getInt(KEY_PREFIX_EXCUSED + "$index", 0)
+            val total = widgetData.getInt(KEY_PREFIX_TOTAL + "$index", 0)
+            val colorHex = widgetData.getString(KEY_PREFIX_COLOR + "$index", "#4CAF50") ?: "#4CAF50"
+            val status = widgetData.getString(KEY_PREFIX_STATUS + "$index", "No data") ?: "No data"
 
             val percentColor = getPercentColor(percent)
             val effectiveTotal = (total - excused).coerceAtLeast(0)
             val subjectColor = parseColorSafe(colorHex, "#4CAF50")
 
-            views.setTextViewText(S0_NAME, name)
-            views.setTextColor(S0_NAME, Color.WHITE)
+            views.setTextViewText(NAME_IDS[index], name)
+            views.setTextColor(NAME_IDS[index], Color.WHITE)
 
-            views.setTextViewText(S0_PERCENT, "$percent%")
-            views.setTextColor(S0_PERCENT, percentColor)
+            views.setTextViewText(PCT_IDS[index], "$percent%")
+            views.setTextColor(PCT_IDS[index], percentColor)
 
-            views.setInt(S0_DOT, "setBackgroundColor", subjectColor)
-            views.setProgressBar(S0_PROGRESS, 100, percent.coerceIn(0, 100), false)
+            views.setInt(DOT_IDS[index], "setBackgroundColor", subjectColor)
+            views.setProgressBar(PROGRESS_IDS[index], 100, percent.coerceIn(0, 100), false)
 
-            views.setTextViewText(S0_RATIO, "$present / $effectiveTotal sessions")
-            views.setTextColor(S0_RATIO, Color.parseColor("#B0FFFFFF"))
+            val ratioText = if (index == 0) "$present / $effectiveTotal sessions" else "$present / $effectiveTotal"
+            views.setTextViewText(RATIO_IDS[index], ratioText)
+            views.setTextColor(RATIO_IDS[index], Color.parseColor("#B0FFFFFF"))
 
-            views.setTextViewText(S0_P, "P:$present")
-            views.setTextViewText(S0_A, "A:$absent")
-            views.setTextViewText(S0_L, "L:$late")
-            views.setTextViewText(S0_E, "E:$excused")
+            views.setTextViewText(P_IDS[index], "P:$present")
+            views.setTextViewText(A_IDS[index], "A:$absent")
+            views.setTextViewText(L_IDS[index], "L:$late")
+            views.setTextViewText(E_IDS[index], "E:$excused")
 
-            views.setTextViewText(S0_STATUS, status)
-            views.setTextColor(S0_STATUS, Color.WHITE)
-        }
-
-        private fun updateSubjectN(views: RemoteViews, prefs: SharedPreferences, index: Int) {
-            val name = getStringPref(prefs, KEY_PREFIX_NAME + "$index", "Subject")
-            val percent = getIntPref(prefs, KEY_PREFIX_PERCENT + "$index", 0)
-            val present = getIntPref(prefs, KEY_PREFIX_PRESENT + "$index", 0)
-            val absent = getIntPref(prefs, KEY_PREFIX_ABSENT + "$index", 0)
-            val late = getIntPref(prefs, KEY_PREFIX_LATE + "$index", 0)
-            val excused = getIntPref(prefs, KEY_PREFIX_EXCUSED + "$index", 0)
-            val total = getIntPref(prefs, KEY_PREFIX_TOTAL + "$index", 0)
-            val colorHex = getStringPref(prefs, KEY_PREFIX_COLOR + "$index", "#4CAF50")
-            val status = getStringPref(prefs, KEY_PREFIX_STATUS + "$index", "No data")
-
-            val percentColor = getPercentColor(percent)
-            val effectiveTotal = (total - excused).coerceAtLeast(0)
-            val subjectColor = parseColorSafe(colorHex, "#4CAF50")
-
-            val arrIndex = index - 1
-
-            views.setTextViewText(NAME_IDS[arrIndex], name)
-            views.setTextColor(NAME_IDS[arrIndex], Color.WHITE)
-
-            views.setTextViewText(PCT_IDS[arrIndex], "$percent%")
-            views.setTextColor(PCT_IDS[arrIndex], percentColor)
-
-            views.setInt(DOT_IDS[arrIndex], "setBackgroundColor", subjectColor)
-            views.setProgressBar(PROGRESS_IDS[arrIndex], 100, percent.coerceIn(0, 100), false)
-
-            views.setTextViewText(RATIO_IDS[arrIndex], "$present / $effectiveTotal")
-            views.setTextColor(RATIO_IDS[arrIndex], Color.parseColor("#B0FFFFFF"))
-
-            views.setTextViewText(P_IDS[arrIndex], "P:$present")
-            views.setTextViewText(A_IDS[arrIndex], "A:$absent")
-            views.setTextViewText(L_IDS[arrIndex], "L:$late")
-            views.setTextViewText(E_IDS[arrIndex], "E:$excused")
-
-            views.setTextViewText(STATUS_IDS[arrIndex], status)
-            views.setTextColor(STATUS_IDS[arrIndex], Color.WHITE)
+            views.setTextViewText(STATUS_IDS[index], status)
+            views.setTextColor(STATUS_IDS[index], Color.WHITE)
         }
 
         private fun getPercentColor(percent: Int): Int {
@@ -341,6 +310,7 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     updateAllWidgets(context)
                 }
             }
+            "com.example.event_countdown.ATTENDANCE_WIDGET_REFRESH" -> updateAllWidgets(context)
             Intent.ACTION_BOOT_COMPLETED -> updateAllWidgets(context)
             Intent.ACTION_MY_PACKAGE_REPLACED -> updateAllWidgets(context)
         }
