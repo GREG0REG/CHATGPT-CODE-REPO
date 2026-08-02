@@ -120,7 +120,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
-    Future<void> _loadData() async {
+  Future<void> _loadData() async {
     setState(() => _loading = true);
 
     final subjectRows = await DatabaseHelper.instance.getAllAttendanceSubjects();
@@ -196,10 +196,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
 
     // ── Write widget data for home screen widget ──
-    // FIXED: Use HomeWidget.saveWidgetData() instead of File I/O
+    // FIXED: Call AFTER setState completes, not before
     await WidgetService.refreshAttendanceWidget();
   }
-
 
   Future<void> _loadDetailForSubject(String subjectName) async {
     final subject = _subjects.firstWhere(
@@ -229,7 +228,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
   }
 
-    Future<void> _addSubject() async {
+  Future<void> _addSubject() async {
     final nameController = TextEditingController();
     final reqController = TextEditingController(text: '75');
     DateTime? semesterStart;
@@ -773,6 +772,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
+  // FIXED: Removed duplicate _loadData() call — _markAttendance only writes to DB,
+  // the caller is responsible for refreshing UI + widget
   Future<void> _markAttendance(String subject, String status, DateTime date) async {
     final dayStart = DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
     final existing = await DatabaseHelper.instance.getAttendanceLogForSubjectAndDate(subject, dayStart);
@@ -793,12 +794,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         'markedAtMillis': DateTime.now().millisecondsSinceEpoch,
       });
     }
-
-    
-    // ── Refresh widget after marking attendance ──
-    await _loadData();
   }
-
 
   Future<void> _showMarkDialog(String subject, {DateTime? specificDate}) async {
     final date = specificDate ?? DateTime.now();
@@ -1386,7 +1382,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return streak;
   }
 
-    @override
+  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
@@ -1481,7 +1477,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return _buildSubjectList(cs);
   }
 
-    Widget _buildSubjectList(ColorScheme cs) {
+  Widget _buildSubjectList(ColorScheme cs) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Column(
@@ -1768,7 +1764,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
-    Widget _buildSubjectDetail(ColorScheme cs) {
+  Widget _buildSubjectDetail(ColorScheme cs) {
     final s = _subjects.firstWhere(
       (sub) => sub['name'] == _selectedSubject,
       orElse: () => {},
@@ -2093,7 +2089,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
-                    child: Text(
+                                      child: Text(
                       'No attendance records yet.',
                       style: TextStyle(color: cs.outline),
                     ),
@@ -2152,7 +2148,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
-    Widget _buildSectionTitle(String title, ColorScheme cs) {
+  Widget _buildSectionTitle(String title, ColorScheme cs) {
     return Row(
       children: [
         Container(
@@ -2215,3 +2211,4 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 }
+
