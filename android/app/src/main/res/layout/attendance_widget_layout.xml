@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 
-  Attendance Widget — NEET Edition v4
-  Multi-subject dark green card matching Reading Tracker
-  Shows up to 3 subjects stacked vertically, compact layout
+<!--
+  Attendance Widget — NEET Edition v5
+  4-subject dark green card. SAFE RemoteViews only.
 -->
 <FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -56,7 +55,7 @@
         android:padding="12dp"
         android:visibility="visible">
 
-        <!-- Header: Title + Streak -->
+        <!-- Header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -101,18 +100,17 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- === SUBJECT 1 === -->
+        <!-- ========== SUBJECT 0 ========== -->
         <LinearLayout
             android:id="@+id/subject_row_0"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:layout_marginTop="8dp"
-            android:gravity="center_vertical"
-            android:visibility="visible">
+            android:gravity="center_vertical">
 
             <TextView
-                android:id="@+id/dot_0"
+                android:id="@+id/attendance_widget_subject_dot"
                 android:layout_width="3dp"
                 android:layout_height="32dp"
                 android:layout_marginEnd="8dp"
@@ -131,7 +129,7 @@
                     android:gravity="center_vertical">
 
                     <TextView
-                        android:id="@+id/name_0"
+                        android:id="@+id/attendance_widget_subject"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
@@ -143,7 +141,7 @@
                         android:ellipsize="end" />
 
                     <TextView
-                        android:id="@+id/pct_0"
+                        android:id="@+id/attendance_widget_percent"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="100%"
@@ -153,7 +151,7 @@
                 </LinearLayout>
 
                 <TextView
-                    android:id="@+id/ratio_0"
+                    android:id="@+id/attendance_widget_ratio"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="1 / 1 sessions"
@@ -162,18 +160,16 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Chips row 1 -->
         <LinearLayout
             android:id="@+id/chips_row_0"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:layout_marginTop="3dp"
-            android:layout_marginStart="11dp"
-            android:visibility="visible">
+            android:layout_marginStart="11dp">
 
             <TextView
-                android:id="@+id/p0"
+                android:id="@+id/chip_present"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="P:1"
@@ -185,7 +181,7 @@
                 android:background="#1581C784" />
 
             <TextView
-                android:id="@+id/a0"
+                android:id="@+id/chip_absent"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
@@ -198,7 +194,7 @@
                 android:background="#15E57373" />
 
             <TextView
-                android:id="@+id/l0"
+                android:id="@+id/chip_late"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
@@ -211,7 +207,7 @@
                 android:background="#15FFB74D" />
 
             <TextView
-                android:id="@+id/e0"
+                android:id="@+id/chip_excused"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
@@ -224,9 +220,8 @@
                 android:background="#1564B5F6" />
         </LinearLayout>
 
-        <!-- Status 1 -->
         <TextView
-            android:id="@+id/status_0"
+            android:id="@+id/attendance_widget_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Can miss 0 more sessions"
@@ -241,17 +236,16 @@
             android:maxLines="1"
             android:ellipsize="end" />
 
-        <!-- Divider -->
         <View
             android:id="@+id/divider_0"
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="2dp"
+            android:layout_marginTop="5dp"
+            android:layout_marginBottom="1dp"
             android:background="#20FFFFFF"
             android:visibility="gone" />
 
-        <!-- === SUBJECT 2 === -->
+        <!-- ========== SUBJECT 1 ========== -->
         <LinearLayout
             android:id="@+id/subject_row_1"
             android:layout_width="match_parent"
@@ -312,7 +306,6 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Chips row 2 -->
         <LinearLayout
             android:id="@+id/chips_row_1"
             android:layout_width="wrap_content"
@@ -374,7 +367,6 @@
                 android:background="#1564B5F6" />
         </LinearLayout>
 
-        <!-- Status 2 -->
         <TextView
             android:id="@+id/status_1"
             android:layout_width="wrap_content"
@@ -392,17 +384,16 @@
             android:ellipsize="end"
             android:visibility="gone" />
 
-        <!-- Divider -->
         <View
             android:id="@+id/divider_1"
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="2dp"
+            android:layout_marginTop="5dp"
+            android:layout_marginBottom="1dp"
             android:background="#20FFFFFF"
             android:visibility="gone" />
 
-        <!-- === SUBJECT 3 === -->
+        <!-- ========== SUBJECT 2 ========== -->
         <LinearLayout
             android:id="@+id/subject_row_2"
             android:layout_width="match_parent"
@@ -463,7 +454,6 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Chips row 3 -->
         <LinearLayout
             android:id="@+id/chips_row_2"
             android:layout_width="wrap_content"
@@ -525,9 +515,156 @@
                 android:background="#1564B5F6" />
         </LinearLayout>
 
-        <!-- Status 3 -->
         <TextView
             android:id="@+id/status_2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Can miss 0 more sessions"
+            android:textColor="#FFFFFF"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:layout_marginTop="4dp"
+            android:layout_marginStart="11dp"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="2dp"
+            android:background="#40888888"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:visibility="gone" />
+
+        <View
+            android:id="@+id/divider_2"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="5dp"
+            android:layout_marginBottom="1dp"
+            android:background="#20FFFFFF"
+            android:visibility="gone" />
+
+        <!-- ========== SUBJECT 3 ========== -->
+        <LinearLayout
+            android:id="@+id/subject_row_3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/dot_3"
+                android:layout_width="3dp"
+                android:layout_height="32dp"
+                android:layout_marginEnd="8dp"
+                android:background="#AB47BC" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/name_3"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Zoology"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
+
+                    <TextView
+                        android:id="@+id/pct_3"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="100%"
+                        android:textColor="#81C784"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/ratio_3"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="1 / 1 sessions"
+                    android:textColor="#B0FFFFFF"
+                    android:textSize="10sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/chips_row_3"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="3dp"
+            android:layout_marginStart="11dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/p3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="P:1"
+                android:textSize="9sp"
+                android:textColor="#81C784"
+                android:textStyle="bold"
+                android:paddingHorizontal="5dp"
+                android:paddingVertical="1dp"
+                android:background="#1581C784" />
+
+            <TextView
+                android:id="@+id/a3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:text="A:0"
+                android:textSize="9sp"
+                android:textColor="#E57373"
+                android:textStyle="bold"
+                android:paddingHorizontal="5dp"
+                android:paddingVertical="1dp"
+                android:background="#15E57373" />
+
+            <TextView
+                android:id="@+id/l3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:text="L:0"
+                android:textSize="9sp"
+                android:textColor="#FFB74D"
+                android:textStyle="bold"
+                android:paddingHorizontal="5dp"
+                android:paddingVertical="1dp"
+                android:background="#15FFB74D" />
+
+            <TextView
+                android:id="@+id/e3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:text="E:0"
+                android:textSize="9sp"
+                android:textColor="#64B5F6"
+                android:textStyle="bold"
+                android:paddingHorizontal="5dp"
+                android:paddingVertical="1dp"
+                android:background="#1564B5F6" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/status_3"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Can miss 0 more sessions"
