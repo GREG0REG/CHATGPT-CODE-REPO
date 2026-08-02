@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.Color
 import android.view.View
 import android.widget.RemoteViews
@@ -104,6 +105,19 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
             R.id.status_3
         )
 
+        // FIXED: Use SharedPreferences directly instead of HomeWidgetData
+        private fun getWidgetPrefs(context: Context): SharedPreferences {
+            return context.getSharedPreferences("HomeWidgetPreferences", Context.MODE_PRIVATE)
+        }
+
+        private fun getStringPref(prefs: SharedPreferences, key: String, defaultValue: String): String {
+            return prefs.getString(key, defaultValue) ?: defaultValue
+        }
+
+        private fun getIntPref(prefs: SharedPreferences, key: String, defaultValue: Int): Int {
+            return prefs.getInt(key, defaultValue)
+        }
+
         @JvmStatic
         fun updateWidgetDirectly(
             context: Context,
@@ -111,8 +125,8 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
             widgetId: Int
         ) {
             try {
-                val widgetData = HomeWidgetPlugin.getData(context)
-                val subjectCount = widgetData.getInt(KEY_SUBJECT_COUNT, 0)
+                val prefs = getWidgetPrefs(context)
+                val subjectCount = getIntPref(prefs, KEY_SUBJECT_COUNT, 0)
 
                 val views = RemoteViews(context.packageName, R.layout.attendance_widget_layout)
 
@@ -135,10 +149,10 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     val displayCount = subjectCount.coerceAtMost(MAX_SUBJECTS)
 
                     // Update Subject 0 (always shown if we have data)
-                    updateSubject0(views, widgetData)
+                    updateSubject0(views, prefs)
 
                     // Update streak chip for subject 0
-                    val streak = widgetData.getInt(KEY_PREFIX_STREAK + "0", 0)
+                    val streak = getIntPref(prefs, KEY_PREFIX_STREAK + "0", 0)
                     if (streak > 0) {
                         views.setViewVisibility(R.id.attendance_widget_streak_chip, View.VISIBLE)
                         views.setTextViewText(R.id.attendance_widget_streak_text, "$streak")
@@ -156,7 +170,7 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                         views.setViewVisibility(DIVIDER_IDS[i - 1], if (showDivider) View.VISIBLE else View.GONE)
 
                         if (visible) {
-                            updateSubjectN(views, widgetData, i)
+                            updateSubjectN(views, prefs, i)
                         }
                     }
 
@@ -183,16 +197,16 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
             }
         }
 
-        private fun updateSubject0(views: RemoteViews, widgetData: HomeWidgetPlugin.HomeWidgetData) {
-            val name = widgetData.getString(KEY_PREFIX_NAME + "0", "Subject") ?: "Subject"
-            val percent = widgetData.getInt(KEY_PREFIX_PERCENT + "0", 0)
-            val present = widgetData.getInt(KEY_PREFIX_PRESENT + "0", 0)
-            val absent = widgetData.getInt(KEY_PREFIX_ABSENT + "0", 0)
-            val late = widgetData.getInt(KEY_PREFIX_LATE + "0", 0)
-            val excused = widgetData.getInt(KEY_PREFIX_EXCUSED + "0", 0)
-            val total = widgetData.getInt(KEY_PREFIX_TOTAL + "0", 0)
-            val colorHex = widgetData.getString(KEY_PREFIX_COLOR + "0", "#4CAF50") ?: "#4CAF50"
-            val status = widgetData.getString(KEY_PREFIX_STATUS + "0", "No data") ?: "No data"
+        private fun updateSubject0(views: RemoteViews, prefs: SharedPreferences) {
+            val name = getStringPref(prefs, KEY_PREFIX_NAME + "0", "Subject")
+            val percent = getIntPref(prefs, KEY_PREFIX_PERCENT + "0", 0)
+            val present = getIntPref(prefs, KEY_PREFIX_PRESENT + "0", 0)
+            val absent = getIntPref(prefs, KEY_PREFIX_ABSENT + "0", 0)
+            val late = getIntPref(prefs, KEY_PREFIX_LATE + "0", 0)
+            val excused = getIntPref(prefs, KEY_PREFIX_EXCUSED + "0", 0)
+            val total = getIntPref(prefs, KEY_PREFIX_TOTAL + "0", 0)
+            val colorHex = getStringPref(prefs, KEY_PREFIX_COLOR + "0", "#4CAF50")
+            val status = getStringPref(prefs, KEY_PREFIX_STATUS + "0", "No data")
 
             val percentColor = getPercentColor(percent)
             val effectiveTotal = (total - excused).coerceAtLeast(0)
@@ -205,7 +219,6 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
             views.setTextColor(S0_PERCENT, percentColor)
 
             views.setInt(S0_DOT, "setBackgroundColor", subjectColor)
-            views.setProgressBar(S0_PROGRESS, 100, percent.coerceIn(0, 100), false)
             views.setProgressBar(S0_PROGRESS, 100, percent.coerceIn(0, 100), false)
 
             views.setTextViewText(S0_RATIO, "$present / $effectiveTotal sessions")
@@ -220,16 +233,16 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
             views.setTextColor(S0_STATUS, Color.WHITE)
         }
 
-        private fun updateSubjectN(views: RemoteViews, widgetData: HomeWidgetPlugin.HomeWidgetData, index: Int) {
-            val name = widgetData.getString(KEY_PREFIX_NAME + "$index", "Subject") ?: "Subject"
-            val percent = widgetData.getInt(KEY_PREFIX_PERCENT + "$index", 0)
-            val present = widgetData.getInt(KEY_PREFIX_PRESENT + "$index", 0)
-            val absent = widgetData.getInt(KEY_PREFIX_ABSENT + "$index", 0)
-            val late = widgetData.getInt(KEY_PREFIX_LATE + "$index", 0)
-            val excused = widgetData.getInt(KEY_PREFIX_EXCUSED + "$index", 0)
-            val total = widgetData.getInt(KEY_PREFIX_TOTAL + "$index", 0)
-            val colorHex = widgetData.getString(KEY_PREFIX_COLOR + "$index", "#4CAF50") ?: "#4CAF50"
-            val status = widgetData.getString(KEY_PREFIX_STATUS + "$index", "No data") ?: "No data"
+        private fun updateSubjectN(views: RemoteViews, prefs: SharedPreferences, index: Int) {
+            val name = getStringPref(prefs, KEY_PREFIX_NAME + "$index", "Subject")
+            val percent = getIntPref(prefs, KEY_PREFIX_PERCENT + "$index", 0)
+            val present = getIntPref(prefs, KEY_PREFIX_PRESENT + "$index", 0)
+            val absent = getIntPref(prefs, KEY_PREFIX_ABSENT + "$index", 0)
+            val late = getIntPref(prefs, KEY_PREFIX_LATE + "$index", 0)
+            val excused = getIntPref(prefs, KEY_PREFIX_EXCUSED + "$index", 0)
+            val total = getIntPref(prefs, KEY_PREFIX_TOTAL + "$index", 0)
+            val colorHex = getStringPref(prefs, KEY_PREFIX_COLOR + "$index", "#4CAF50")
+            val status = getStringPref(prefs, KEY_PREFIX_STATUS + "$index", "No data")
 
             val percentColor = getPercentColor(percent)
             val effectiveTotal = (total - excused).coerceAtLeast(0)
