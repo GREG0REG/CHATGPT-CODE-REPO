@@ -2089,7 +2089,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
-                                      child: Text(
+                  child: Text(
                       'No attendance records yet.',
                       style: TextStyle(color: cs.outline),
                     ),
