@@ -821,7 +821,17 @@ class DatabaseHelper {
     await db.execute('ALTER TABLE events ADD COLUMN neetTargetScore INTEGER');
     await db.execute('ALTER TABLE events ADD COLUMN neetSubjectFocus TEXT');
 
-    // 2. Add NEET columns to 'study_sessions' table
+    // 2. Migration: add missing NEET columns if table already exists
+    await _addColumnIfNotExists(db, 'events', 'targetScore', 'INTEGER');
+    await _addColumnIfNotExists(db, 'events', 'neetExamType', 'TEXT');
+    await _addColumnIfNotExists(db, 'events', 'revisionRound', 'TEXT');
+    await _addColumnIfNotExists(db, 'events', 'isPyqSession', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'events', 'difficulty', 'TEXT');
+    await _addColumnIfNotExists(db, 'events', 'studyDuration', 'TEXT');
+    await _addColumnIfNotExists(db, 'events', 'studyModeTagsJson', 'TEXT');
+    
+
+    // 3. Add NEET columns to 'study_sessions' table
     await db.execute('ALTER TABLE study_sessions ADD COLUMN neetSubject INTEGER');
     await db.execute('ALTER TABLE study_sessions ADD COLUMN mcqsAttempted INTEGER DEFAULT 0');
     await db.execute('ALTER TABLE study_sessions ADD COLUMN mcqsCorrect INTEGER DEFAULT 0');
@@ -830,7 +840,7 @@ class DatabaseHelper {
     await db.execute('ALTER TABLE study_sessions ADD COLUMN mockTestScore INTEGER');
     await db.execute('ALTER TABLE study_sessions ADD COLUMN mockTestRank INTEGER');
 
-    // 3. Create NEW 'gpa_courses' table (proper GPA schema)
+    // 4. Create NEW 'gpa_courses' table (proper GPA schema)
     await db.execute("""
       CREATE TABLE gpa_courses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
