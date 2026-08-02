@@ -74,23 +74,18 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-8.4-
 
-      - name: Cache Android Keystore
-        id: cache-keystore
-        uses: actions/cache@v4
-        with:
-          path: |
-            android/app/release-key.jks
-            android/key.properties
-          key: android-keystore-v1
-
       - name: Generate signing keystore
-        if: steps.cache-keystore.outputs.cache-hit != 'true'
         run: |
           mkdir -p android/app
-          keytool -genkey -v -keystore android/app/release-key.jks \
-            -storepass releasepass -alias release -keypass releasepass \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=StudyFlow,O=Personal,C=US"
+          if [ ! -f android/app/release-key.jks ]; then
+            keytool -genkey -v -keystore android/app/release-key.jks \
+              -storepass releasepass -alias release -keypass releasepass \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=StudyFlow,O=Personal,C=US"
+            echo "Keystore generated"
+          else
+            echo "Keystore already exists"
+          fi
           echo "storePassword=releasepass" > android/key.properties
           echo "keyPassword=releasepass" >> android/key.properties
           echo "keyAlias=release" >> android/key.properties
