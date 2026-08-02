@@ -27,15 +27,21 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
         private const val KEY_PREFIX_TOTAL = "attendance_subject_total_"
         private const val KEY_PREFIX_COLOR = "attendance_subject_color_"
         private const val KEY_PREFIX_STATUS = "attendance_subject_status_"
+        private const val KEY_PREFIX_STREAK = "attendance_subject_streak_"
 
-        private val ROW_IDS = intArrayOf(
-            R.id.subject_row_0, R.id.subject_row_1, R.id.subject_row_2, R.id.subject_row_3
+        // IDs for each subject's section (views are now flat, not in row containers)
+        private val SECTION_IDS = intArrayOf(
+            R.id.subject_section_0, R.id.subject_section_1,
+            R.id.subject_section_2, R.id.subject_section_3
         )
         private val DIVIDER_IDS = intArrayOf(
             R.id.divider_0, R.id.divider_1, R.id.divider_2
         )
         private val PCT_IDS = intArrayOf(
             R.id.pct_0, R.id.pct_1, R.id.pct_2, R.id.pct_3
+        )
+        private val DOT_IDS = intArrayOf(
+            R.id.dot_0, R.id.dot_1, R.id.dot_2, R.id.dot_3
         )
         private val NAME_IDS = intArrayOf(
             R.id.name_0, R.id.name_1, R.id.name_2, R.id.name_3
@@ -45,6 +51,18 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
         )
         private val RATIO_IDS = intArrayOf(
             R.id.ratio_0, R.id.ratio_1, R.id.ratio_2, R.id.ratio_3
+        )
+        private val P_IDS = intArrayOf(
+            R.id.p0, R.id.p1, R.id.p2, R.id.p3
+        )
+        private val A_IDS = intArrayOf(
+            R.id.a0, R.id.a1, R.id.a2, R.id.a3
+        )
+        private val L_IDS = intArrayOf(
+            R.id.l0, R.id.l1, R.id.l2, R.id.l3
+        )
+        private val E_IDS = intArrayOf(
+            R.id.e0, R.id.e1, R.id.e2, R.id.e3
         )
         private val STATUS_IDS = intArrayOf(
             R.id.status_0, R.id.status_1, R.id.status_2, R.id.status_3
@@ -68,6 +86,7 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
 
                     views.setTextViewText(R.id.attendance_widget_empty_title, "Attendance")
                     views.setTextViewText(R.id.attendance_widget_empty_subtitle, "No subjects yet")
+                    views.setTextViewText(R.id.attendance_widget_empty_cta, "Tap to add subjects")
 
                     setLaunchPendingIntent(context, widgetId, views, R.id.attendance_widget_empty_state)
 
@@ -77,9 +96,18 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
 
                     val displayCount = subjectCount.coerceAtMost(MAX_SUBJECTS)
 
+                    // Streak chip (only for first subject)
+                    val streak = widgetData.getInt(KEY_PREFIX_STREAK + "0", 0)
+                    if (streak > 0) {
+                        views.setViewVisibility(R.id.attendance_widget_streak_chip, View.VISIBLE)
+                        views.setTextViewText(R.id.attendance_widget_streak_text, "$streak")
+                    } else {
+                        views.setViewVisibility(R.id.attendance_widget_streak_chip, View.GONE)
+                    }
+
                     for (i in 0 until MAX_SUBJECTS) {
                         val visible = i < displayCount
-                        views.setViewVisibility(ROW_IDS[i], if (visible) View.VISIBLE else View.GONE)
+                        views.setViewVisibility(SECTION_IDS[i], if (visible) View.VISIBLE else View.GONE)
 
                         if (i < MAX_SUBJECTS - 1) {
                             val showDivider = visible && (i < displayCount - 1)
@@ -97,13 +125,18 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                             val colorHex = widgetData.getString(KEY_PREFIX_COLOR + "$i", "#4CAF50") ?: "#4CAF50"
                             val status = widgetData.getString(KEY_PREFIX_STATUS + "$i", "No data") ?: "No data"
 
-                            val percentColor = try {
+                            val percentColor = when {
+                                percent >= 75 -> Color.parseColor("#4CAF50")
+                                percent >= 60 -> Color.parseColor("#FF9800")
+                                else -> Color.parseColor("#F44336")
+                            }
+
+                            val effectiveTotal = (total - excused).coerceAtLeast(0)
+                            val subjectColor = try {
                                 Color.parseColor(colorHex)
                             } catch (e: Exception) {
                                 Color.parseColor("#4CAF50")
                             }
-
-                            val effectiveTotal = (total - excused).coerceAtLeast(0)
 
                             views.setTextViewText(NAME_IDS[i], name)
                             views.setTextColor(NAME_IDS[i], Color.WHITE)
@@ -111,11 +144,17 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                             views.setTextViewText(PCT_IDS[i], "$percent%")
                             views.setTextColor(PCT_IDS[i], percentColor)
 
+                            views.setInt(DOT_IDS[i], "setBackgroundColor", subjectColor)
                             views.setProgressBar(PROGRESS_IDS[i], 100, percent.coerceIn(0, 100), false)
 
                             val ratioText = if (i == 0) "$present / $effectiveTotal sessions" else "$present / $effectiveTotal"
                             views.setTextViewText(RATIO_IDS[i], ratioText)
                             views.setTextColor(RATIO_IDS[i], Color.parseColor("#B0FFFFFF"))
+
+                            views.setTextViewText(P_IDS[i], "P:$present")
+                            views.setTextViewText(A_IDS[i], "A:$absent")
+                            views.setTextViewText(L_IDS[i], "L:$late")
+                            views.setTextViewText(E_IDS[i], "E:$excused")
 
                             views.setTextViewText(STATUS_IDS[i], status)
                             views.setTextColor(STATUS_IDS[i], Color.WHITE)
@@ -130,6 +169,17 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
 
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "Update failed for widget $widgetId", e)
+                try {
+                    val fallback = RemoteViews(context.packageName, R.layout.attendance_widget_layout)
+                    fallback.setViewVisibility(R.id.attendance_widget_empty_state, View.VISIBLE)
+                    fallback.setViewVisibility(R.id.attendance_widget_content, View.GONE)
+                    fallback.setTextViewText(R.id.attendance_widget_empty_title, "Attendance")
+                    fallback.setTextViewText(R.id.attendance_widget_empty_subtitle, "Loading...")
+                    fallback.setTextViewText(R.id.attendance_widget_empty_cta, "Tap to refresh")
+                    appWidgetManager.updateAppWidget(widgetId, fallback)
+                } catch (e2: Exception) {
+                    android.util.Log.e(TAG, "Fallback also failed", e2)
+                }
             }
         }
 
