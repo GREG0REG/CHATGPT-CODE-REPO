@@ -1,8 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Attendance Widget — NEET Edition v2
-  Redesigned with modern glassmorphism look
--->
 <appwidget-provider
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="180dp"
@@ -10,7 +6,7 @@
     android:minResizeWidth="140dp"
     android:minResizeHeight="80dp"
     android:maxResizeWidth="400dp"
-    android:maxResizeHeight="200dp"
+    android:maxResizeHeight="300dp"
     android:targetCellWidth="3"
     android:targetCellHeight="2"
     android:updatePeriodMillis="1800000"
