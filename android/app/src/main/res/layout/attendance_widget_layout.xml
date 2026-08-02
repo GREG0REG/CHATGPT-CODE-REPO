@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Attendance Widget — NEET Edition v5
-  4 subjects. Built from WORKING v4.
-  Subject 0 retains ALL original IDs.
+  Attendance Widget — NEET Edition v6 (FIXED)
+  All 4 subjects with proper IDs and visibility control.
 -->
 <FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -10,14 +9,14 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- EMPTY STATE — exact working v4 -->
+    <!-- EMPTY STATE -->
     <LinearLayout
         android:id="@+id/attendance_widget_empty_state"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="horizontal"
         android:padding="14dp"
-        android:background="#E6003830"
+        android:background="@drawable/attendance_widget_bg"
         android:gravity="center_vertical"
         android:visibility="gone">
 
@@ -71,14 +70,14 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- CONTENT STATE — vertical stack -->
+    <!-- CONTENT STATE -->
     <LinearLayout
         android:id="@+id/attendance_widget_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:padding="14dp"
-        android:background="#E6003830">
+        android:background="@drawable/attendance_widget_bg">
 
         <!-- Header -->
         <LinearLayout
@@ -126,7 +125,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ===== SUBJECT 0 — ALL ORIGINAL IDs ===== -->
+        <!-- ===== SUBJECT 0 — NOW WITH PROPER ID ===== -->
         <LinearLayout
             android:id="@+id/subject_row_0"
             android:layout_width="match_parent"
