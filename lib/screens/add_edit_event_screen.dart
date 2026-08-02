@@ -8,7 +8,7 @@ import '../models/event.dart';
 import '../models/custom_reminder.dart';
 import '../models/subtask.dart';
 import '../models/yearly_specific_date.dart';
-import '../db/database_helper.dart';
+import '../database_helper.dart';
 import '../services/notification_service.dart';
 import '../services/settings_service.dart';
 import '../services/widget_service.dart';
