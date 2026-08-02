@@ -23,6 +23,38 @@ enum NeetExamType {
   pyqPractice,
 }
 
+extension NeetExamTypeExt on NeetExamType {
+  String get label {
+    switch (this) {
+      case NeetExamType.none: return 'Not specified';
+      case NeetExamType.mockTest: return 'Mock Test';
+      case NeetExamType.revisionSession: return 'Revision Session';
+      case NeetExamType.finalPrep: return 'Final Prep';
+      case NeetExamType.pyqPractice: return 'PYQ Practice';
+    }
+  }
+
+  String get dbValue {
+    switch (this) {
+      case NeetExamType.none: return 'none';
+      case NeetExamType.mockTest: return 'mockTest';
+      case NeetExamType.revisionSession: return 'revisionSession';
+      case NeetExamType.finalPrep: return 'finalPrep';
+      case NeetExamType.pyqPractice: return 'pyqPractice';
+    }
+  }
+
+  static NeetExamType fromString(String? value) {
+    switch (value) {
+      case 'mockTest': return NeetExamType.mockTest;
+      case 'revisionSession': return NeetExamType.revisionSession;
+      case 'finalPrep': return NeetExamType.finalPrep;
+      case 'pyqPractice': return NeetExamType.pyqPractice;
+      default: return NeetExamType.none;
+    }
+  }
+}
+
 // ============================================
 // REVISION ROUND
 // ============================================
@@ -31,6 +63,130 @@ enum RevisionRound {
   round2,
   round3,
   mockTestPhase,
+}
+
+extension RevisionRoundExt on RevisionRound {
+  String get label {
+    switch (this) {
+      case RevisionRound.round1: return 'Round 1: First Reading';
+      case RevisionRound.round2: return 'Round 2: Revision';
+      case RevisionRound.round3: return 'Round 3: Final Revision';
+      case RevisionRound.mockTestPhase: return 'Mock Test Phase';
+    }
+  }
+
+  String get dbValue {
+    switch (this) {
+      case RevisionRound.round1: return 'round1';
+      case RevisionRound.round2: return 'round2';
+      case RevisionRound.round3: return 'round3';
+      case RevisionRound.mockTestPhase: return 'mockTestPhase';
+    }
+  }
+
+  static RevisionRound fromString(String? value) {
+    switch (value) {
+      case 'round1': return RevisionRound.round1;
+      case 'round2': return RevisionRound.round2;
+      case 'round3': return RevisionRound.round3;
+      case 'mockTestPhase': return RevisionRound.mockTestPhase;
+      default: return RevisionRound.round1;
+    }
+  }
+}
+
+// ============================================
+// STUDY DIFFICULTY
+// ============================================
+enum StudyDifficulty {
+  easy,
+  medium,
+  hard,
+}
+
+extension StudyDifficultyExt on StudyDifficulty {
+  String get label {
+    switch (this) {
+      case StudyDifficulty.easy: return 'Easy';
+      case StudyDifficulty.medium: return 'Medium';
+      case StudyDifficulty.hard: return 'Hard';
+    }
+  }
+
+  String get dbValue {
+    switch (this) {
+      case StudyDifficulty.easy: return 'easy';
+      case StudyDifficulty.medium: return 'medium';
+      case StudyDifficulty.hard: return 'hard';
+    }
+  }
+
+  static StudyDifficulty fromString(String? value) {
+    switch (value) {
+      case 'easy': return StudyDifficulty.easy;
+      case 'hard': return StudyDifficulty.hard;
+      default: return StudyDifficulty.medium;
+    }
+  }
+}
+
+// ============================================
+// STUDY DURATION
+// ============================================
+enum StudyDuration {
+  short,    // < 1 hour
+  medium,   // 1-3 hours
+  long,     // 3+ hours
+}
+
+extension StudyDurationExt on StudyDuration {
+  String get label {
+    switch (this) {
+      case StudyDuration.short: return 'Short Session';
+      case StudyDuration.medium: return 'Medium Session';
+      case StudyDuration.long: return 'Long Session';
+    }
+  }
+
+  String get subtitle {
+    switch (this) {
+      case StudyDuration.short: return '< 1 hour';
+      case StudyDuration.medium: return '1 – 3 hours';
+      case StudyDuration.long: return '3+ hours';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case StudyDuration.short: return Icons.timer_outlined;
+      case StudyDuration.medium: return Icons.timelapse_outlined;
+      case StudyDuration.long: return Icons.hourglass_bottom_outlined;
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case StudyDuration.short: return Colors.teal;
+      case StudyDuration.medium: return Colors.indigo;
+      case StudyDuration.long: return Colors.deepPurple;
+    }
+  }
+
+  String get dbValue {
+    switch (this) {
+      case StudyDuration.short: return 'short';
+      case StudyDuration.medium: return 'medium';
+      case StudyDuration.long: return 'long';
+    }
+  }
+
+  static StudyDuration fromString(String? value) {
+    switch (value) {
+      case 'short': return StudyDuration.short;
+      case 'long': return StudyDuration.long;
+      default: return StudyDuration.medium;
+    }
+  }
 }
 
 // ============================================
@@ -157,6 +313,11 @@ class Event {
   final String? revisionRound;   // 'round1', 'round2', 'round3', 'mockTestPhase'
   final bool isPyqSession;       // Is this a PYQ practice session
 
+  // --- NEW: Working study features ---
+  final String? difficulty;        // 'easy', 'medium', 'hard'
+  final String? studyDuration;     // 'short', 'medium', 'long'
+  final String? studyModeTagsJson; // JSON array of selected study mode tags
+
   const Event({
     this.id,
     required this.title,
@@ -183,6 +344,10 @@ class Event {
     this.neetExamType,
     this.revisionRound,
     this.isPyqSession = false,
+    // NEW working study features
+    this.difficulty,
+    this.studyDuration,
+    this.studyModeTagsJson,
   });
 
   // --- Computed properties ---
@@ -338,6 +503,29 @@ class Event {
     return isNeetExam && (priority >= 3);
   }
 
+  /// Parsed NEET exam type enum
+  NeetExamType get neetExamTypeEnum => NeetExamTypeExt.fromString(neetExamType);
+
+  /// Parsed revision round enum
+  RevisionRound get revisionRoundEnum => RevisionRoundExt.fromString(revisionRound);
+
+  /// Parsed difficulty enum
+  StudyDifficulty get difficultyEnum => StudyDifficultyExt.fromString(difficulty);
+
+  /// Parsed study duration enum
+  StudyDuration get studyDurationEnum => StudyDurationExt.fromString(studyDuration);
+
+  /// Parsed study mode tags
+  List<String> get studyModeTags {
+    if (studyModeTagsJson == null || studyModeTagsJson!.isEmpty) return [];
+    try {
+      final list = jsonDecode(studyModeTagsJson!) as List;
+      return list.cast<String>();
+    } catch (_) {
+      return [];
+    }
+  }
+
   // ============================================
   // COPY & SERIALIZATION
   // ============================================
@@ -379,6 +567,13 @@ class Event {
     String? revisionRound,
     bool clearRevisionRound = false,
     bool? isPyqSession,
+    // NEW working study features
+    String? difficulty,
+    bool clearDifficulty = false,
+    String? studyDuration,
+    bool clearStudyDuration = false,
+    String? studyModeTagsJson,
+    bool clearStudyModeTags = false,
   }) {
     return Event(
       id: id ?? this.id,
@@ -415,6 +610,10 @@ class Event {
       neetExamType: clearNeetExamType ? null : (neetExamType ?? this.neetExamType),
       revisionRound: clearRevisionRound ? null : (revisionRound ?? this.revisionRound),
       isPyqSession: isPyqSession ?? this.isPyqSession,
+      // NEW working study features
+      difficulty: clearDifficulty ? null : (difficulty ?? this.difficulty),
+      studyDuration: clearStudyDuration ? null : (studyDuration ?? this.studyDuration),
+      studyModeTagsJson: clearStudyModeTags ? null : (studyModeTagsJson ?? this.studyModeTagsJson),
     );
   }
 
@@ -507,6 +706,16 @@ class Event {
     if (map['isPyqSession'] != null && map['isPyqSession'] is! int && map['isPyqSession'] is! bool) {
       errors.add('"isPyqSession" must be an int, bool, or null, got ${map['isPyqSession'].runtimeType}');
     }
+    // NEW working study features validation
+    if (map['difficulty'] != null && map['difficulty'] is! String) {
+      errors.add('"difficulty" must be a String or null, got ${map['difficulty'].runtimeType}');
+    }
+    if (map['studyDuration'] != null && map['studyDuration'] is! String) {
+      errors.add('"studyDuration" must be a String or null, got ${map['studyDuration'].runtimeType}');
+    }
+    if (map['studyModeTagsJson'] != null && map['studyModeTagsJson'] is! String) {
+      errors.add('"studyModeTagsJson" must be a String or null, got ${map['studyModeTagsJson'].runtimeType}');
+    }
 
     if (errors.isNotEmpty) {
       throw FormatException(errors.join('; '));
@@ -540,6 +749,10 @@ class Event {
       'neetExamType': neetExamType,
       'revisionRound': revisionRound,
       'isPyqSession': isPyqSession ? 1 : 0,
+      // NEW working study features
+      'difficulty': difficulty,
+      'studyDuration': studyDuration,
+      'studyModeTagsJson': studyModeTagsJson,
     };
   }
 
@@ -574,6 +787,10 @@ class Event {
       neetExamType: map['neetExamType'] as String?,
       revisionRound: map['revisionRound'] as String?,
       isPyqSession: _parseBool(map['isPyqSession']),
+      // NEW working study features
+      difficulty: map['difficulty'] as String?,
+      studyDuration: map['studyDuration'] as String?,
+      studyModeTagsJson: map['studyModeTagsJson'] as String?,
     );
   }
 
