@@ -74,9 +74,6 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                     for (i in 0 until MAX_SUBJECTS) {
                         val visible = i < displayCount
                         
-                        // Hide/show by setting text to empty and visibility
-                        // Since we can't easily hide individual TextViews in a flat layout,
-                        // we just leave them visible but with empty text for unused slots
                         if (visible) {
                             val name = widgetData.getString(KEY_PREFIX_NAME + "$i", "Subject") ?: "Subject"
                             val percent = widgetData.getInt(KEY_PREFIX_PERCENT + "$i", 0)
@@ -103,7 +100,6 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                             views.setTextColor(PCT_IDS[i], percentColor)
 
                             views.setProgressBar(PROGRESS_IDS[i], 100, percent.coerceIn(0, 100), false)
-                            views.setInt(PROGRESS_IDS[i], "setProgressTintList", percentColor)
 
                             val ratioText = "$present / $effectiveTotal"
                             views.setTextViewText(RATIO_IDS[i], ratioText)
@@ -112,7 +108,6 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
                             views.setTextViewText(STATUS_IDS[i], status)
                             views.setTextColor(STATUS_IDS[i], Color.WHITE)
                         } else {
-                            // Clear unused slots
                             views.setTextViewText(NAME_IDS[i], "")
                             views.setTextViewText(PCT_IDS[i], "")
                             views.setProgressBar(PROGRESS_IDS[i], 100, 0, false)
