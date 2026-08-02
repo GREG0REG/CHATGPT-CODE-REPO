@@ -74,11 +74,14 @@
     public static int d(...);
     public static int e(...);
 }
+
 # ============================================
-# Widget Resources - Prevent R8 from stripping
+# WIDGET RESOURCES - CRITICAL FIX
+# R8/shrinkResources cannot trace RemoteViews
+# runtime resource usage. Must keep explicitly.
 # ============================================
 
-# Keep ALL widget-related resources (R8 shrinkResources can't trace RemoteViews usage)
+# Keep ALL widget layout resources
 -keepresources layout/reading_widget_*
 -keepresources layout/attendance_widget_*
 -keepresources layout/event_widget_*
@@ -87,6 +90,7 @@
 -keepresources layout/habit_widget_*
 -keepresources layout/widget_*
 
+# Keep ALL widget drawable resources
 -keepresources drawable/reading_*
 -keepresources drawable/attendance_*
 -keepresources drawable/event_*
@@ -100,4 +104,5 @@
 -keepresources drawable/launch_*
 -keepresources drawable/urgency_*
 
+# Keep ALL widget info XML files
 -keepresources xml/*_widget_info.xml
