@@ -12,7 +12,7 @@ import '../database_helper.dart';
 import '../services/notification_service.dart';
 import '../services/settings_service.dart';
 import '../services/widget_service.dart';
-import '../theme/event_icons.dart';
+
 
 enum RecurrenceType { none, daily, weekly, monthly, yearly }
 
