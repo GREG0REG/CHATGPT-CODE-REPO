@@ -28,11 +28,17 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
         private const val KEY_PREFIX_COLOR = "attendance_subject_color_"
         private const val KEY_PREFIX_STATUS = "attendance_subject_status_"
 
-        private val NAME_IDS = intArrayOf(
-            R.id.name_0, R.id.name_1, R.id.name_2, R.id.name_3
+        private val ROW_IDS = intArrayOf(
+            R.id.subject_row_0, R.id.subject_row_1, R.id.subject_row_2, R.id.subject_row_3
+        )
+        private val DIVIDER_IDS = intArrayOf(
+            R.id.divider_0, R.id.divider_1, R.id.divider_2
         )
         private val PCT_IDS = intArrayOf(
             R.id.pct_0, R.id.pct_1, R.id.pct_2, R.id.pct_3
+        )
+        private val NAME_IDS = intArrayOf(
+            R.id.name_0, R.id.name_1, R.id.name_2, R.id.name_3
         )
         private val PROGRESS_IDS = intArrayOf(
             R.id.progress_0, R.id.progress_1, R.id.progress_2, R.id.progress_3
@@ -73,7 +79,13 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
 
                     for (i in 0 until MAX_SUBJECTS) {
                         val visible = i < displayCount
-                        
+                        views.setViewVisibility(ROW_IDS[i], if (visible) View.VISIBLE else View.GONE)
+
+                        if (i < MAX_SUBJECTS - 1) {
+                            val showDivider = visible && (i < displayCount - 1)
+                            views.setViewVisibility(DIVIDER_IDS[i], if (showDivider) View.VISIBLE else View.GONE)
+                        }
+
                         if (visible) {
                             val name = widgetData.getString(KEY_PREFIX_NAME + "$i", "Subject") ?: "Subject"
                             val percent = widgetData.getInt(KEY_PREFIX_PERCENT + "$i", 0)
@@ -101,18 +113,12 @@ class AttendanceWidgetProvider : AppWidgetProvider() {
 
                             views.setProgressBar(PROGRESS_IDS[i], 100, percent.coerceIn(0, 100), false)
 
-                            val ratioText = "$present / $effectiveTotal"
+                            val ratioText = if (i == 0) "$present / $effectiveTotal sessions" else "$present / $effectiveTotal"
                             views.setTextViewText(RATIO_IDS[i], ratioText)
                             views.setTextColor(RATIO_IDS[i], Color.parseColor("#B0FFFFFF"))
 
                             views.setTextViewText(STATUS_IDS[i], status)
                             views.setTextColor(STATUS_IDS[i], Color.WHITE)
-                        } else {
-                            views.setTextViewText(NAME_IDS[i], "")
-                            views.setTextViewText(PCT_IDS[i], "")
-                            views.setProgressBar(PROGRESS_IDS[i], 100, 0, false)
-                            views.setTextViewText(RATIO_IDS[i], "")
-                            views.setTextViewText(STATUS_IDS[i], "")
                         }
                     }
 
