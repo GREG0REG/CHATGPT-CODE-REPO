@@ -149,23 +149,10 @@ class WidgetService {
     return luminance > 0.5 ? Colors.black : Colors.white;
   }
 
-    // ─────────────────────────────────────────────
+  // ═════════════════════════════════════════════════════════════════
   // ATTENDANCE WIDGET — NEET Edition v3
   // Dark green card style matching Reading Tracker
-  // ─────────────────────────────────────────────
-  static const String attendanceAndroidWidgetName = 'AttendanceWidgetProvider';
-
-  static const _kAttSubjectCount = 'attendance_subject_count';
-  static const _kAttPrefixName = 'attendance_subject_name_';
-  static const _kAttPrefixPercent = 'attendance_subject_percent_';
-  static const _kAttPrefixPresent = 'attendance_subject_present_';
-  static const _kAttPrefixAbsent = 'attendance_subject_absent_';
-  static const _kAttPrefixLate = 'attendance_subject_late_';
-  static const _kAttPrefixExcused = 'attendance_subject_excused_';
-  static const _kAttPrefixTotal = 'attendance_subject_total_';
-  static const _kAttPrefixColor = 'attendance_subject_color_';
-  static const _kAttPrefixStatus = 'attendance_subject_status_';
-  static const _kAttPrefixStreak = 'attendance_subject_streak_';
+  // ═════════════════════════════════════════════════════════════════
 
   static Future<void> refreshAttendanceWidget() async {
     try {
@@ -272,11 +259,11 @@ class WidgetService {
       }
 
       await HomeWidget.updateWidget(
-        name: attendanceAndroidWidgetName,
-        androidName: attendanceAndroidWidgetName,
+        name: attendanceWidgetName,
+        androidName: attendanceWidgetName,
       );
     } catch (e, st) {
-      debugPrint('refreshAttendanceWidget error: $e\\n$st');
+      debugPrint('refreshAttendanceWidget error: $e\n$st');
     }
   }
 
@@ -464,128 +451,6 @@ class WidgetService {
     }
     final diff = date.difference(now).inDays;
     return diff.clamp(0, 999);
-  }
-
-  // ═════════════════════════════════════════════════════════════════
-  // ATTENDANCE WIDGET
-  // ═════════════════════════════════════════════════════════════════
-
-  static Future<void> refreshAttendanceWidget() async {
-    try {
-      final subjects = await DatabaseHelper.instance.getAllAttendanceSubjects();
-      final subjectData = <Map<String, dynamic>>[];
-
-      for (final row in subjects) {
-        final id = (row['id'] as int?) ?? 0;
-        final name = row['name'] as String;
-        final requiredPct = (row['requiredPercentage'] as num?)?.toDouble() ?? 75.0;
-        final colorHex = row['colorHex'] as String? ?? '#4CAF50';
-
-        final stats = await DatabaseHelper.instance.getAttendanceStatsForSubject(name);
-        final present = (stats['present'] as int?) ?? 0;
-        final absent = (stats['absent'] as int?) ?? 0;
-        final late = (stats['late'] as int?) ?? 0;
-        final excused = (stats['excused'] as int?) ?? 0;
-        final total = (stats['total'] as int?) ?? 0;
-
-        final effectiveTotal = total - excused;
-        final attended = present + (late * 0.5);
-        final percentage = effectiveTotal > 0
-            ? ((attended / effectiveTotal) * 100).toInt()
-            : 0;
-
-        String statusText;
-        int canMiss = 0;
-        if (effectiveTotal == 0) {
-          statusText = 'No data yet';
-        } else if (requiredPct >= 100.0) {
-          statusText = percentage >= 99 ? 'Perfect attendance!' : '100% required — attend all';
-        } else if (percentage >= requiredPct) {
-          canMiss = ((effectiveTotal * (requiredPct / 100) - absent) / (1 - requiredPct / 100)).floor();
-          canMiss = canMiss.clamp(0, 999);
-          statusText = 'Can miss $canMiss more';
-        } else {
-          final needAttend = ((requiredPct / 100 * effectiveTotal - attended) / (requiredPct / 100)).ceil();
-          statusText = 'Need $needAttend more';
-        }
-
-        final streak = await _calculateStreakForSubject(name);
-
-        subjectData.add({
-          'name': name,
-          'percentage': percentage,
-          'present': present,
-          'absent': absent,
-          'late': late,
-          'excused': excused,
-          'total': total,
-          'effectiveTotal': effectiveTotal,
-          'color': colorHex,
-          'status': statusText,
-          'streak': streak,
-          'canMiss': canMiss,
-        });
-      }
-
-      subjectData.sort((a, b) => (a['percentage'] as int).compareTo(b['percentage'] as int));
-
-      await HomeWidget.saveWidgetData(_kAttSubjectCount, subjectData.length);
-
-      for (int i = 0; i < subjectData.length && i < 5; i++) {
-        final s = subjectData[i];
-        await HomeWidget.saveWidgetData(_kAttPrefixName + '$i', s['name'] as String);
-        await HomeWidget.saveWidgetData(_kAttPrefixPercent + '$i', s['percentage'] as int);
-        await HomeWidget.saveWidgetData(_kAttPrefixPresent + '$i', s['present'] as int);
-        await HomeWidget.saveWidgetData(_kAttPrefixAbsent + '$i', s['absent'] as int);
-        await HomeWidget.saveWidgetData(_kAttPrefixLate + '$i', s['late'] as int);
-        await HomeWidget.saveWidgetData(_kAttPrefixExcused + '$i', s['excused'] as int);
-        await HomeWidget.saveWidgetData(_kAttPrefixTotal + '$i', s['total'] as int);
-        await HomeWidget.saveWidgetData(_kAttPrefixColor + '$i', s['color'] as String);
-        await HomeWidget.saveWidgetData(_kAttPrefixStatus + '$i', s['status'] as String);
-        await HomeWidget.saveWidgetData(_kAttPrefixStreak + '$i', s['streak'] as int);
-        await HomeWidget.saveWidgetData(_kAttPrefixCanMiss + '$i', s['canMiss'] as int);
-      }
-
-      await HomeWidget.updateWidget(
-        name: attendanceWidgetName,
-        androidName: attendanceWidgetName,
-      );
-
-      debugPrint('Attendance widget data saved: ${subjectData.length} subjects');
-    } catch (e) {
-      debugPrint('WidgetService.refreshAttendanceWidget error: $e');
-    }
-  }
-
-  static Future<int> _calculateStreakForSubject(String subjectName) async {
-    final logs = await DatabaseHelper.instance.getAttendanceLogsForSubject(subjectName);
-    final sortedLogs = logs.where((l) => l['subjectName'] == subjectName).toList()
-      ..sort((a, b) => ((b['dateMillis'] as int?) ?? 0).compareTo((a['dateMillis'] as int?) ?? 0));
-
-    if (sortedLogs.isEmpty) return 0;
-
-    int streak = 0;
-    final now = DateTime.now();
-    var expectedDate = DateTime(now.year, now.month, now.day);
-
-    for (final log in sortedLogs) {
-      final logDate = DateTime.fromMillisecondsSinceEpoch((log['dateMillis'] as int?) ?? 0);
-      final normalizedLog = DateTime(logDate.year, logDate.month, logDate.day);
-
-      if (normalizedLog == expectedDate) {
-        final status = log['status'] as String? ?? '';
-        if (status == 'present' || status == 'late') {
-          streak++;
-          expectedDate = expectedDate.subtract(const Duration(days: 1));
-        } else {
-          break;
-        }
-      } else if (normalizedLog.isBefore(expectedDate)) {
-        break;
-      }
-    }
-
-    return streak;
   }
 
   // ═════════════════════════════════════════════════════════════════
@@ -1282,4 +1147,3 @@ class WidgetService {
     // No-op: tap-to-open is handled natively. Kept for clarity.
   }
 }
-
