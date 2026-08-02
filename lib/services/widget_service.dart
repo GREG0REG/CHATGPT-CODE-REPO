@@ -154,6 +154,12 @@ class WidgetService {
   // Dark green card style matching Reading Tracker
   // ═════════════════════════════════════════════════════════════════
 
+    // ═════════════════════════════════════════════════════════════════
+  // ATTENDANCE WIDGET — NEET Edition v4
+  // Dark green card style matching Reading Tracker widget
+  // Shows up to 4 subjects with progress bars and streak
+  // ═════════════════════════════════════════════════════════════════
+
   static Future<void> refreshAttendanceWidget() async {
     try {
       final subjects = await DatabaseHelper.instance.getAllAttendanceSubjects();
@@ -238,10 +244,12 @@ class WidgetService {
         });
       }
 
+      // Sort: lowest percentage first (most at-risk)
       subjectData.sort((a, b) =>
           (a['percent'] as double).compareTo(b['percent'] as double));
 
-      final count = subjectData.length.clamp(0, 10);
+      // Save up to 4 subjects (widget layout limit)
+      final count = subjectData.length.clamp(0, 4);
       await HomeWidget.saveWidgetData(_kAttSubjectCount, count);
 
       for (int i = 0; i < count; i++) {
@@ -258,10 +266,18 @@ class WidgetService {
         await HomeWidget.saveWidgetData(_kAttPrefixStreak + '$i', s['streak'] as int);
       }
 
+      // Clear old data beyond current count
+      for (int i = count; i < 10; i++) {
+        await HomeWidget.saveWidgetData(_kAttPrefixName + '$i', null);
+        await HomeWidget.saveWidgetData(_kAttPrefixPercent + '$i', null);
+      }
+
       await HomeWidget.updateWidget(
         name: attendanceWidgetName,
         androidName: attendanceWidgetName,
       );
+
+      debugPrint('Attendance widget refreshed: $count subjects');
     } catch (e, st) {
       debugPrint('refreshAttendanceWidget error: $e\n$st');
     }
