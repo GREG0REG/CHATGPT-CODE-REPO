@@ -14,7 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:event_countdown/db/database_helper.dart';
 import '../services/settings_service.dart';
-import 'package:event_countdown/services/widget_service.dart';
+import '../database_helper.dart';
 
 // ═══════════════════════════════════════════════════════════════════
 // NEET DATA MODELS & HISTORICAL DATA
