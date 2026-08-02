@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Attendance Widget — NEET Edition v5
-  Based on WORKING v4. Added 3 more subjects.
-  CRITICAL: Keeps all original IDs and structure for subject 0.
+  4 subjects. Built from WORKING v4.
+  Subject 0 retains ALL original IDs.
 -->
 <FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -10,7 +10,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- EMPTY STATE — EXACTLY as working v4 -->
+    <!-- EMPTY STATE — exact working v4 -->
     <LinearLayout
         android:id="@+id/attendance_widget_empty_state"
         android:layout_width="match_parent"
@@ -71,7 +71,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- CONTENT STATE — vertical stack of subjects -->
+    <!-- CONTENT STATE — vertical stack -->
     <LinearLayout
         android:id="@+id/attendance_widget_content"
         android:layout_width="match_parent"
@@ -80,13 +80,13 @@
         android:padding="14dp"
         android:background="#E6003830">
 
-        <!-- Header: Title + Streak -->
+        <!-- Header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginBottom="8dp">
+            android:layout_marginBottom="6dp">
 
             <TextView
                 android:layout_width="0dp"
@@ -126,7 +126,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ========== SUBJECT 0 (ORIGINAL WORKING STRUCTURE) ========== -->
+        <!-- ===== SUBJECT 0 — ALL ORIGINAL IDs ===== -->
         <LinearLayout
             android:id="@+id/subject_row_0"
             android:layout_width="match_parent"
@@ -134,7 +134,6 @@
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <!-- Left: Large Percentage -->
             <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
@@ -152,21 +151,18 @@
                     android:textStyle="bold" />
             </FrameLayout>
 
-            <!-- Right: Subject Info -->
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="2"
                 android:orientation="vertical">
 
-                <!-- Subject Name with Color Dot -->
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical">
 
-                    <!-- CRITICAL: TextView with bullet char — safe for setTextColor in RemoteViews -->
                     <TextView
                         android:id="@+id/attendance_widget_subject_dot"
                         android:layout_width="10dp"
@@ -188,7 +184,6 @@
                         android:ellipsize="end" />
                 </LinearLayout>
 
-                <!-- Ratio -->
                 <TextView
                     android:id="@+id/attendance_widget_ratio"
                     android:layout_width="wrap_content"
@@ -198,7 +193,6 @@
                     android:textSize="13sp"
                     android:layout_marginTop="3dp" />
 
-                <!-- P/A/L/E Mini Chips -->
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -257,7 +251,6 @@
                         android:background="#152196F3" />
                 </LinearLayout>
 
-                <!-- Status Pill -->
                 <TextView
                     android:id="@+id/attendance_widget_status"
                     android:layout_width="wrap_content"
@@ -275,17 +268,16 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Divider 0 -->
         <View
             android:id="@+id/divider_0"
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
             android:layout_marginBottom="4dp"
             android:background="#20FFFFFF"
             android:visibility="gone" />
 
-        <!-- ========== SUBJECT 1 ========== -->
+        <!-- ===== SUBJECT 1 ===== -->
         <LinearLayout
             android:id="@+id/subject_row_1"
             android:layout_width="match_parent"
@@ -307,7 +299,7 @@
                     android:layout_gravity="center"
                     android:text="0%"
                     android:textColor="#FFFFFF"
-                    android:textSize="28sp"
+                    android:textSize="26sp"
                     android:textStyle="bold" />
             </FrameLayout>
 
@@ -428,17 +420,16 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Divider 1 -->
         <View
             android:id="@+id/divider_1"
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="4dp"
+            android:layout_marginTop="5dp"
+            android:layout_marginBottom="3dp"
             android:background="#20FFFFFF"
             android:visibility="gone" />
 
-        <!-- ========== SUBJECT 2 ========== -->
+        <!-- ===== SUBJECT 2 ===== -->
         <LinearLayout
             android:id="@+id/subject_row_2"
             android:layout_width="match_parent"
@@ -460,7 +451,7 @@
                     android:layout_gravity="center"
                     android:text="0%"
                     android:textColor="#FFFFFF"
-                    android:textSize="28sp"
+                    android:textSize="26sp"
                     android:textStyle="bold" />
             </FrameLayout>
 
@@ -581,17 +572,16 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Divider 2 -->
         <View
             android:id="@+id/divider_2"
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="4dp"
+            android:layout_marginTop="5dp"
+            android:layout_marginBottom="3dp"
             android:background="#20FFFFFF"
             android:visibility="gone" />
 
-        <!-- ========== SUBJECT 3 ========== -->
+        <!-- ===== SUBJECT 3 ===== -->
         <LinearLayout
             android:id="@+id/subject_row_3"
             android:layout_width="match_parent"
@@ -613,7 +603,7 @@
                     android:layout_gravity="center"
                     android:text="0%"
                     android:textColor="#FFFFFF"
-                    android:textSize="28sp"
+                    android:textSize="26sp"
                     android:textStyle="bold" />
             </FrameLayout>
 
