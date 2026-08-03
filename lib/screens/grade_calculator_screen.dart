@@ -1,6 +1,7 @@
 // FILE: lib/screens/grade_calculator_screen.dart
 // REDESIGNED v4 — NEET Edition
 // FIXED: Preset loading hang bug (guaranteed loading=false in finally block)
+// FIXED: SharedPreferences.getKeys() read-only error — converted to List before iterating
 // NEW: 5th "Tools" tab with Quick Score Calculator, Countdown, Daily Targets
 // NEW: Chapter Mastery, Revision Tracker, Weak Topics, PYQ Status
 // NEW: Subject Time Distribution, Weightage Visualizer
@@ -595,7 +596,9 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   Future<void> _clearAllComponents() async {
     await DatabaseHelper.instance.clearGradeComponents();
     final p = await _prefs;
-    for (final k in p.getKeys().where((k) => k.startsWith('grade_calc_v4_'))) {
+    // FIXED: Convert to List before iterating to avoid read-only error
+    final keysToRemove = p.getKeys().where((k) => k.startsWith('grade_calc_v4_')).toList();
+    for (final k in keysToRemove) {
       await p.remove(k);
     }
     _whatIfScores.clear();
@@ -605,6 +608,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
 
   // ═════════════════════════════════════════════════════════════════
   // FIXED: Preset loading with guaranteed completion
+  // FIXED: SharedPreferences.getKeys() read-only error
   // ═════════════════════════════════════════════════════════════════
 
   Future<void> _loadPreset(String subject) async {
@@ -615,7 +619,9 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
 
       await DatabaseHelper.instance.clearGradeComponents();
       final p = await _prefs;
-      for (final k in p.getKeys().where((k) => k.startsWith('grade_calc_v4_'))) {
+      // FIXED: Convert to List before iterating to avoid read-only error
+      final keysToRemove = p.getKeys().where((k) => k.startsWith('grade_calc_v4_')).toList();
+      for (final k in keysToRemove) {
         await p.remove(k);
       }
 
@@ -659,7 +665,9 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     try {
       await DatabaseHelper.instance.clearGradeComponents();
       final p = await _prefs;
-      for (final k in p.getKeys().where((k) => k.startsWith('grade_calc_v4_'))) {
+      // FIXED: Convert to List before iterating to avoid read-only error
+      final keysToRemove = p.getKeys().where((k) => k.startsWith('grade_calc_v4_')).toList();
+      for (final k in keysToRemove) {
         await p.remove(k);
       }
       for (final entry in NeetData.chapterPresets.entries) {
@@ -3247,11 +3255,11 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     );
   }
 
-  // ═════════════════════════════════════════════════════════════════
+    // ═════════════════════════════════════════════════════════════════
   // TAB 5: TOOLS (NEW — Quick Score, Daily Targets, Exam Date)
   // ═════════════════════════════════════════════════════════════════
 
-    Widget _buildToolsTab(ColorScheme cs) {
+  Widget _buildToolsTab(ColorScheme cs) {
     final quickResult = _calculateQuickScore();
 
     return SingleChildScrollView(
