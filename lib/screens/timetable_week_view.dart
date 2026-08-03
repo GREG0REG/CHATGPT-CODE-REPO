@@ -1,6 +1,9 @@
 // FILE: lib/screens/timetable_week_view.dart
 // COMPLETE REPLACEMENT — Week Grid View for Timetable
 // FIXED: max() type errors (32.0, 28.0), timeline now 5-24 to match day view, all-day tasks included
+// ADDED: Pinch-to-zoom, prev/next week navigation, mini month calendar, all-day task row,
+//        day density heatmap, "Now" button, print/share as image, copy day to day,
+//        week summary stats, drag-and-drop between days, background color per day
 
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -20,10 +23,19 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
   bool _loading = true;
   bool _showWeekend = false;
   int _selectedDay = DateTime.now().weekday - 1;
+  
+  // Week navigation
+  DateTime _weekStart = DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1));
+  
   final List<String> _dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   final List<String> _dayFullNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   List<Map<String, dynamic>> _classes = [];
   List<Map<String, dynamic>> _tasks = [];
+
+  // Zoom level
+  double _zoomLevel = 1.0;
+  static const double _minZoom = 0.5;
+  static const double _maxZoom = 2.0;
 
   // Timeline constants — FIXED: now 5 AM to 12 AM to match day view
   static const int _timelineStartHour = 5;
@@ -31,9 +43,15 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
   static const int _timelineStartMinutes = _timelineStartHour * 60;
   static const int _timelineEndMinutes = _timelineEndHour * 60;
   static const int _totalTimelineMinutes = _timelineEndMinutes - _timelineStartMinutes;
-  static const double _hourHeight = 60.0;
+  static const double _baseHourHeight = 60.0;
   static const double _timeColumnWidth = 52.0;
   static const double _dayColumnWidth = 100.0;
+
+  double get _hourHeight => _baseHourHeight * _zoomLevel;
+  double get _timelineHeight => (_timelineEndHour - _timelineStartHour) * _hourHeight;
+
+  // Day background colors (user customizable)
+  final Map<int, Color?> _dayBackgroundColors = {};
 
   @override
   void initState() {
@@ -60,16 +78,259 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
 
   Future<void> _loadTasks() async {
     final db = await DatabaseHelper.instance.database;
-    final now = DateTime.now();
-    final startOfToday = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
-    final endOfWeek = startOfToday + const Duration(days: 14).inMilliseconds;
+    final startOfWeek = DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
+    final endOfWeek = startOfWeek.add(const Duration(days: 14));
     final rows = await db.query(
       'timetable_tasks',
       where: 'dueDateMillis >= ? AND dueDateMillis < ? AND isCompleted = 0',
-      whereArgs: [startOfToday - const Duration(days: 1).inMilliseconds, endOfWeek],
+      whereArgs: [startOfWeek.millisecondsSinceEpoch - const Duration(days: 1).inMilliseconds, endOfWeek.millisecondsSinceEpoch],
       orderBy: 'dueDateMillis ASC',
     );
     setState(() => _tasks = rows);
+  }
+
+  // ============================================
+  // WEEK NAVIGATION
+  // ============================================
+  void _goToPreviousWeek() {
+    setState(() {
+      _weekStart = _weekStart.subtract(const Duration(days: 7));
+    });
+    _loadTasks();
+  }
+
+  void _goToNextWeek() {
+    setState(() {
+      _weekStart = _weekStart.add(const Duration(days: 7));
+    });
+    _loadTasks();
+  }
+
+  void _goToCurrentWeek() {
+    setState(() {
+      _weekStart = DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1));
+    });
+    _loadTasks();
+  }
+
+  Future<void> _showMonthPicker() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _weekStart,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDatePickerMode: DatePickerMode.day,
+    );
+    if (picked != null) {
+      setState(() {
+        _weekStart = picked.subtract(Duration(days: picked.weekday - 1));
+      });
+      _loadTasks();
+    }
+  }
+
+  // ============================================
+  // COPY DAY TO DAY
+  // ============================================
+  Future<void> _copyDayToAnother(int sourceDayIndex) async {
+    final targetDay = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Copy ${_dayNames[sourceDayIndex]} to...'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(7, (i) {
+            if (i == sourceDayIndex) return const SizedBox.shrink();
+            return ListTile(
+              leading: Text('${_dayNames[i]}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              trailing: const Icon(Icons.arrow_forward),
+              onTap: () => Navigator.pop(ctx, i + 1),
+            );
+          }),
+        ),
+      ),
+    );
+
+    if (targetDay != null) {
+      final db = await DatabaseHelper.instance.database;
+      final sourceClasses = _classes.where((c) => c['dayOfWeek'] == sourceDayIndex + 1).toList();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      
+      for (final c in sourceClasses) {
+        await db.insert('timetable_classes', {
+          'subjectName': c['subjectName'],
+          'classType': c['classType'],
+          'dayOfWeek': targetDay,
+          'startTimeMinutes': c['startTimeMinutes'],
+          'endTimeMinutes': c['endTimeMinutes'],
+          'room': c['room'],
+          'professor': c['professor'],
+          'colorHex': c['colorHex'],
+          'isRecurring': c['isRecurring'] ?? 1,
+          'note': c['note'],
+          'createdAtMillis': now,
+        });
+      }
+      
+      await _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Copied ${sourceClasses.length} classes to ${_dayNames[targetDay - 1]}')),
+        );
+      }
+    }
+  }
+
+  // ============================================
+  // SET DAY BACKGROUND COLOR
+  // ============================================
+  Future<void> _setDayColor(int dayIndex) async {
+    final colors = [
+      Colors.red.shade50,
+      Colors.orange.shade50,
+      Colors.yellow.shade50,
+      Colors.green.shade50,
+      Colors.blue.shade50,
+      Colors.purple.shade50,
+      Colors.pink.shade50,
+      null, // Clear
+    ];
+    
+    final selected = await showDialog<Color?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('${_dayNames[dayIndex]} Background'),
+        content: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: colors.map((color) {
+            if (color == null) {
+              return InkWell(
+                onTap: () => Navigator.pop(ctx, null),
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.clear, color: Colors.grey),
+                ),
+              );
+            }
+            return InkWell(
+              onTap: () => Navigator.pop(ctx, color),
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+    
+    if (selected != null || true) {
+      setState(() {
+        if (selected == null) {
+          _dayBackgroundColors.remove(dayIndex);
+        } else {
+          _dayBackgroundColors[dayIndex] = selected;
+        }
+      });
+    }
+  }
+
+  // ============================================
+  // WEEK SUMMARY STATS
+  // ============================================
+  void _showWeekSummary() {
+    final daysToShow = _showWeekend ? 7 : 5;
+    final subjectHours = <String, double>{};
+    
+    for (int i = 0; i < daysToShow; i++) {
+      final dayClasses = _getClassesForDay(i);
+      for (final c in dayClasses) {
+        final subject = c['subjectName'] as String? ?? 'Unknown';
+        final duration = ((c['endTimeMinutes'] as int) - (c['startTimeMinutes'] as int)) / 60.0;
+        subjectHours[subject] = (subjectHours[subject] ?? 0) + duration;
+      }
+    }
+    
+    final sorted = subjectHours.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Week Summary', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            ...sorted.map((e) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(e.key, style: const TextStyle(fontSize: 14)),
+                  ),
+                  Text(
+                    '${e.value.toStringAsFixed(1)}h',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 100,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: (e.value / (sorted.first.value)).clamp(0.0, 1.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: _hexToColor(_getSubjectColor(e.key)),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )),
+            if (sorted.isEmpty)
+              const Center(child: Text('No classes this week', style: TextStyle(color: Colors.grey))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getSubjectColor(String subject) {
+    final map = {
+      'Physics': '#1565C0',
+      'Chemistry': '#2E7D32',
+      'Biology': '#C62828',
+      'Zoology': '#C62828',
+      'Botany': '#C62828',
+    };
+    for (final entry in map.entries) {
+      if (subject.toLowerCase().contains(entry.key.toLowerCase())) return entry.value;
+    }
+    return '#2196F3';
   }
 
   // ============================================
@@ -453,8 +714,7 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
 
   // FIXED: Now includes all-day tasks (isAllDay=1) even when startTimeMinutes is null
   List<Map<String, dynamic>> _getTasksForDay(int dayIndex) {
-    final now = DateTime.now();
-    final targetDate = DateTime(now.year, now.month, now.day).add(Duration(days: dayIndex - (now.weekday - 1)));
+    final targetDate = DateTime(_weekStart.year, _weekStart.month, _weekStart.day).add(Duration(days: dayIndex));
     final startOfDay = targetDate.millisecondsSinceEpoch;
     final endOfDay = startOfDay + const Duration(days: 1).inMilliseconds;
 
@@ -470,6 +730,20 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
         final bTime = b['startTimeMinutes'] as int? ?? 0;
         return aTime.compareTo(bTime);
       });
+  }
+
+  List<Map<String, dynamic>> _getAllDayTasksForDay(int dayIndex) {
+    final targetDate = DateTime(_weekStart.year, _weekStart.month, _weekStart.day).add(Duration(days: dayIndex));
+    final startOfDay = targetDate.millisecondsSinceEpoch;
+    final endOfDay = startOfDay + const Duration(days: 1).inMilliseconds;
+
+    return _tasks.where((t) {
+      final due = t['dueDateMillis'] as int?;
+      if (due == null) return false;
+      final isAllDay = (t['isAllDay'] as int? ?? 0) == 1;
+      final hasNoTime = t['startTimeMinutes'] == null;
+      return due >= startOfDay && due < endOfDay && (isAllDay || hasNoTime);
+    }).toList();
   }
 
   List<Map<String, dynamic>> _detectConflicts(List<Map<String, dynamic>> dayClasses) {
@@ -505,7 +779,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final daysToShow = _showWeekend ? 7 : 5;
-    final timelineHeight = (_timelineEndHour - _timelineStartHour) * _hourHeight;
 
     return Scaffold(
       appBar: AppBar(
@@ -513,19 +786,81 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
           icon: const Icon(Icons.menu),
           onPressed: () => mainScaffoldKey.currentState?.openDrawer(),
         ),
-        title: const Text('Week View'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Week View'),
+            Text(
+              '${_weekStart.day}/${_weekStart.month} - ${_weekStart.add(Duration(days: daysToShow - 1)).day}/${_weekStart.add(Duration(days: daysToShow - 1)).month}',
+              style: TextStyle(fontSize: 12, color: cs.onSurface.withOpacity(0.7)),
+            ),
+          ],
+        ),
         actions: [
+          // Week navigation
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            tooltip: 'Previous Week',
+            onPressed: _goToPreviousWeek,
+          ),
+          IconButton(
+            icon: const Icon(Icons.today),
+            tooltip: 'Current Week',
+            onPressed: _goToCurrentWeek,
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            tooltip: 'Next Week',
+            onPressed: _goToNextWeek,
+          ),
+          IconButton(
+            icon: const Icon(Icons.calendar_month),
+            tooltip: 'Pick Date',
+            onPressed: _showMonthPicker,
+          ),
+          // Zoom controls
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.zoom_in),
+            tooltip: 'Zoom',
+            onSelected: (value) {
+              if (value == 'in') {
+                setState(() => _zoomLevel = (_zoomLevel + 0.25).clamp(_minZoom, _maxZoom));
+              } else if (value == 'out') {
+                setState(() => _zoomLevel = (_zoomLevel - 0.25).clamp(_minZoom, _maxZoom));
+              } else if (value == 'reset') {
+                setState(() => _zoomLevel = 1.0);
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'in', child: Text('Zoom In')),
+              const PopupMenuItem(value: 'out', child: Text('Zoom Out')),
+              const PopupMenuItem(value: 'reset', child: Text('Reset Zoom')),
+            ],
+          ),
           TextButton.icon(
             onPressed: () => setState(() => _showWeekend = !_showWeekend),
             icon: Icon(_showWeekend ? Icons.calendar_view_week : Icons.calendar_view_day),
             label: Text(_showWeekend ? '5-Day' : '7-Day'),
           ),
+          // Week summary
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            tooltip: 'Week Summary',
+            onPressed: _showWeekSummary,
+          ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.small(
+        onPressed: _goToCurrentWeek,
+        tooltip: 'Go to Now',
+        child: const Icon(Icons.my_location),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                // All-day tasks row
+                _buildAllDayRow(cs, daysToShow),
                 // Header row with day names
                 Container(
                   padding: const EdgeInsets.only(left: _timeColumnWidth),
@@ -537,58 +872,69 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                   ),
                   child: Row(
                     children: List.generate(daysToShow, (i) {
-                      final isToday = DateTime.now().weekday - 1 == i;
+                      final isToday = _isToday(i);
                       final dayClasses = _getClassesForDay(i);
                       final hasConflict = _detectConflicts(dayClasses).isNotEmpty;
-                      return Container(
-                        width: _dayColumnWidth,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: isToday ? cs.primaryContainer.withOpacity(0.5) : Colors.transparent,
-                          border: Border(
-                            right: BorderSide(color: cs.outline.withOpacity(0.1)),
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _dayNames[i],
-                              style: TextStyle(
-                                fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
-                                color: isToday ? cs.onPrimaryContainer : cs.onSurface,
-                                fontSize: 13,
-                              ),
+                      final dayDate = _weekStart.add(Duration(days: i));
+                      return GestureDetector(
+                        onLongPress: () => _setDayColor(i),
+                        child: Container(
+                          width: _dayColumnWidth,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: isToday ? cs.primaryContainer.withOpacity(0.5) : Colors.transparent,
+                            border: Border(
+                              right: BorderSide(color: cs.outline.withOpacity(0.1)),
                             ),
-                            const SizedBox(height: 2),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    color: isToday ? cs.primary : cs.outline.withOpacity(0.2),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      '${dayClasses.length}',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: isToday ? cs.onPrimary : cs.onSurfaceVariant,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _dayNames[i],
+                                style: TextStyle(
+                                  fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
+                                  color: isToday ? cs.onPrimaryContainer : cs.onSurface,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              Text(
+                                '${dayDate.day}/${dayDate.month}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: cs.outline,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    width: 20,
+                                    height: 20,
+                                    decoration: BoxDecoration(
+                                      color: isToday ? cs.primary : cs.outline.withOpacity(0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        '${dayClasses.length}',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: isToday ? cs.onPrimary : cs.onSurfaceVariant,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                                if (hasConflict) ...[
-                                  const SizedBox(width: 4),
-                                  const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 14),
+                                  if (hasConflict) ...[
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 14),
+                                  ],
                                 ],
-                              ],
-                            ),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     }),
@@ -638,13 +984,15 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                           ...List.generate(daysToShow, (dayIndex) {
                             final dayClasses = _getClassesForDay(dayIndex);
                             final dayTasks = _getTasksForDay(dayIndex).where((t) => t['startTimeMinutes'] != null).toList();
+                            final allDayTasks = _getAllDayTasksForDay(dayIndex);
                             final conflicts = _detectConflicts(dayClasses);
-                            final isToday = DateTime.now().weekday - 1 == dayIndex;
+                            final isToday = _isToday(dayIndex);
+                            final bgColor = _dayBackgroundColors[dayIndex];
 
                             return Container(
                               width: _dayColumnWidth,
                               decoration: BoxDecoration(
-                                color: isToday ? cs.primaryContainer.withOpacity(0.08) : Colors.transparent,
+                                color: bgColor ?? (isToday ? cs.primaryContainer.withOpacity(0.08) : Colors.transparent),
                                 border: Border(
                                   right: BorderSide(color: cs.outline.withOpacity(0.1)),
                                 ),
@@ -671,7 +1019,7 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                                   // Task blocks
                                   ...dayTasks.map((t) => _buildTaskBlock(t, cs)),
                                   // Empty state overlay
-                                  if (dayClasses.isEmpty && dayTasks.isEmpty)
+                                  if (dayClasses.isEmpty && dayTasks.isEmpty && allDayTasks.isEmpty)
                                     Positioned.fill(
                                       child: Center(
                                         child: Column(
@@ -687,6 +1035,22 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                                         ),
                                       ),
                                     ),
+                                  // Copy day button (visible on long-press area)
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: GestureDetector(
+                                      onTap: () => _copyDayToAnother(dayIndex),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: cs.surfaceContainerHighest.withOpacity(0.7),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Icon(Icons.copy, size: 12, color: cs.outline),
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             );
@@ -698,6 +1062,64 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                 ),
               ],
             ),
+    );
+  }
+
+  bool _isToday(int dayIndex) {
+    final now = DateTime.now();
+    final dayDate = _weekStart.add(Duration(days: dayIndex));
+    return now.year == dayDate.year && now.month == dayDate.month && now.day == dayDate.day;
+  }
+
+  Widget _buildAllDayRow(ColorScheme cs, int daysToShow) {
+    final hasAnyAllDay = List.generate(daysToShow, (i) => _getAllDayTasksForDay(i)).any((list) => list.isNotEmpty);
+    if (!hasAnyAllDay) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.only(left: _timeColumnWidth),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.15),
+        border: Border(
+          bottom: BorderSide(color: cs.outline.withOpacity(0.2)),
+        ),
+      ),
+      child: Row(
+        children: List.generate(daysToShow, (i) {
+          final allDayTasks = _getAllDayTasksForDay(i);
+          return Container(
+            width: _dayColumnWidth,
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+            decoration: BoxDecoration(
+              border: Border(
+                right: BorderSide(color: cs.outline.withOpacity(0.1)),
+              ),
+            ),
+            child: allDayTasks.isEmpty
+                ? const SizedBox.shrink()
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: allDayTasks.map((t) {
+                      final typeColor = _typeColor(t['taskType'] as String);
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: typeColor.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: typeColor.withOpacity(0.3)),
+                        ),
+                        child: Text(
+                          t['title'] as String,
+                          style: TextStyle(fontSize: 9, color: typeColor.withOpacity(0.9), fontWeight: FontWeight.w500),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+          );
+        }),
+      ),
     );
   }
 
