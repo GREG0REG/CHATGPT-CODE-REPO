@@ -6,17 +6,18 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.Color
 import android.view.View
 import android.widget.RemoteViews
-import es.antonborri.home_widget.HomeWidgetPlugin
+import androidx.core.content.edit
 
 class ReadingWidgetProvider : AppWidgetProvider() {
-
     companion object {
         private const val TAG = "ReadingWidget"
         private const val MAX_BOOKS = 10
         private const val REQUEST_CODE_BASE = 5000
+        private const val PREF_NAME = "reading_widget_data"
 
         private val SUBJECT_COLORS = mapOf(
             "physics" to Color.parseColor("#2196F3"),
@@ -54,16 +55,17 @@ class ReadingWidgetProvider : AppWidgetProvider() {
         ) {
             try {
                 val views = RemoteViews(context.packageName, R.layout.reading_widget_layout)
-                val widgetData = HomeWidgetPlugin.getData(context)
+                val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
-                val bookCount = widgetData.getInt("reading_book_count", 0)
-                val totalBooksAdded = widgetData.getInt("reading_total_books_added", 0)
-                val totalPagesToday = widgetData.getInt("reading_total_pages_today", 0)
-                val totalMinutesToday = widgetData.getInt("reading_total_minutes_today", 0)
-                val streakDays = widgetData.getInt("reading_streak_days", 0)
-                val readToday = widgetData.getBoolean("reading_read_today", false)
+                // Read data from SharedPreferences (mimics HomeWidgetPlugin.getData)
+                val bookCount = prefs.getInt("reading_book_count", 0)
+                val totalBooksAdded = prefs.getInt("reading_total_books_added", 0)
+                val totalPagesToday = prefs.getInt("reading_total_pages_today", 0)
+                val totalMinutesToday = prefs.getInt("reading_total_minutes_today", 0)
+                val streakDays = prefs.getInt("reading_streak_days", 0)
+                val readToday = prefs.getBoolean("reading_read_today", false)
 
-                // Clear container before repopulating
+                // Clear container
                 views.removeAllViews(R.id.reading_widget_books_container)
 
                 if (bookCount <= 0) {
@@ -72,12 +74,10 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.reading_widget_books_container, View.GONE)
                     views.setViewVisibility(R.id.reading_widget_footer, View.GONE)
                     views.setViewVisibility(R.id.reading_widget_streak, View.GONE)
-
                     views.setTextViewText(R.id.reading_widget_empty_title, "No Books")
                     views.setTextViewText(R.id.reading_widget_empty_subtitle, "Page 0/0 • 0%")
                     views.setProgressBar(R.id.reading_widget_empty_progress, 100, 0, false)
                     views.setTextViewText(R.id.reading_widget_empty_hint, "Add a book to start tracking")
-
                 } else {
                     // HAS BOOKS
                     views.setViewVisibility(R.id.reading_widget_empty, View.GONE)
@@ -93,33 +93,31 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                         views.setViewVisibility(R.id.reading_widget_streak, View.GONE)
                     }
 
-                    // Populate books
+                    // Populate books (max 10)
                     for (i in 0 until bookCount.coerceAtMost(MAX_BOOKS)) {
                         val bookViews = RemoteViews(context.packageName, R.layout.reading_widget_book_item)
 
-                        val title = widgetData.getString("reading_title_$i", "Book $i") ?: "Book $i"
-                        val progressPercent = widgetData.getInt("reading_progress_$i", 0)
-                        val pagesStr = widgetData.getString("reading_pages_$i", "0 / 1") ?: "0 / 1"
-                        val colorHex = widgetData.getString("reading_color_$i", "#2196F3") ?: "#2196F3"
-                        val subject = widgetData.getString("reading_subject_$i", "") ?: ""
-                        val status = widgetData.getString("reading_status_$i", "On Track") ?: "On Track"
-                        val pagesPerDayNeeded = widgetData.getInt("reading_pages_per_day_$i", 0)
-                        val estCompletionDate = widgetData.getString("reading_est_date_$i", "") ?: ""
-                        val readTodayThisBook = widgetData.getBoolean("reading_read_today_$i", false)
-                        val isUrgent = widgetData.getBoolean("reading_is_urgent_$i", false)
+                        val title = prefs.getString("reading_title_$i", "Book $i") ?: "Book $i"
+                        val progressPercent = prefs.getInt("reading_progress_$i", 0)
+                        val pagesStr = prefs.getString("reading_pages_$i", "0 / 1") ?: "0 / 1"
+                        val colorHex = prefs.getString("reading_color_$i", "#2196F3") ?: "#2196F3"
+                        val subject = prefs.getString("reading_subject_$i", "") ?: ""
+                        val status = prefs.getString("reading_status_$i", "On Track") ?: "On Track"
+                        val pagesPerDayNeeded = prefs.getInt("reading_pages_per_day_$i", 0)
+                        val estCompletionDate = prefs.getString("reading_est_date_$i", "") ?: ""
+                        val readTodayThisBook = prefs.getBoolean("reading_read_today_$i", false)
+                        val isUrgent = prefs.getBoolean("reading_is_urgent_$i", false)
 
                         val parts = pagesStr.split("/").map { it.trim() }
                         val currentPage = parts.getOrNull(0)?.toIntOrNull() ?: 0
                         val totalPages = parts.getOrNull(1)?.toIntOrNull() ?: 1
 
-                        // Determine colors
+                        // Accent color
                         val accentColor = getSubjectColorInt(subject, colorHex)
-                        val progressDrawableName = getProgressDrawableName(subject)
-
-                        // Set accent bar color
                         bookViews.setInt(R.id.book_item_accent_bar, "setBackgroundColor", accentColor)
 
-                        // Set progress bar drawable using reflection-safe approach
+                        // Progress drawable
+                        val progressDrawableName = getProgressDrawableName(subject)
                         val progressDrawableId = context.resources.getIdentifier(
                             progressDrawableName, "drawable", context.packageName
                         )
@@ -146,7 +144,7 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                         bookViews.setTextViewText(R.id.book_item_status, statusText)
                         bookViews.setTextColor(R.id.book_item_status, statusColor)
 
-                        // Pages info line - combine all info like the target image
+                        // Pages info line
                         val pagesInfo = buildString {
                             append("Page $currentPage/$totalPages")
                             append(" • $progressPercent%")
@@ -180,10 +178,8 @@ class ReadingWidgetProvider : AppWidgetProvider() {
                         hours > 0 -> "${hours}h"
                         else -> "${mins}m"
                     }
-
                     val activeBooks = bookCount.coerceAtMost(MAX_BOOKS)
                     val totalBooks = totalBooksAdded.coerceAtLeast(activeBooks)
-
                     views.setTextViewText(R.id.reading_widget_footer_books, "$activeBooks/$totalBooks books active")
                     views.setTextViewText(R.id.reading_widget_footer_pages, "$totalPagesToday pages today")
                     views.setTextViewText(R.id.reading_widget_footer_time, timeStr)
