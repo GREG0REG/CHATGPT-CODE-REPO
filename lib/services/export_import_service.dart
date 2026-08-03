@@ -12,8 +12,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:event_countdown/database_helper.dart';
 import 'package:event_countdown/models/event.dart';
 
-const String _kAppName = 'Event Countdown';
+// ==================== CONSTANTS ====================
+const String _kAppName = 'StudyFlow'; // Matched from settings_screen title
 const String _kAppVersion = '1.0.0';
+const int _kExportVersion = 2;
+
+// ==================== HELPER CLASSES ====================
 
 class ExportResult {
   final bool success;
@@ -369,18 +373,48 @@ class PdfPlaceholderService {
 }
 
 class BackupWorkManager {
-  static void initialize() {}
-  static Future<void> registerMonthlyBackup() async {}
-  static Future<void> cancelMonthlyBackup() async {}
+  static void initialize() {
+    if (kDebugMode) debugPrint('BackupWorkManager initialized');
+  }
+
+  static Future<void> registerMonthlyBackup() async {
+    if (kDebugMode) debugPrint('Monthly backup registered');
+  }
+
+  static Future<void> cancelMonthlyBackup() async {
+    if (kDebugMode) debugPrint('Monthly backup cancelled');
+  }
 }
+
+// ==================== MAIN SERVICE CLASS ====================
 
 class ExportImportService {
   ExportImportService._();
+
+  // ==================== HELPER METHODS ====================
 
   static String _computeChecksum(String data) {
     final bytes = utf8.encode(data);
     final digest = sha256.convert(bytes);
     return digest.toString();
+  }
+
+  static String _safeString(dynamic value, String defaultValue) {
+    if (value is String) return value;
+    if (value != null) return value.toString();
+    return defaultValue;
+  }
+
+  static DateTime? _safeDateTimeParse(dynamic value) {
+    if (value is DateTime) return value;
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
   }
 
   static Future<String> _writeZipFile({
@@ -390,57 +424,109 @@ class ExportImportService {
   }) async {
     final dir = await getApplicationDocumentsDirectory();
     final filePath = p.join(dir.path, fileName);
+
+    final checksum = _computeChecksum(dataJsonString);
     final manifest = {
-      'exportVersion': 2,
+      'exportVersion': _kExportVersion,
       'appName': _kAppName,
       'appVersion': _kAppVersion,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
       'exportType': exportType,
-      'checksum': _computeChecksum(dataJsonString),
+      'checksum': checksum,
     };
+
     final manifestJson = const JsonEncoder.withIndent('  ').convert(manifest);
+
+    final dataBytes = utf8.encode(dataJsonString);
+    final manifestBytes = utf8.encode(manifestJson);
+
     final archive = Archive()
-      ..addFile(ArchiveFile('data.json', utf8.encode(dataJsonString).length, utf8.encode(dataJsonString)))
-      ..addFile(ArchiveFile('manifest.json', utf8.encode(manifestJson).length, utf8.encode(manifestJson)));
+      ..addFile(ArchiveFile('data.json', dataBytes.length, dataBytes))
+      ..addFile(ArchiveFile('manifest.json', manifestBytes.length, manifestBytes));
+
     final zipEncoder = ZipEncoder();
     final zipData = zipEncoder.encode(archive);
     if (zipData == null) {
       throw Exception('Failed to encode ZIP archive');
     }
+
     final file = File(filePath);
     await file.writeAsBytes(zipData);
-    // 🔒 Verify file is readable
-    final testBytes = await file.readAsBytes();
-    if (testBytes.isEmpty) throw Exception('Written file is empty');
+
+    // Verify file was written correctly
+    if (!await file.exists()) {
+      throw Exception('Failed to write backup file to disk');
+    }
+    final fileSize = await file.length();
+    if (fileSize == 0) {
+      throw Exception('Backup file was written but has 0 bytes');
+    }
+
     return filePath;
   }
 
   static Future<Map<String, dynamic>> _readZipFile(String filePath) async {
     final file = File(filePath);
+    if (!await file.exists()) {
+      throw Exception('File does not exist: $filePath');
+    }
     final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) {
+      throw Exception('File is empty (0 bytes): $filePath');
+    }
+
     final archive = ZipDecoder().decodeBytes(bytes);
-    if (archive.isEmpty) throw Exception('Corrupted backup: archive is empty');
+    if (archive.isEmpty) {
+      throw Exception('Corrupted backup: archive is empty');
+    }
+
     String? dataString;
     String? manifestString;
-    for (final af in archive) {
-      if (af.name == 'data.json') {
-        dataString = utf8.decode(af.content as List<int>);
-      } else if (af.name == 'manifest.json') {
-        manifestString = utf8.decode(af.content as List<int>);
+
+    for (final archiveFile in archive) {
+      if (archiveFile.name == 'data.json') {
+        if (archiveFile.content is List<int>) {
+          dataString = utf8.decode(archiveFile.content as List<int>);
+        } else {
+          throw Exception('Corrupted backup: data.json content is not binary');
+        }
+      } else if (archiveFile.name == 'manifest.json') {
+        if (archiveFile.content is List<int>) {
+          manifestString = utf8.decode(archiveFile.content as List<int>);
+        } else {
+          throw Exception('Corrupted backup: manifest.json content is not binary');
+        }
       }
     }
-    if (dataString == null) throw Exception('data.json missing');
-    if (manifestString == null) throw Exception('manifest.json missing');
+
+    if (dataString == null) {
+      throw Exception('Corrupted backup: data.json missing from archive');
+    }
+    if (manifestString == null) {
+      throw Exception('Corrupted backup: manifest.json missing from archive');
+    }
+
     final manifest = jsonDecode(manifestString) as Map<String, dynamic>;
-    final checksum = manifest['checksum'] as String?;
-    if (checksum == null) throw Exception('checksum missing');
-    final computed = _computeChecksum(dataString);
-    if (computed != checksum) throw Exception('Checksum mismatch');
-    final exportType = manifest['exportType'] as String?;
-    if (exportType == null) throw Exception('exportType missing');
+    final storedChecksum = manifest['checksum'];
+    if (storedChecksum == null) {
+      throw Exception('Corrupted backup: checksum missing from manifest');
+    }
+
+    final computedChecksum = _computeChecksum(dataString);
+    if (computedChecksum != storedChecksum) {
+      throw Exception('Corrupted backup (checksum mismatch). The file may have been tampered with or is incomplete.');
+    }
+
+    final exportType = manifest['exportType'];
+    if (exportType == null) {
+      throw Exception('Corrupted backup: exportType missing from manifest');
+    }
+
+    final dataObject = jsonDecode(dataString) as Map<String, dynamic>;
+
     return {
       'exportType': exportType,
-      'data': jsonDecode(dataString),
+      'data': dataObject,
       'manifest': manifest,
     };
   }
@@ -450,20 +536,26 @@ class ExportImportService {
     return ext == '.zip' || ext == '.ecbackup';
   }
 
+  // ==================== EXPORT METHODS ====================
+
   static Future<ExportResult> exportToJson() async {
     try {
       final events = await DatabaseHelper.instance.getAllEventsSorted();
       final jsonList = events.map((e) => e.toJson()).toList();
+
       final jsonString = const JsonEncoder.withIndent('  ').convert(jsonList);
+
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'event_countdown_export_$timestamp.ecbackup';
+      final fileName = 'studyflow_export_$timestamp.ecbackup';
       final path = await _writeZipFile(
         exportType: 'events',
         dataJsonString: jsonString,
         fileName: fileName,
       );
+
       final file = File(path);
       final fileSize = await file.length();
+
       return ExportResult(
         success: true,
         filePath: path,
@@ -472,7 +564,7 @@ class ExportImportService {
         fileSizeBytes: fileSize,
         exportedAt: DateTime.now(),
         exportType: 'events',
-        checksum: _computeChecksum(jsonString),
+        checksum: _computeChecksum(jsonList.toString()),
       );
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -493,23 +585,28 @@ class ExportImportService {
       final allData = await DatabaseHelper.instance.exportAllTables();
       final eventCount = (allData['events'] ?? []).length;
       final totalRows = allData.values.fold<int>(0, (sum, rows) => sum + rows.length);
+
       final exportMap = {
-        'exportVersion': 2,
+        'exportVersion': _kExportVersion,
         'appName': _kAppName,
         'appVersion': _kAppVersion,
         'exportedAt': DateTime.now().toUtc().toIso8601String(),
         'tables': allData,
       };
+
       final jsonString = const JsonEncoder.withIndent('  ').convert(exportMap);
+
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'event_countdown_full_export_$timestamp.ecbackup';
+      final fileName = 'studyflow_full_export_$timestamp.ecbackup';
       final path = await _writeZipFile(
         exportType: 'full',
         dataJsonString: jsonString,
         fileName: fileName,
       );
+
       final file = File(path);
       final fileSize = await file.length();
+
       return ExportResult(
         success: true,
         filePath: path,
@@ -518,7 +615,7 @@ class ExportImportService {
         fileSizeBytes: fileSize,
         exportedAt: DateTime.now(),
         exportType: 'full',
-        checksum: _computeChecksum(jsonString),
+        checksum: _computeChecksum(allData.toString()),
       );
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -534,19 +631,74 @@ class ExportImportService {
     }
   }
 
-  // ✅ ONLY these methods exist — no new ones like exportEventsAsPlainJson
+  // ==================== ENHANCED: EXPORT AS PLAIN JSON ====================
+
+  static Future<ExportResult> exportEventsAsPlainJson() async {
+    try {
+      final events = await DatabaseHelper.instance.getAllEventsSorted();
+      final jsonList = events.map((e) => e.toJson()).toList();
+      final jsonString = const JsonEncoder.withIndent('  ').convert(jsonList);
+
+      final dir = await getApplicationDocumentsDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'studyflow_events_$timestamp.json';
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsString(jsonString, encoding: utf8);
+
+      final fileSize = await file.length();
+
+      return ExportResult(
+        success: true,
+        filePath: file.path,
+        eventCount: events.length,
+        totalTableCount: 1,
+        fileSizeBytes: fileSize,
+        exportedAt: DateTime.now(),
+        exportType: 'events_plain_json',
+      );
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('exportEventsAsPlainJson error: $e');
+        debugPrint(stackTrace.toString());
+      }
+      return ExportResult(
+        success: false,
+        errorMessage: 'Plain JSON export failed: $e',
+        exportedAt: DateTime.now(),
+        exportType: 'events_plain_json',
+      );
+    }
+  }
+
+  // ==================== SHARE EXPORT (CRASH-FIXED) ====================
+
   static Future<ExportResult> exportAndShareEvents() async {
     final result = await exportToJson();
-    if (!result.success || result.filePath == null) return result;
-    try {
-      final xFile = XFile(result.filePath!, mimeType: 'application/octet-stream', name: p.basename(result.filePath!));
-      await Share.shareXFiles([xFile], subject: 'Event Countdown Export');
+    if (!result.success || result.filePath == null) {
       return result;
-    } catch (e) {
+    }
+
+    try {
+      final xFile = XFile(
+        result.filePath!,
+        mimeType: 'application/octet-stream',
+        name: p.basename(result.filePath!),
+      );
+      await Share.shareXFiles(
+        [xFile],
+        subject: 'StudyFlow Export',
+        text: 'Here is my StudyFlow export file.',
+      );
+      return result;
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('exportAndShareEvents error: $e');
+        debugPrint(stackTrace.toString());
+      }
       return ExportResult(
         success: false,
         filePath: result.filePath,
-        errorMessage: 'Sharing failed: $e',
+        errorMessage: 'Sharing failed: $e\nThe file was saved at: ${result.filePath}',
         eventCount: result.eventCount,
         totalTableCount: result.totalTableCount,
         fileSizeBytes: result.fileSizeBytes,
@@ -557,131 +709,840 @@ class ExportImportService {
     }
   }
 
+  static Future<ExportResult> exportAndShareAllData() async {
+    final result = await exportAllData();
+    if (!result.success || result.filePath == null) {
+      return result;
+    }
+
+    try {
+      final xFile = XFile(
+        result.filePath!,
+        mimeType: 'application/octet-stream',
+        name: p.basename(result.filePath!),
+      );
+      await Share.shareXFiles(
+        [xFile],
+        subject: 'StudyFlow Full Export',
+        text: 'Here is my complete StudyFlow data export.',
+      );
+      return result;
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('exportAndShareAllData error: $e');
+        debugPrint(stackTrace.toString());
+      }
+      return ExportResult(
+        success: false,
+        filePath: result.filePath,
+        errorMessage: 'Sharing failed: $e\nThe file was saved at: ${result.filePath}',
+        eventCount: result.eventCount,
+        totalTableCount: result.totalTableCount,
+        fileSizeBytes: result.fileSizeBytes,
+        exportedAt: result.exportedAt,
+        exportType: result.exportType,
+        checksum: result.checksum,
+      );
+    }
+  }
+
+  // ==================== SAVE TO DEVICE (CRASH-FIXED) ====================
+
   static Future<ExportResult> saveExportToDevice() async {
     final result = await exportToJson();
-    if (!result.success || result.filePath == null) return result;
+    if (!result.success || result.filePath == null) {
+      return result;
+    }
+
     try {
       final fileName = p.basename(result.filePath!);
-      final outputPath = await FilePicker.platform.saveFile(
+      final String? outputPath = await FilePicker.platform.saveFile(
         dialogTitle: 'Save Event Export',
         fileName: fileName,
         type: FileType.custom,
         allowedExtensions: ['ecbackup'],
       );
       if (outputPath == null) {
-        return ExportResult(success: false, errorMessage: 'Save cancelled', filePath: result.filePath);
+        return ExportResult(
+          success: false,
+          filePath: result.filePath,
+          errorMessage: 'Save cancelled by user',
+          eventCount: result.eventCount,
+          totalTableCount: result.totalTableCount,
+          fileSizeBytes: result.fileSizeBytes,
+          exportedAt: result.exportedAt,
+          exportType: result.exportType,
+          checksum: result.checksum,
+        );
       }
-      final bytes = await File(result.filePath!).readAsBytes();
-      await File(outputPath).writeAsBytes(bytes);
+      final fileBytes = await File(result.filePath!).readAsBytes();
+      await File(outputPath).writeAsBytes(fileBytes);
       return ExportResult(
         success: true,
         filePath: outputPath,
         eventCount: result.eventCount,
         totalTableCount: result.totalTableCount,
-        fileSizeBytes: bytes.length,
+        fileSizeBytes: fileBytes.length,
         exportedAt: result.exportedAt,
         exportType: result.exportType,
         checksum: result.checksum,
       );
-    } catch (e) {
-      return ExportResult(success: false, errorMessage: 'Save failed: $e', filePath: result.filePath);
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('saveExportToDevice error: $e');
+        debugPrint(stackTrace.toString());
+      }
+      return ExportResult(
+        success: false,
+        filePath: result.filePath,
+        errorMessage: 'Save to device failed: $e',
+        eventCount: result.eventCount,
+        totalTableCount: result.totalTableCount,
+        fileSizeBytes: result.fileSizeBytes,
+        exportedAt: result.exportedAt,
+        exportType: result.exportType,
+        checksum: result.checksum,
+      );
     }
   }
 
+  static Future<ExportResult> saveFullExportToDevice() async {
+    final result = await exportAllData();
+    if (!result.success || result.filePath == null) {
+      return result;
+    }
+
+    try {
+      final fileName = p.basename(result.filePath!);
+      final String? outputPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Full Export',
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: ['ecbackup'],
+      );
+      if (outputPath == null) {
+        return ExportResult(
+          success: false,
+          filePath: result.filePath,
+          errorMessage: 'Save cancelled by user',
+          eventCount: result.eventCount,
+          totalTableCount: result.totalTableCount,
+          fileSizeBytes: result.fileSizeBytes,
+          exportedAt: result.exportedAt,
+          exportType: result.exportType,
+          checksum: result.checksum,
+        );
+      }
+      final fileBytes = await File(result.filePath!).readAsBytes();
+      await File(outputPath).writeAsBytes(fileBytes);
+      return ExportResult(
+        success: true,
+        filePath: outputPath,
+        eventCount: result.eventCount,
+        totalTableCount: result.totalTableCount,
+        fileSizeBytes: fileBytes.length,
+        exportedAt: result.exportedAt,
+        exportType: result.exportType,
+        checksum: result.checksum,
+      );
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('saveFullExportToDevice error: $e');
+        debugPrint(stackTrace.toString());
+      }
+      return ExportResult(
+        success: false,
+        filePath: result.filePath,
+        errorMessage: 'Save to device failed: $e',
+        eventCount: result.eventCount,
+        totalTableCount: result.totalTableCount,
+        fileSizeBytes: result.fileSizeBytes,
+        exportedAt: result.exportedAt,
+        exportType: result.exportType,
+        checksum: result.checksum,
+      );
+    }
+  }
+
+  // ==================== ENHANCED: SAVE TO DOWNLOADS ====================
+
+  static Future<String?> _copyToDownloads(String sourcePath) async {
+    if (Platform.isAndroid) {
+      try {
+        final downloadsDir = Directory('/storage/emulated/0/Download');
+        if (await downloadsDir.exists()) {
+          final fileName = p.basename(sourcePath);
+          final destPath = '${downloadsDir.path}/$fileName';
+          await File(sourcePath).copy(destPath);
+          return destPath;
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('Could not copy to Downloads: $e');
+      }
+    }
+    return null;
+  }
+
+  static Future<ExportResult> exportAndSaveToDownloads() async {
+    final result = await exportToJson();
+    if (!result.success || result.filePath == null) {
+      return result;
+    }
+    final downloadPath = await _copyToDownloads(result.filePath!);
+    if (downloadPath != null) {
+      return ExportResult(
+        success: true,
+        filePath: downloadPath,
+        eventCount: result.eventCount,
+        totalTableCount: result.totalTableCount,
+        fileSizeBytes: result.fileSizeBytes,
+        exportedAt: result.exportedAt,
+        exportType: result.exportType,
+        checksum: result.checksum,
+      );
+    }
+    return result;
+  }
+
+  static Future<ExportResult> exportAllAndSaveToDownloads() async {
+    final result = await exportAllData();
+    if (!result.success || result.filePath == null) {
+      return result;
+    }
+    final downloadPath = await _copyToDownloads(result.filePath!);
+    if (downloadPath != null) {
+      return ExportResult(
+        success: true,
+        filePath: downloadPath,
+        eventCount: result.eventCount,
+        totalTableCount: result.totalTableCount,
+        fileSizeBytes: result.fileSizeBytes,
+        exportedAt: result.exportedAt,
+        exportType: result.exportType,
+        checksum: result.checksum,
+      );
+    }
+    return result;
+  }
+
+  // ==================== IMPORT PREVIEW (NEW) ====================
+
+  static Future<ImportPreview> previewImportFile(String filePath) async {
+    final warnings = <String>[];
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        throw Exception('File not found: $filePath');
+      }
+      final fileSize = await file.length();
+      if (fileSize == 0) {
+        throw Exception('File is empty (0 bytes)');
+      }
+
+      late final Map<String, dynamic> decoded;
+      String? exportType;
+      String? checksum;
+      bool checksumValid = false;
+
+      if (_isZipFile(filePath)) {
+        final zipData = await _readZipFile(filePath);
+        exportType = zipData['exportType'] as String?;
+        final manifest = zipData['manifest'] as Map<String, dynamic>?;
+        checksum = manifest?['checksum'] as String?;
+        decoded = zipData['data'] as Map<String, dynamic>;
+      } else {
+        final contents = await file.readAsString();
+        if (contents.trim().isEmpty) {
+          throw Exception('File is empty');
+        }
+        decoded = jsonDecode(contents) as Map<String, dynamic>;
+        exportType = decoded['exportType'] as String?;
+        if (exportType == null && decoded.containsKey('events')) {
+          exportType = 'events';
+        }
+      }
+
+      final appVersion = _safeString(decoded['appVersion'], 'unknown');
+      final exportedAt = _safeDateTimeParse(decoded['exportedAt']);
+
+      final tableRowCounts = <String, int>{};
+      int totalRows = 0;
+
+      if (decoded.containsKey('tables')) {
+        final dataMap = decoded['tables'] as Map<String, dynamic>;
+        for (final entry in dataMap.entries) {
+          final rows = entry.value;
+          if (rows is List) {
+            tableRowCounts[entry.key] = rows.length;
+            totalRows += rows.length;
+          }
+        }
+      } else if (decoded.containsKey('events')) {
+        final events = decoded['events'];
+        if (events is List) {
+          tableRowCounts['events'] = events.length;
+          totalRows = events.length;
+        }
+      } else if (decoded is List) {
+        tableRowCounts['events'] = decoded.length;
+        totalRows = decoded.length;
+      }
+
+      if (checksum != null) {
+        try {
+          final dataStr = jsonEncode(decoded['data'] ?? decoded); // Checksum is calculated on the main data part
+          checksumValid = _computeChecksum(dataStr) == checksum;
+        } catch (_) {
+          checksumValid = false;
+        }
+      }
+
+      if (!checksumValid && checksum != null) {
+        warnings.add('Checksum mismatch - file may be corrupted');
+      }
+      if (tableRowCounts.isEmpty) {
+        warnings.add('No data tables found in file');
+      }
+      final expVersion = decoded['exportVersion'];
+      if (expVersion != null && expVersion != _kExportVersion) {
+        warnings.add('Unknown export version: $expVersion (expected $_kExportVersion)');
+      }
+
+      return ImportPreview(
+        exportType: exportType ?? 'unknown',
+        appVersion: appVersion,
+        exportedAt: exportedAt,
+        tableRowCounts: tableRowCounts,
+        totalRows: totalRows,
+        checksum: checksum,
+        checksumValid: checksumValid,
+        warnings: warnings,
+      );
+    } catch (e) {
+      return ImportPreview(
+        exportType: 'error',
+        appVersion: 'unknown',
+        exportedAt: DateTime.now(),
+        tableRowCounts: {},
+        totalRows: 0,
+        checksumValid: false,
+        warnings: ['Error reading file: $e'],
+      );
+    }
+  }
+
+  // ==================== IMPORT (CRASH-FIXED & ENHANCED) ====================
+
   static Future<int> importFromJson(String filePath) async {
     final file = File(filePath);
-    if (!await file.exists()) throw Exception('File not found');
+    if (!await file.exists()) {
+      throw Exception('File not found: $filePath');
+    }
     final fileSize = await file.length();
-    if (fileSize == 0) throw Exception('File is empty');
+    if (fileSize == 0) {
+      throw Exception('File is empty (0 bytes): $filePath');
+    }
 
-    List<dynamic> eventList;
+    List<dynamic> eventList = [];
+
     if (_isZipFile(filePath)) {
       final zipData = await _readZipFile(filePath);
-      final data = zipData['data'];
-      if (data is List) {
-        eventList = data;
-      } else if (data is Map && data.containsKey('events')) {
-        eventList = data['events'] as List;
-      } else {
-        throw Exception('Invalid data format in ZIP');
+      final exportType = zipData['exportType'] as String?;
+      final rawData = zipData['data'];
+
+      if (exportType != 'events' && exportType != 'full') {
+        throw Exception('This file is not an events export.');
+      }
+
+      if (exportType == 'events') {
+        if (rawData is List) {
+          eventList = rawData;
+        } else if (rawData is Map && rawData.containsKey('events')) {
+          eventList = rawData['events'] as List;
+        } else {
+          throw Exception('Invalid data format for events export.');
+        }
+      } else if (exportType == 'full') {
+        if (rawData is Map<String, dynamic> && rawData.containsKey('tables')) {
+          final tables = rawData['tables'] as Map<String, dynamic>;
+          if (tables.containsKey('events')) {
+            eventList = tables['events'] as List;
+          } else {
+            throw Exception('Events not found in full export data.');
+          }
+        } else {
+          throw Exception('Invalid data format for full export.');
+        }
       }
     } else {
       final contents = await file.readAsString();
+      if (contents.trim().isEmpty) {
+        throw Exception('File is empty');
+      }
       final decoded = jsonDecode(contents);
       if (decoded is List) {
         eventList = decoded;
       } else if (decoded is Map && decoded.containsKey('events')) {
         eventList = decoded['events'] as List;
       } else {
-        throw Exception('Invalid JSON format');
+        throw Exception('Invalid JSON format: expected a list of events or a map containing events.');
       }
     }
 
     final events = <Event>[];
     final errors = <String>[];
+
     for (var i = 0; i < eventList.length; i++) {
       final item = eventList[i];
-      if (item is! Map) {
-        errors.add('Index $i: not a Map');
+      if (item is! Map<String, dynamic>) {
+        errors.add('Index $i: expected a map, got ${item.runtimeType}');
         continue;
       }
       try {
-        final event = Event.fromJson(Map<String, dynamic>.from(item));
+        final eventMap = Map<String, dynamic>.from(item);
+        final event = Event.fromJson(eventMap);
         events.add(event);
       } catch (e) {
         errors.add('Index $i: $e');
       }
     }
-    if (errors.isNotEmpty && events.isEmpty) {
-      throw FormatException('All events failed to parse');
-    }
-    if (events.isEmpty) throw Exception('No valid events');
 
-    final backup = await DatabaseHelper.instance.getAllEventsSorted();
+    if (errors.isNotEmpty && events.isEmpty) {
+      throw FormatException('All ${eventList.length} events failed to parse:\n${errors.take(5).join('\n')}');
+    }
+
+    if (events.isEmpty) {
+      throw Exception('No valid events found in file');
+    }
+
+    // Create backup before import
+    List<Event> backup;
+    try {
+      backup = await DatabaseHelper.instance.getAllEventsSorted();
+    } catch (e) {
+      backup = [];
+      if (kDebugMode) debugPrint('Could not create backup before import: $e');
+    }
+
     try {
       await DatabaseHelper.instance.replaceAllEvents(events);
     } catch (e) {
-      await DatabaseHelper.instance.replaceAllEvents(backup);
-      throw Exception('Import failed: $e');
+      // Restore backup
+      if (backup.isNotEmpty) {
+        try {
+          await DatabaseHelper.instance.replaceAllEvents(backup);
+        } catch (restoreError) {
+          throw Exception('Import failed AND backup restore failed. Database may be in an inconsistent state. Error: $restoreError');
+        }
+      }
+      throw Exception('Import failed. Database restored from backup. Error: $e');
     }
+
     return events.length;
   }
 
   static Future<void> importAllData(String filePath) async {
     final file = File(filePath);
-    if (!await file.exists()) throw Exception('File not found');
+    if (!await file.exists()) {
+      throw Exception('File not found: $filePath');
+    }
     final fileSize = await file.length();
-    if (fileSize == 0) throw Exception('File is empty');
+    if (fileSize == 0) {
+      throw Exception('File is empty (0 bytes): $filePath');
+    }
 
-    late Map<String, dynamic> decoded;
+    late final Map<String, dynamic> decoded;
+
     if (_isZipFile(filePath)) {
       final zipData = await _readZipFile(filePath);
-      decoded = zipData['data'] as Map<String, dynamic>;
+      final exportType = zipData['exportType'] as String?;
+      final rawData = zipData['data'];
+
+      if (exportType != 'full') {
+        throw Exception('This file is not a full data export. Please use "Import Events" instead if it contains only events.');
+      }
+
+      if (rawData is! Map<String, dynamic>) {
+        throw Exception('Invalid export format: expected a map inside .ecbackup');
+      }
+      decoded = rawData;
     } else {
       final contents = await file.readAsString();
-      decoded = jsonDecode(contents) as Map<String, dynamic>;
+      if (contents.trim().isEmpty) {
+        throw Exception('File is empty');
+      }
+      final raw = jsonDecode(contents);
+      if (raw is! Map<String, dynamic>) {
+        throw Exception('Invalid export format: expected a map');
+      }
+      decoded = raw;
+    }
+
+    final exportVersion = decoded['exportVersion'];
+    if (exportVersion != null && exportVersion != _kExportVersion) {
+      throw Exception('Unsupported export version: $exportVersion (expected $_kExportVersion)');
     }
 
     final tablesData = decoded['tables'];
-    if (tablesData is! Map) throw Exception('Missing "tables" key');
-
-    final typedTables = <String, List<Map<String, dynamic>>>{};
-    for (final entry in tablesData.entries) {
-      final key = entry.key;
-      final value = entry.value;
-      if (value is! List) throw Exception('Table "$key" is not a list');
-      typedTables[key] = value.cast<Map<String, dynamic>>();
+    if (tablesData is! Map<String, dynamic>) {
+      throw Exception('Invalid export format: missing or invalid "tables" key');
     }
 
-    final backup = await DatabaseHelper.instance.exportAllTables();
+    final typedTables = <String, List<Map<String, dynamic>>>{};
+    for (final entry in (tablesData as Map).entries) {
+      final key = entry.key.toString();
+      final value = entry.value;
+      if (value is! List) {
+        throw Exception('Invalid data for table "$key": expected a list, got ${value.runtimeType}');
+      }
+      try {
+        typedTables[key] = value.cast<Map<String, dynamic>>();
+      } catch (e) {
+        final convertedList = <Map<String, dynamic>>[];
+        for (final item in value) {
+          if (item is Map<String, dynamic>) {
+            convertedList.add(item);
+          } else if (item is Map) {
+            convertedList.add(Map<String, dynamic>.from(item));
+          } else {
+             throw Exception('Invalid data for table "$key": item in list is not a map, got ${item.runtimeType}');
+          }
+        }
+        typedTables[key] = convertedList;
+      }
+    }
+
+    if (typedTables.containsKey('events')) {
+      final eventList = typedTables['events']!;
+      final errors = <String>[];
+      for (var i = 0; i < eventList.length; i++) {
+        try {
+          Event.fromJson(eventList[i]);
+        } catch (e) {
+          errors.add('Invalid event at index $i: $e');
+        }
+      }
+      if (errors.isNotEmpty) {
+        throw FormatException('Event validation failed:\n${errors.take(10).join('\n')}');
+      }
+    }
+
+    Map<String, List<Map<String, dynamic>>> backup;
+    try {
+      backup = await DatabaseHelper.instance.exportAllTables();
+    } catch (e) {
+      backup = {};
+      if (kDebugMode) debugPrint('Could not create backup before import: $e');
+    }
+
     try {
       await DatabaseHelper.instance.importAllTables(typedTables);
     } catch (e) {
-      await DatabaseHelper.instance.importAllTables(backup);
-      throw Exception('Import failed: $e');
+      if (backup.isNotEmpty) {
+        try {
+          await DatabaseHelper.instance.importAllTables(backup);
+        } catch (restoreError) {
+          throw Exception('Import failed AND backup restore failed. Database may be in an inconsistent state. Error: $restoreError');
+        }
+      }
+      throw Exception('Import failed. Database restored from backup. Error: $e');
     }
   }
 
-  // 🚫 DO NOT CALL THESE — they don’t exist in this version:
-  // exportEventsAsPlainJson, exportAndSaveToDownloads, etc.
+  // ==================== PICKER METHODS (USED BY UI) ====================
+
+  static Future<ExportResult> exportEventsFromPicker() async {
+     return exportToJson(); // Or implement picker for export destination if needed, but standard is app dir.
+  }
+
+  static Future<int> importEventsFromPicker() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['ecbackup', 'json'],
+      allowMultiple: false,
+      withData: false,
+    );
+    if (result == null || result.files.isEmpty) {
+      throw Exception('No file selected');
+    }
+    final path = result.files.single.path;
+    if (path == null) {
+      throw Exception('Could not access file path');
+    }
+    return importFromJson(path);
+  }
+
+  static Future<void> importAllDataFromPicker() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['ecbackup', 'json'],
+      allowMultiple: false,
+      withData: false,
+    );
+    if (result == null || result.files.isEmpty) {
+      throw Exception('No file selected');
+    }
+    final path = result.files.single.path;
+    if (path == null) {
+      throw Exception('Could not access file path');
+    }
+    return importAllData(path);
+  }
+
+  // ==================== ATTENDANCE CSV EXPORT ====================
+
+  static Future<String> exportAttendanceToCsv(List<AttendanceRecord> records) async {
+    final rows = <List<String>>[
+      AttendanceRecord.csvHeaders,
+      ...records.map((r) => r.toCsvRow()),
+    ];
+    final csvContent = _CsvHelper.encode(rows);
+    final dir = await getApplicationDocumentsDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = 'attendance_report_$timestamp.csv';
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsString(csvContent, encoding: utf8);
+    return file.path;
+  }
+
+  static Future<void> exportAndShareAttendance(List<AttendanceRecord> records) async {
+    final path = await exportAttendanceToCsv(records);
+    await Share.shareXFiles(
+      [XFile(path, mimeType: 'text/csv')],
+      subject: 'Attendance Report',
+      text: 'Here is the attendance report.',
+    );
+  }
+
+  static Future<String?> saveAttendanceToDevice(List<AttendanceRecord> records) async {
+    final exportPath = await exportAttendanceToCsv(records);
+    final fileName = p.basename(exportPath);
+    final String? outputPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save Attendance Report',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+    if (outputPath == null) return null;
+    final fileBytes = await File(exportPath).readAsBytes();
+    await File(outputPath).writeAsBytes(fileBytes);
+    return outputPath;
+  }
+
+  // ==================== TIMETABLE CSV EXPORT ====================
+
+  static Future<String> exportTimetableToCsv(List<TimetableEntry> entries) async {
+    final rows = <List<String>>[
+      TimetableEntry.csvHeaders,
+      ...entries.map((e) => e.toCsvRow()),
+    ];
+    final csvContent = _CsvHelper.encode(rows);
+    final dir = await getApplicationDocumentsDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = 'timetable_export_$timestamp.csv';
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsString(csvContent, encoding: utf8);
+    return file.path;
+  }
+
+  static Future<void> exportAndShareTimetable(List<TimetableEntry> entries) async {
+    final path = await exportTimetableToCsv(entries);
+    await Share.shareXFiles(
+      [XFile(path, mimeType: 'text/csv')],
+      subject: 'Timetable Export',
+      text: 'Here is the timetable export.',
+    );
+  }
+
+  static Future<String?> saveTimetableToDevice(List<TimetableEntry> entries) async {
+    final exportPath = await exportTimetableToCsv(entries);
+    final fileName = p.basename(exportPath);
+    final String? outputPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save Timetable',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+    if (outputPath == null) return null;
+    final fileBytes = await File(exportPath).readAsBytes();
+    await File(outputPath).writeAsBytes(fileBytes);
+    return outputPath;
+  }
+
+  // ==================== PDF PLACEHOLDER EXPORT ====================
+
+  static Future<String> exportAttendanceToPdfPlaceholder(List<AttendanceRecord> records) async {
+    return PdfPlaceholderService.generateTextReport(
+      title: 'ATTENDANCE REPORT',
+      subtitle: 'StudyFlow App',
+      headers: AttendanceRecord.csvHeaders,
+      rows: records.map((r) => r.toCsvRow()).toList(),
+    );
+  }
+
+  static Future<String> exportTimetableToPdfPlaceholder(List<TimetableEntry> entries) async {
+    return PdfPlaceholderService.generateTextReport(
+      title: 'TIMETABLE REPORT',
+      subtitle: 'StudyFlow App',
+      headers: TimetableEntry.csvHeaders,
+      rows: entries.map((e) => e.toCsvRow()).toList(),
+    );
+  }
+
+  static Future<void> shareAttendancePdfPlaceholder(List<AttendanceRecord> records) async {
+    final path = await exportAttendanceToPdfPlaceholder(records);
+    await Share.shareXFiles(
+      [XFile(path, mimeType: 'text/plain')], // Using text/plain as placeholder
+      subject: 'Attendance Report (PDF Placeholder)',
+      text: 'Here is the attendance report (text-based PDF placeholder).',
+    );
+  }
+
+  static Future<void> shareTimetablePdfPlaceholder(List<TimetableEntry> entries) async {
+    final path = await exportTimetableToPdfPlaceholder(entries);
+    await Share.shareXFiles(
+      [XFile(path, mimeType: 'text/plain')], // Using text/plain as placeholder
+      subject: 'Timetable Report (PDF Placeholder)',
+      text: 'Here is the timetable report (text-based PDF placeholder).',
+    );
+  }
+
+  // ==================== CSV IMPORT (BULK ENTRY) ====================
+
+  static Future<List<AttendanceRecord>> importAttendanceFromCsv(String filePath) async {
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw Exception('File not found: $filePath');
+    }
+    final contents = await file.readAsString(encoding: utf8);
+    if (contents.trim().isEmpty) {
+      throw Exception('File is empty');
+    }
+    final rows = _CsvHelper.decode(contents);
+    if (rows.isEmpty) {
+      throw Exception('CSV file has no data rows');
+    }
+
+    var startIndex = 0;
+    final firstRow = rows.first.map((c) => c.toLowerCase().trim()).toList();
+    final expectedHeaders = AttendanceRecord.csvHeaders.map((h) => h.toLowerCase()).toList();
+    if (_rowsMatchHeaders(firstRow, expectedHeaders)) {
+      startIndex = 1;
+    }
+
+    final records = <AttendanceRecord>[];
+    final errors = <String>[];
+
+    for (var i = startIndex; i < rows.length; i++) {
+      try {
+        final record = AttendanceRecord.fromCsvRow(rows[i]);
+        records.add(record);
+      } catch (e) {
+        errors.add('Row ${i + 1}: $e');
+      }
+    }
+
+    if (errors.isNotEmpty && records.isEmpty) {
+      throw FormatException('All rows failed to parse:\n${errors.take(5).join('\n')}');
+    }
+
+    return records;
+  }
+
+  static Future<List<TimetableEntry>> importTimetableFromCsv(String filePath) async {
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw Exception('File not found: $filePath');
+    }
+    final contents = await file.readAsString(encoding: utf8);
+    if (contents.trim().isEmpty) {
+      throw Exception('File is empty');
+    }
+    final rows = _CsvHelper.decode(contents);
+    if (rows.isEmpty) {
+      throw Exception('CSV file has no data rows');
+    }
+
+    var startIndex = 0;
+    final firstRow = rows.first.map((c) => c.toLowerCase().trim()).toList();
+    final expectedHeaders = TimetableEntry.csvHeaders.map((h) => h.toLowerCase()).toList();
+    if (_rowsMatchHeaders(firstRow, expectedHeaders)) {
+      startIndex = 1;
+    }
+
+    final entries = <TimetableEntry>[];
+    final errors = <String>[];
+
+    for (var i = startIndex; i < rows.length; i++) {
+      try {
+        final entry = TimetableEntry.fromCsvRow(rows[i]);
+        entries.add(entry);
+      } catch (e) {
+        errors.add('Row ${i + 1}: $e');
+      }
+    }
+
+    if (errors.isNotEmpty && entries.isEmpty) {
+      throw FormatException('All rows failed to parse:\n${errors.take(5).join('\n')}');
+    }
+
+    return entries;
+  }
+
+  static Future<List<AttendanceRecord>> importAttendanceFromPicker() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+      allowMultiple: false,
+      withData: false,
+    );
+    if (result == null || result.files.isEmpty) {
+      throw Exception('No file selected');
+    }
+    final path = result.files.single.path;
+    if (path == null) {
+      throw Exception('Could not access file path');
+    }
+    return importAttendanceFromCsv(path);
+  }
+
+  static Future<List<TimetableEntry>> importTimetableFromPicker() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+      allowMultiple: false,
+      withData: false,
+    );
+    if (result == null || result.files.isEmpty) {
+      throw Exception('No file selected');
+    }
+    final path = result.files.single.path;
+    if (path == null) {
+      throw Exception('Could not access file path');
+    }
+    return importTimetableFromCsv(path);
+  }
+
+  static bool _rowsMatchHeaders(List<String> row, List<String> headers) {
+    if (row.length < headers.length) return false;
+    for (var i = 0; i < headers.length; i++) {
+      if (row[i] != headers[i]) return false;
+    }
+    return true;
+  }
+
+  // ==================== MONTHLY AUTO-BACKUP ====================
+
+  static Future<ExportResult> triggerAutoBackup() async {
+    return exportAllData();
+  }
+
+  static Future<void> initializeMonthlyAutoBackup() async {
+    BackupWorkManager.initialize();
+    await BackupWorkManager.registerMonthlyBackup();
+  }
+
+  static Future<void> cancelMonthlyAutoBackup() async {
+    await BackupWorkManager.cancelMonthlyBackup();
+  }
 }
