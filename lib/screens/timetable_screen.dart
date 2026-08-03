@@ -1754,7 +1754,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 ),
               ),
             ),
-            // BOTTOM DRAG HANDLE
+                        // BOTTOM DRAG HANDLE
             GestureDetector(
               behavior: HitTestBehavior.translucent,
               onVerticalDragStart: (_) => _onDragStart(c['id'] as int, false, originalStart, originalEnd, false),
@@ -1767,7 +1767,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   borderRadius: const BorderRadius.vertical(bottom: Radius.circular(9)),
                 ),
                 child: Center(
-                                    child: Container(
+                  child: Container(
                     width: 28,
                     height: 3,
                     decoration: BoxDecoration(
@@ -1777,11 +1777,12 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      );
-    }
+      ),
+    );
+  }
 
     // ============================================
     // TASK CARD (REDESIGNED)
