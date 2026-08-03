@@ -11,6 +11,7 @@
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import '../database_helper.dart';
 import '../services/widget_service.dart';
@@ -1766,13 +1767,12 @@ class _TimetableScreenState extends State<TimetableScreen> {
                   borderRadius: const BorderRadius.vertical(bottom: Radius.circular(9)),
                 ),
                 child: Center(
-                                      child: Container(
-                      width: 28,
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.85),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+                                    child: Container(
+                    width: 28,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ),
@@ -2231,4 +2231,3 @@ class _TimetableScreenState extends State<TimetableScreen> {
       );
     }
   }
-
