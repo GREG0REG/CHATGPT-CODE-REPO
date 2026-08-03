@@ -392,7 +392,7 @@ class MockTestStorage {
 
   static Future<void> save(MockTestResult test) async {
     final all = await getAll();
-    all.removeWhere((t) => t.id == id);
+    all.removeWhere((t) => t.id == test.id);
     all.add(test);
     while (all.length > 100) all.removeLast();
     final prefs = await SharedPreferences.getInstance();
@@ -519,7 +519,7 @@ class _GradeCalcPrefs {
 }
 
 class GradeCalculatorScreen extends StatefulWidget {
-  const GradeCalculatorScreen({super.key});
+  const GradeCalculatorScreen({super.key});  // <-- FIXED: Added const
   @override
   State<GradeCalculatorScreen> createState() => _GradeCalculatorScreenState();
 }
@@ -1270,7 +1270,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
             const SizedBox(height: 8),
             Text('$marks', style: TextStyle(fontSize: 48, fontWeight: FontWeight.w800, color: NeetData.getMarksColor(marks))),
             const SizedBox(height: 4),
-            Text('${percentile.toStringAsFixed(2)} percentile', style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant)),
+                        Text('${percentile.toStringAsFixed(2)} percentile', style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant)),
             Text('Estimated AIR: $air', style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant)),
             const SizedBox(height: 12),
             Container(
@@ -1518,7 +1518,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
 
     // Weekly stats
     final weeklyStats = _getWeeklyStudyStats();
-    buffer.writeln('📅 This Week's Study:');
+    buffer.writeln('📅 This Week\'s Study:');
     buffer.writeln('   Hours: ${weeklyStats['totalHours'].toStringAsFixed(1)}h');
     buffer.writeln('   MCQs Solved: ${weeklyStats['totalMcqs']}');
     buffer.writeln('   Accuracy: ${weeklyStats['accuracy'].toStringAsFixed(1)}%');
@@ -1526,7 +1526,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     buffer.writeln('');
 
     // Subject breakdown
-    final subjHours = weeklyStats['subjectHours'] as Map<String, double>? ?? {};
+    final subjHours = weeklyStats['subjectHours'] as Map<String, dynamic>? ?? {};
     if (subjHours.isNotEmpty) {
       buffer.writeln('⏰ Subject-wise Hours:');
       subjHours.forEach((subj, hours) {
@@ -2899,1819 +2899,1819 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
                       border: Border.all(color: scoreColor.withOpacity(0.2)),
                     ),
                     child: Column(
-                      children: [
-                        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                              children: [
                           Text('${res['score']}', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w800, color: scoreColor)),
                           const SizedBox(width: 6),
                           Text('/ 720', style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant)),
-                        ]),
-                        const SizedBox(height: 8),
-                        Wrap(spacing: 16, alignment: WrapAlignment.center, children: [
-                          _buildQuickStat('Percentile', '${(res['percentile'] as double).toStringAsFixed(2)}%', cs.primary),
-                          _buildQuickStat('Est. AIR', '${res['air']}', cs.secondary),
-                          _buildQuickStat('Rank', '${res['rankRange']}', scoreColor),
-                        ]),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(color: scoreColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                          child: Text('${res['tier']}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: scoreColor)),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(spacing: 16, alignment: WrapAlignment.center, children: [
+                        _buildQuickStat('Percentile', '${(res['percentile'] as double).toStringAsFixed(2)}%', cs.primary),
+                        _buildQuickStat('Est. AIR', '${res['air']}', cs.secondary),
+                        _buildQuickStat('Rank', '${res['rankRange']}', scoreColor),
+                      ]),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(color: scoreColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                        child: Text('${res['tier']}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: scoreColor)),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
-          const SizedBox(height: 20),
-          if (total > 0) ...[
-            Text('Subject Breakdown', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-            const SizedBox(height: 12),
-            _buildNeetSubjectBar('Physics', _simulatedPhysics, 180, const Color(0xFF1565C0), cs),
-            const SizedBox(height: 8),
-            _buildNeetSubjectBar('Chemistry', _simulatedChemistry, 180, const Color(0xFF2E7D32), cs),
-            const SizedBox(height: 8),
-            _buildNeetSubjectBar('Biology', _simulatedBiology, 360, const Color(0xFFC62828), cs),
-            const SizedBox(height: 20),
-          ],
-          if (total > 0) _buildCutoffComparison(total, cs),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _addMockTest,
-              icon: const Icon(Icons.save),
-              label: const Text('Save to Mock Test History'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatBox(String label, String value, Color color, ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Text(label, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-          const SizedBox(height: 4),
-          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSubjectInput(String label, String hint, Color color, TextEditingController controller, ColorScheme cs) {
-    return TextField(
-      controller: controller,
-      keyboardType: TextInputType.number,
-      onChanged: (_) => setState(() {}),
-      decoration: InputDecoration(
-        labelText: label, hintText: hint,
-        prefixIcon: Container(
-          margin: const EdgeInsets.all(12),
-          width: 10, height: 10,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: color, width: 2)),
       ),
-    );
-  }
-
-  Widget _buildQuickInput(String label, String hint, IconData icon, Color color, TextEditingController controller) {
-    return TextField(
-      controller: controller,
-      keyboardType: TextInputType.number,
-      textAlign: TextAlign.center,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(icon, size: 18, color: color),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-        isDense: true,
-      ),
-    );
-  }
-
-  Widget _buildQuickStat(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+      const SizedBox(height: 20),
+      if (total > 0) ...[
+        Text('Subject Breakdown', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+        const SizedBox(height: 12),
+        _buildNeetSubjectBar('Physics', _simulatedPhysics, 180, const Color(0xFF1565C0), cs),
+        const SizedBox(height: 8),
+        _buildNeetSubjectBar('Chemistry', _simulatedChemistry, 180, const Color(0xFF2E7D32), cs),
+        const SizedBox(height: 8),
+        _buildNeetSubjectBar('Biology', _simulatedBiology, 360, const Color(0xFFC62828), cs),
+        const SizedBox(height: 20),
       ],
-    );
-  }
+      if (total > 0) _buildCutoffComparison(total, cs),
+      const SizedBox(height: 20),
+      SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: _addMockTest,
+          icon: const Icon(Icons.save),
+          label: const Text('Save to Mock Test History'),
+        ),
+      ),
+    ],
+  );
+}
 
-  Widget _buildNeetSubjectBar(String name, int marks, int max, Color color, ColorScheme cs) {
-    final pct = marks / max;
-    return Column(
+Widget _buildStatBox(String label, String value, Color color, ColorScheme cs) {
+  return Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerHighest.withOpacity(0.5),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Column(
+      children: [
+        Text(label, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 4),
+        Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+      ],
+    ),
+  );
+}
+
+Widget _buildSubjectInput(String label, String hint, Color color, TextEditingController controller, ColorScheme cs) {
+  return TextField(
+    controller: controller,
+    keyboardType: TextInputType.number,
+    onChanged: (_) => setState(() {}),
+    decoration: InputDecoration(
+      labelText: label, hintText: hint,
+      prefixIcon: Container(
+        margin: const EdgeInsets.all(12),
+        width: 10, height: 10,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: color, width: 2)),
+    ),
+  );
+}
+
+Widget _buildQuickInput(String label, String hint, IconData icon, Color color, TextEditingController controller) {
+  return TextField(
+    controller: controller,
+    keyboardType: TextInputType.number,
+    textAlign: TextAlign.center,
+    decoration: InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: Icon(icon, size: 18, color: color),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      isDense: true,
+    ),
+  );
+}
+
+Widget _buildQuickStat(String label, String value, Color color) {
+  return Column(
+    children: [
+      Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+      Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+    ],
+  );
+}
+
+Widget _buildNeetSubjectBar(String name, int marks, int max, Color color, ColorScheme cs) {
+  final pct = marks / max;
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: cs.onSurface)),
+          Text('$marks / $max (${(pct * 100).toStringAsFixed(1)}%)', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+        ],
+      ),
+      const SizedBox(height: 6),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: LinearProgressIndicator(
+          value: pct.clamp(0.0, 1.0), minHeight: 10,
+          backgroundColor: cs.surfaceContainerHighest,
+          valueColor: AlwaysStoppedAnimation(color),
+        ),
+      ),
+    ],
+  );
+}
+
+Widget _buildCutoffComparison(int marks, ColorScheme cs) {
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerHighest.withOpacity(0.3),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+    ),
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: cs.onSurface)),
-            Text('$marks / $max (${(pct * 100).toStringAsFixed(1)}%)', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+            Icon(Icons.school, size: 18, color: cs.primary),
+            const SizedBox(width: 8),
+            Text('College Cutoff Comparison', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
           ],
         ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(
-            value: pct.clamp(0.0, 1.0), minHeight: 10,
-            backgroundColor: cs.surfaceContainerHighest,
-            valueColor: AlwaysStoppedAnimation(color),
-          ),
-        ),
+        const SizedBox(height: 12),
+        ...NeetData.collegeCutoffs.entries.take(8).map((entry) {
+          final college = entry.key;
+          final cutoffs = entry.value;
+          final latestCutoff = cutoffs['2024'] ?? 0;
+          final diff = marks - latestCutoff;
+          final isSafe = diff >= 0;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Container(width: 8, height: 8, decoration: BoxDecoration(color: isSafe ? Colors.green : cs.error, shape: BoxShape.circle)),
+                const SizedBox(width: 10),
+                Expanded(child: Text(college, style: TextStyle(fontSize: 12, color: cs.onSurface))),
+                Text(isSafe ? '+$diff' : '$diff', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isSafe ? Colors.green : cs.error)),
+                const SizedBox(width: 4),
+                Text('($latestCutoff)', style: TextStyle(fontSize: 10, color: cs.outline)),
+              ],
+            ),
+          );
+        }).toList(),
       ],
-    );
-  }
+    ),
+  );
+}
 
-  Widget _buildCutoffComparison(int marks, ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.school, size: 18, color: cs.primary),
-              const SizedBox(width: 8),
-              Text('College Cutoff Comparison', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...NeetData.collegeCutoffs.entries.take(8).map((entry) {
-            final college = entry.key;
-            final cutoffs = entry.value;
-            final latestCutoff = cutoffs['2024'] ?? 0;
-            final diff = marks - latestCutoff;
-            final isSafe = diff >= 0;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+// ═════════════════════════════════════════════════════════════════
+// TAB 3: MOCK TESTS
+// ═════════════════════════════════════════════════════════════════
+
+Widget _buildMockTestsTab(ColorScheme cs) {
+  if (_loadingMocks) return const Center(child: CircularProgressIndicator());
+  if (_mockTests.isEmpty) return _buildEmptyMockTests(cs);
+
+  final recentTests = _mockTests.take(10).toList();
+  final avgScore = recentTests.map((t) => t.totalScore).reduce((a, b) => a + b) / recentTests.length;
+  final bestScore = recentTests.map((t) => t.totalScore).reduce((a, b) => a > b ? a : b);
+  final latest = recentTests.first;
+  final trend = recentTests.length > 1 ? latest.totalScore - recentTests[1].totalScore : 0;
+
+  return CustomScrollView(
+    slivers: [
+      SliverToBoxAdapter(
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 children: [
-                  Container(width: 8, height: 8, decoration: BoxDecoration(color: isSafe ? Colors.green : cs.error, shape: BoxShape.circle)),
+                  Expanded(child: _buildMiniStat('Tests', '${_mockTests.length}', cs.primary, cs)),
                   const SizedBox(width: 10),
-                  Expanded(child: Text(college, style: TextStyle(fontSize: 12, color: cs.onSurface))),
-                  Text(isSafe ? '+$diff' : '$diff', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isSafe ? Colors.green : cs.error)),
-                  const SizedBox(width: 4),
-                  Text('($latestCutoff)', style: TextStyle(fontSize: 10, color: cs.outline)),
+                  Expanded(child: _buildMiniStat('Best', '$bestScore', Colors.green, cs)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _buildMiniStat('Avg', '${avgScore.toStringAsFixed(0)}', cs.secondary, cs)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _buildMiniStat('Trend', trend >= 0 ? '+$trend' : '$trend', trend >= 0 ? Colors.green : cs.error, cs)),
                 ],
               ),
-            );
-          }).toList(),
-        ],
-      ),
-    );
-  }
-
-  // ═════════════════════════════════════════════════════════════════
-  // TAB 3: MOCK TESTS
-  // ═════════════════════════════════════════════════════════════════
-
-  Widget _buildMockTestsTab(ColorScheme cs) {
-    if (_loadingMocks) return const Center(child: CircularProgressIndicator());
-    if (_mockTests.isEmpty) return _buildEmptyMockTests(cs);
-
-    final recentTests = _mockTests.take(10).toList();
-    final avgScore = recentTests.map((t) => t.totalScore).reduce((a, b) => a + b) / recentTests.length;
-    final bestScore = recentTests.map((t) => t.totalScore).reduce((a, b) => a > b ? a : b);
-    final latest = recentTests.first;
-    final trend = recentTests.length > 1 ? latest.totalScore - recentTests[1].totalScore : 0;
-
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: Column(
-            children: [
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Expanded(child: _buildMiniStat('Tests', '${_mockTests.length}', cs.primary, cs)),
-                    const SizedBox(width: 10),
-                    Expanded(child: _buildMiniStat('Best', '$bestScore', Colors.green, cs)),
-                    const SizedBox(width: 10),
-                    Expanded(child: _buildMiniStat('Avg', '${avgScore.toStringAsFixed(0)}', cs.secondary, cs)),
-                    const SizedBox(width: 10),
-                    Expanded(child: _buildMiniStat('Trend', trend >= 0 ? '+$trend' : '$trend', trend >= 0 ? Colors.green : cs.error, cs)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              _buildTrendChart(recentTests.reversed.toList(), cs),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Text('Test History', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                            title: const Text('Clear all history?'),
-                            content: const Text('Delete all mock test records?'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Clear')),
-                            ],
-                          ),
-                        );
-                        if (confirm == true) {
-                          await MockTestStorage.clear();
-                          await _loadMockTests();
-                        }
-                      },
-                      icon: const Icon(Icons.delete_outline, size: 16),
-                      label: const Text('Clear', style: TextStyle(fontSize: 12)),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final test = _mockTests[index];
-                final color = NeetData.getMarksColor(test.totalScore);
-                final dateStr = '${test.date.day}/${test.date.month}/${test.date.year}';
-                return Dismissible(
-                  key: ValueKey('mock_${test.id}'),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(16)),
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20),
-                    child: Icon(Icons.delete_outline, color: cs.onErrorContainer),
-                  ),
-                  onDismissed: (_) => _deleteMockTest(test.id),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerHighest.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 44, height: 44,
-                              decoration: BoxDecoration(color: color.withOpacity(0.12), shape: BoxShape.circle),
-                              child: Center(child: Text('${test.totalScore}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color))),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(test.testName, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                                  Text(dateStr, style: TextStyle(fontSize: 11, color: cs.outline)),
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text('${test.percentile.toStringAsFixed(1)}%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.primary)),
-                                Text('AIR ~${test.air}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            _buildSubjectMini('P', test.physicsScore, 180, const Color(0xFF1565C0), cs),
-                            const SizedBox(width: 8),
-                            _buildSubjectMini('C', test.chemistryScore, 180, const Color(0xFF2E7D32), cs),
-                            const SizedBox(width: 8),
-                            _buildSubjectMini('B', test.biologyScore, 360, const Color(0xFFC62828), cs),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-              childCount: _mockTests.length,
-            ),
-          ),
-        ),
-        const SliverToBoxAdapter(child: SizedBox(height: 32)),
-      ],
-    );
-  }
-
-  Widget _buildMiniStat(String label, String value, Color color, ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        children: [
-          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-          const SizedBox(height: 2),
-          Text(label, style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTrendChart(List<MockTestResult> tests, ColorScheme cs) {
-    if (tests.length < 2) return const SizedBox.shrink();
-    final maxScore = tests.map((t) => t.totalScore).reduce((a, b) => a > b ? a : b).toDouble();
-    final minScore = tests.map((t) => t.totalScore).reduce((a, b) => a < b ? a : b).toDouble();
-    final range = (maxScore - minScore).clamp(50.0, 720.0);
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Score Trend', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurface)),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 120,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: tests.asMap().entries.map((entry) {
-                final test = entry.value;
-                final height = ((test.totalScore - minScore) / range * 80 + 20).clamp(20.0, 100.0);
-                final color = NeetData.getMarksColor(test.totalScore);
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Container(
-                          width: double.infinity,
-                          height: height,
-                          decoration: BoxDecoration(
-                            color: color.withOpacity(0.7),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text('${test.totalScore}', style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSubjectMini(String label, int score, int max, Color color, ColorScheme cs) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
-            const SizedBox(width: 4),
-            Text('$score', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onSurface)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyMockTests(ColorScheme cs) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80, height: 80,
-              decoration: BoxDecoration(color: cs.primaryContainer, shape: BoxShape.circle),
-              child: Icon(Icons.history_edu, size: 36, color: cs.onPrimaryContainer),
             ),
             const SizedBox(height: 16),
-            Text('No mock tests yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
-            const SizedBox(height: 4),
-            Text('Go to NEET Simulator tab and enter your marks to start tracking.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: cs.outline)),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: () => _tabController.animateTo(1),
-              icon: const Icon(Icons.psychology),
-              label: const Text('Go to Simulator'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-
-  // ═════════════════════════════════════════════════════════════════
-  // TAB 4: ANALYTICS
-  // ═════════════════════════════════════════════════════════════════
-
-  Widget _buildAnalyticsTab(ColorScheme cs) {
-    if (_mockTests.isEmpty) return _buildEmptyAnalytics(cs);
-
-    final allTests = _mockTests;
-    final avgPhysics = allTests.map((t) => t.physicsScore).reduce((a, b) => a + b) / allTests.length;
-    final avgChemistry = allTests.map((t) => t.chemistryScore).reduce((a, b) => a + b) / allTests.length;
-    final avgBiology = allTests.map((t) => t.biologyScore).reduce((a, b) => a + b) / allTests.length;
-    final physPct = (avgPhysics / 180) * 100;
-    final chemPct = (avgChemistry / 180) * 100;
-    final bioPct = (avgBiology / 360) * 100;
-
-    final subjects = {'Physics': physPct, 'Chemistry': chemPct, 'Biology': bioPct};
-    final weakest = subjects.entries.reduce((a, b) => a.value < b.value ? a : b);
-    final strongest = subjects.entries.reduce((a, b) => a.value > b.value ? a : b);
-
-    final scores = allTests.map((t) => t.totalScore).toList();
-    final mean = scores.reduce((a, b) => a + b) / scores.length;
-    final variance = scores.map((s) => (s - mean) * (s - mean)).reduce((a, b) => a + b) / scores.length;
-    final stdDev = math.sqrt(variance);
-    final consistency = ((1 - (stdDev / 720)) * 100).clamp(0.0, 100.0);
-
-    final firstScore = allTests.last.totalScore;
-    final lastScore = allTests.first.totalScore;
-    final improvement = lastScore - firstScore;
-    final testsCount = allTests.length;
-    final improvementPerTest = testsCount > 1 ? improvement / (testsCount - 1) : 0;
-
-    final timeDist = _getSubjectTimeDistribution();
-    final totalHours = timeDist.values.fold(0.0, (a, b) => a + b);
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [cs.primary.withOpacity(0.15), cs.surfaceContainerHighest.withOpacity(0.3)],
-                begin: Alignment.topLeft, end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: cs.primary.withOpacity(0.2)),
-            ),
-            child: Column(
-              children: [
-                Text('Performance Analytics', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildAnalyticsRing('Consistency', consistency, cs.primary, cs),
-                    _buildAnalyticsRing('Avg Score', mean, cs.secondary, cs),
-                    _buildAnalyticsRing('Improvement', improvement.toDouble(), improvement >= 0 ? Colors.green : cs.error, cs),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (totalHours > 0) _buildTimeDistributionCard(cs, timeDist, totalHours),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Subject Averages', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                const SizedBox(height: 16),
-                _buildAnalyticsSubjectBar('Physics', avgPhysics, 180, const Color(0xFF1565C0), cs),
-                const SizedBox(height: 12),
-                _buildAnalyticsSubjectBar('Chemistry', avgChemistry, 180, const Color(0xFF2E7D32), cs),
-                const SizedBox(height: 12),
-                _buildAnalyticsSubjectBar('Biology', avgBiology, 360, const Color(0xFFC62828), cs),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: cs.primaryContainer.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: cs.primary.withOpacity(0.15)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.lightbulb, size: 18, color: cs.primary),
-                    const SizedBox(width: 8),
-                    Text('Smart Recommendations', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildRecommendationCard('Weakest Subject: ${weakest.key}', NeetData.getSubjectAdvice(weakest.key, weakest.value), Icons.trending_down, cs.error, cs),
-                const SizedBox(height: 10),
-                _buildRecommendationCard('Strongest Subject: ${strongest.key}', 'Great! Use this confidence to tackle harder topics.', Icons.trending_up, Colors.green, cs),
-                const SizedBox(height: 10),
-                _buildRecommendationCard('Consistency Score: ${consistency.toStringAsFixed(0)}%',
-                  consistency > 80 ? 'Your scores are very stable. Great job!' : consistency > 60 ? 'Scores fluctuate. Focus on building a steady routine.' : 'High variation detected. Work on time management and revision.',
-                  Icons.show_chart, consistency > 80 ? Colors.green : consistency > 60 ? Colors.orange : cs.error, cs),
-                const SizedBox(height: 10),
-                _buildRecommendationCard('Improvement Rate: ${improvementPerTest >= 0 ? '+' : ''}${improvementPerTest.toStringAsFixed(1)} marks/test',
-                  improvementPerTest > 5 ? 'Excellent improvement trajectory! Keep it up.' : improvementPerTest > 0 ? 'Steady improvement. Increase practice to accelerate.' : improvementPerTest > -5 ? 'Scores are stable. Push harder for breakthrough.' : 'Scores declining. Revisit basics and test strategy.',
-                  improvementPerTest >= 0 ? Icons.arrow_upward : Icons.arrow_downward, improvementPerTest >= 0 ? Colors.green : cs.error, cs),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Target Score Calculator', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                const SizedBox(height: 12),
-                _buildTargetRow('AIIMS Delhi', 680, mean, cs),
-                _buildTargetRow('Top Govt College', 650, mean, cs),
-                _buildTargetRow('Govt College', 610, mean, cs),
-                _buildTargetRow('Private College', 550, mean, cs),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimeDistributionCard(ColorScheme cs, Map<String, double> timeDist, double totalHours) {
-    final idealDist = {'Biology': 0.50, 'Physics': 0.25, 'Chemistry': 0.25};
-    final colors = {'Physics': const Color(0xFF1565C0), 'Chemistry': const Color(0xFF2E7D32), 'Biology': const Color(0xFFC62828), 'Other': Colors.grey};
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.schedule, size: 18, color: cs.primary),
-              const SizedBox(width: 8),
-              Text('Study Time Distribution', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text('Total: ${totalHours.toStringAsFixed(1)}h recorded', style: TextStyle(fontSize: 11, color: cs.outline)),
-          const SizedBox(height: 12),
-          ...timeDist.entries.where((e) => e.value > 0).map((e) {
-            final actualPct = (e.value / totalHours * 100);
-            final idealPct = (idealDist[e.key] ?? 0) * 100;
-            final diff = actualPct - idealPct;
-            final color = colors[e.key] ?? Colors.grey;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            _buildTrendChart(recentTests.reversed.toList(), cs),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
                 children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text(e.key, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurface)),
-                    Text('${e.value.toStringAsFixed(1)}h (${actualPct.toStringAsFixed(0)}%)', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-                  ]),
-                  const SizedBox(height: 4),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: (actualPct / 100).clamp(0.0, 1.0), minHeight: 8,
-                      backgroundColor: cs.surfaceContainerHighest,
-                      valueColor: AlwaysStoppedAnimation(color),
-                    ),
+                  Text('Test History', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          title: const Text('Clear all history?'),
+                          content: const Text('Delete all mock test records?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Clear')),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await MockTestStorage.clear();
+                        await _loadMockTests();
+                      }
+                    },
+                    icon: const Icon(Icons.delete_outline, size: 16),
+                    label: const Text('Clear', style: TextStyle(fontSize: 12)),
                   ),
-                  const SizedBox(height: 2),
-                  Text(diff > 5 ? '+${diff.toStringAsFixed(0)}% over ideal' : diff < -5 ? '${diff.toStringAsFixed(0)}% under ideal' : 'On track',
-                    style: TextStyle(fontSize: 9, color: diff.abs() > 5 ? Colors.orange : Colors.green)),
                 ],
               ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAnalyticsRing(String label, double value, Color color, ColorScheme cs) {
-    final pct = label == 'Improvement' ? (value / 100).clamp(-1.0, 1.0).abs() : (value / 100).clamp(0.0, 1.0);
-    return Column(
-      children: [
-        SizedBox(
-          width: 72, height: 72,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              CircularProgressIndicator(value: 1.0, strokeWidth: 6, backgroundColor: cs.surfaceContainerHighest, valueColor: const AlwaysStoppedAnimation(Colors.transparent)),
-              CircularProgressIndicator(value: pct, strokeWidth: 6, backgroundColor: Colors.transparent, valueColor: AlwaysStoppedAnimation(color)),
-              Text(label == 'Avg Score' ? '${value.toStringAsFixed(0)}' : '${value.toStringAsFixed(0)}%', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(label, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-      ],
-    );
-  }
-
-  Widget _buildAnalyticsSubjectBar(String name, double avg, int max, Color color, ColorScheme cs) {
-    final pct = (avg / max).clamp(0.0, 1.0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: cs.onSurface)),
-          Text('${avg.toStringAsFixed(1)} / $max avg', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-        ]),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(value: pct, minHeight: 10, backgroundColor: cs.surfaceContainerHighest, valueColor: AlwaysStoppedAnimation(color)),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRecommendationCard(String title, String advice, IconData icon, Color color, ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: cs.surface.withOpacity(0.5), borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, size: 18, color: color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                const SizedBox(height: 2),
-                Text(advice, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, height: 1.4)),
-              ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTargetRow(String college, int target, double current, ColorScheme cs) {
-    final diff = target - current;
-    final isAchievable = diff <= 0;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Expanded(flex: 3, child: Text(college, style: TextStyle(fontSize: 12, color: cs.onSurface))),
-          Expanded(flex: 2, child: Text('$target marks', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface))),
-          Expanded(
-            flex: 2,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: isAchievable ? Colors.green.withOpacity(0.12) : cs.error.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
-              child: Text(isAchievable ? 'Achieved!' : '+${diff.toStringAsFixed(0)} needed', textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: isAchievable ? Colors.green : cs.error)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyAnalytics(ColorScheme cs) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(width: 80, height: 80, decoration: BoxDecoration(color: cs.primaryContainer, shape: BoxShape.circle), child: Icon(Icons.analytics, size: 36, color: cs.onPrimaryContainer)),
-            const SizedBox(height: 16),
-            Text('No data for analytics', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
-            const SizedBox(height: 4),
-            Text('Save some mock tests to see your performance analytics and smart recommendations.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: cs.outline)),
-            const SizedBox(height: 20),
-            FilledButton.icon(onPressed: () => _tabController.animateTo(1), icon: const Icon(Icons.psychology), label: const Text('Go to Simulator')),
+            const SizedBox(height: 8),
           ],
         ),
       ),
-    );
-  }
-
-
-  // ═════════════════════════════════════════════════════════════════
-  // TAB 5: TOOLS
-  // ═════════════════════════════════════════════════════════════════
-
-  Widget _buildToolsTab(ColorScheme cs) {
-    final quickResult = _calculateQuickScore();
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildExamDateCard(cs),
-          const SizedBox(height: 16),
-          _buildQuickScoreCard(cs, quickResult),
-          const SizedBox(height: 16),
-          _buildDailyTargetsCard(cs),
-          const SizedBox(height: 16),
-          _buildWeightageVisualizer(cs),
-          const SizedBox(height: 16),
-          _buildTimeSummaryCard(cs),
-          const SizedBox(height: 16),
-          _buildStudyLogCard(cs),
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildExamDateCard(ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [cs.primary.withOpacity(0.12), cs.surfaceContainerHighest.withOpacity(0.3)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.primary.withOpacity(0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.calendar_today, size: 18, color: cs.primary),
-              const SizedBox(width: 8),
-              Text('NEET Exam Date', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_neetExamDate != null) ...[
-            Row(
-              children: [
-                Expanded(
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final test = _mockTests[index];
+              final color = NeetData.getMarksColor(test.totalScore);
+              final dateStr = '${test.date.day}/${test.date.month}/${test.date.year}';
+              return Dismissible(
+                key: ValueKey('mock_${test.id}'),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(16)),
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  child: Icon(Icons.delete_outline, color: cs.onErrorContainer),
+                ),
+                onDismissed: (_) => _deleteMockTest(test.id),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${_neetExamDate!.day}/${_neetExamDate!.month}/${_neetExamDate!.year}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface)),
-                      const SizedBox(height: 2),
-                      Text('${_getNeetCountdown()} days remaining', style: TextStyle(fontSize: 12, color: cs.primary, fontWeight: FontWeight.w500)),
+                      Row(
+                        children: [
+                          Container(
+                            width: 44, height: 44,
+                            decoration: BoxDecoration(color: color.withOpacity(0.12), shape: BoxShape.circle),
+                            child: Center(child: Text('${test.totalScore}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color))),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(test.testName, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                                Text(dateStr, style: TextStyle(fontSize: 11, color: cs.outline)),
+                              ],
+                            ),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text('${test.percentile.toStringAsFixed(1)}%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.primary)),
+                              Text('AIR ~${test.air}', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          _buildSubjectMini('P', test.physicsScore, 180, const Color(0xFF1565C0), cs),
+                          const SizedBox(width: 8),
+                          _buildSubjectMini('C', test.chemistryScore, 180, const Color(0xFF2E7D32), cs),
+                          const SizedBox(width: 8),
+                          _buildSubjectMini('B', test.biologyScore, 360, const Color(0xFFC62828), cs),
+                        ],
+                      ),
                     ],
                   ),
                 ),
-                FilledButton.tonal(onPressed: () => _pickExamDate(), child: const Text('Change')),
-              ],
-            ),
-          ] else ...[
-            Text('Set your NEET exam date to see countdown and daily motivation', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-            const SizedBox(height: 10),
-            SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: () => _pickExamDate(), icon: const Icon(Icons.calendar_month), label: const Text('Set Exam Date'))),
-          ],
+              );
+            },
+            childCount: _mockTests.length,
+          ),
+        ),
+      ),
+      const SliverToBoxAdapter(child: SizedBox(height: 32)),
+    ],
+  );
+}
+
+Widget _buildMiniStat(String label, String value, Color color, ColorScheme cs) {
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerHighest.withOpacity(0.4),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Column(
+      children: [
+        Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+        const SizedBox(height: 2),
+        Text(label, style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+      ],
+    ),
+  );
+}
+
+Widget _buildTrendChart(List<MockTestResult> tests, ColorScheme cs) {
+  if (tests.length < 2) return const SizedBox.shrink();
+  final maxScore = tests.map((t) => t.totalScore).reduce((a, b) => a > b ? a : b).toDouble();
+  final minScore = tests.map((t) => t.totalScore).reduce((a, b) => a < b ? a : b).toDouble();
+  final range = (maxScore - minScore).clamp(50.0, 720.0);
+
+  return Container(
+    margin: const EdgeInsets.symmetric(horizontal: 20),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerHighest.withOpacity(0.3),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Score Trend', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurface)),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 120,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: tests.asMap().entries.map((entry) {
+              final test = entry.value;
+              final height = ((test.totalScore - minScore) / range * 80 + 20).clamp(20.0, 100.0);
+              final color = NeetData.getMarksColor(test.totalScore);
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        height: height,
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.7),
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('${test.totalScore}', style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildSubjectMini(String label, int score, int max, Color color, ColorScheme cs) {
+  return Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+          const SizedBox(width: 4),
+          Text('$score', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onSurface)),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
-  Future<void> _pickExamDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _neetExamDate ?? DateTime(now.year + 1, 5, 4),
-      firstDate: now,
-      lastDate: DateTime(now.year + 2, 12, 31),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(primary: Theme.of(context).colorScheme.primary),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (picked != null) {
-      setState(() => _neetExamDate = picked);
-      await _setNeetExamDate(picked.millisecondsSinceEpoch);
-    }
-  }
-
-  Widget _buildQuickScoreCard(ColorScheme cs, Map<String, dynamic> result) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
-      ),
+Widget _buildEmptyMockTests(ColorScheme cs) {
+  return Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 80, height: 80,
+            decoration: BoxDecoration(color: cs.primaryContainer, shape: BoxShape.circle),
+            child: Icon(Icons.history_edu, size: 36, color: cs.onPrimaryContainer),
+          ),
+          const SizedBox(height: 16),
+          Text('No mock tests yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+          const SizedBox(height: 4),
+          Text('Go to NEET Simulator tab and enter your marks to start tracking.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: cs.outline)),
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: () => _tabController.animateTo(1),
+            icon: const Icon(Icons.psychology),
+            label: const Text('Go to Simulator'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+
+// ═════════════════════════════════════════════════════════════════
+// TAB 4: ANALYTICS
+// ═════════════════════════════════════════════════════════════════
+
+Widget _buildAnalyticsTab(ColorScheme cs) {
+  if (_mockTests.isEmpty) return _buildEmptyAnalytics(cs);
+
+  final allTests = _mockTests;
+  final avgPhysics = allTests.map((t) => t.physicsScore).reduce((a, b) => a + b) / allTests.length;
+  final avgChemistry = allTests.map((t) => t.chemistryScore).reduce((a, b) => a + b) / allTests.length;
+  final avgBiology = allTests.map((t) => t.biologyScore).reduce((a, b) => a + b) / allTests.length;
+  final physPct = (avgPhysics / 180) * 100;
+  final chemPct = (avgChemistry / 180) * 100;
+  final bioPct = (avgBiology / 360) * 100;
+
+  final subjects = {'Physics': physPct, 'Chemistry': chemPct, 'Biology': bioPct};
+  final weakest = subjects.entries.reduce((a, b) => a.value < b.value ? a : b);
+  final strongest = subjects.entries.reduce((a, b) => a.value > b.value ? a : b);
+
+  final scores = allTests.map((t) => t.totalScore).toList();
+  final mean = scores.reduce((a, b) => a + b) / scores.length;
+  final variance = scores.map((s) => (s - mean) * (s - mean)).reduce((a, b) => a + b) / scores.length;
+  final stdDev = math.sqrt(variance);
+  final consistency = ((1 - (stdDev / 720)) * 100).clamp(0.0, 100.0);
+
+  final firstScore = allTests.last.totalScore;
+  final lastScore = allTests.first.totalScore;
+  final improvement = lastScore - firstScore;
+  final testsCount = allTests.length;
+  final improvementPerTest = testsCount > 1 ? improvement / (testsCount - 1) : 0;
+
+  final timeDist = _getSubjectTimeDistribution();
+  final totalHours = timeDist.values.fold(0.0, (a, b) => a + b);
+
+  return SingleChildScrollView(
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [cs.primary.withOpacity(0.15), cs.surfaceContainerHighest.withOpacity(0.3)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: cs.primary.withOpacity(0.2)),
+          ),
+          child: Column(
+            children: [
+              Text('Performance Analytics', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildAnalyticsRing('Consistency', consistency, cs.primary, cs),
+                  _buildAnalyticsRing('Avg Score', mean, cs.secondary, cs),
+                  _buildAnalyticsRing('Improvement', improvement.toDouble(), improvement >= 0 ? Colors.green : cs.error, cs),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        if (totalHours > 0) _buildTimeDistributionCard(cs, timeDist, totalHours),
+        const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Subject Averages', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+              const SizedBox(height: 16),
+              _buildAnalyticsSubjectBar('Physics', avgPhysics, 180, const Color(0xFF1565C0), cs),
+              const SizedBox(height: 12),
+              _buildAnalyticsSubjectBar('Chemistry', avgChemistry, 180, const Color(0xFF2E7D32), cs),
+              const SizedBox(height: 12),
+              _buildAnalyticsSubjectBar('Biology', avgBiology, 360, const Color(0xFFC62828), cs),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cs.primaryContainer.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: cs.primary.withOpacity(0.15)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.lightbulb, size: 18, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Text('Smart Recommendations', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildRecommendationCard('Weakest Subject: ${weakest.key}', NeetData.getSubjectAdvice(weakest.key, weakest.value), Icons.trending_down, cs.error, cs),
+              const SizedBox(height: 10),
+              _buildRecommendationCard('Strongest Subject: ${strongest.key}', 'Great! Use this confidence to tackle harder topics.', Icons.trending_up, Colors.green, cs),
+              const SizedBox(height: 10),
+              _buildRecommendationCard('Consistency Score: ${consistency.toStringAsFixed(0)}%',
+                consistency > 80 ? 'Your scores are very stable. Great job!' : consistency > 60 ? 'Scores fluctuate. Focus on building a steady routine.' : 'High variation detected. Work on time management and revision.',
+                Icons.show_chart, consistency > 80 ? Colors.green : consistency > 60 ? Colors.orange : cs.error, cs),
+              const SizedBox(height: 10),
+              _buildRecommendationCard('Improvement Rate: ${improvementPerTest >= 0 ? '+' : ''}${improvementPerTest.toStringAsFixed(1)} marks/test',
+                improvementPerTest > 5 ? 'Excellent improvement trajectory! Keep it up.' : improvementPerTest > 0 ? 'Steady improvement. Increase practice to accelerate.' : improvementPerTest > -5 ? 'Scores are stable. Push harder for breakthrough.' : 'Scores declining. Revisit basics and test strategy.',
+                improvementPerTest >= 0 ? Icons.arrow_upward : Icons.arrow_downward, improvementPerTest >= 0 ? Colors.green : cs.error, cs),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Target Score Calculator', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+              const SizedBox(height: 12),
+              _buildTargetRow('AIIMS Delhi', 680, mean, cs),
+              _buildTargetRow('Top Govt College', 650, mean, cs),
+              _buildTargetRow('Govt College', 610, mean, cs),
+              _buildTargetRow('Private College', 550, mean, cs),
+            ],
+          ),
+        ),
+        const SizedBox(height: 32),
+      ],
+    ),
+  );
+}
+
+Widget _buildTimeDistributionCard(ColorScheme cs, Map<String, double> timeDist, double totalHours) {
+  final idealDist = {'Biology': 0.50, 'Physics': 0.25, 'Chemistry': 0.25};
+  final colors = {'Physics': const Color(0xFF1565C0), 'Chemistry': const Color(0xFF2E7D32), 'Biology': const Color(0xFFC62828), 'Other': Colors.grey};
+
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerHighest.withOpacity(0.3),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.schedule, size: 18, color: cs.primary),
+            const SizedBox(width: 8),
+            Text('Study Time Distribution', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text('Total: ${totalHours.toStringAsFixed(1)}h recorded', style: TextStyle(fontSize: 11, color: cs.outline)),
+        const SizedBox(height: 12),
+        ...timeDist.entries.where((e) => e.value > 0).map((e) {
+          final actualPct = (e.value / totalHours * 100);
+          final idealPct = (idealDist[e.key] ?? 0) * 100;
+          final diff = actualPct - idealPct;
+          final color = colors[e.key] ?? Colors.grey;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Text(e.key, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurface)),
+                  Text('${e.value.toStringAsFixed(1)}h (${actualPct.toStringAsFixed(0)}%)', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                ]),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: (actualPct / 100).clamp(0.0, 1.0), minHeight: 8,
+                    backgroundColor: cs.surfaceContainerHighest,
+                    valueColor: AlwaysStoppedAnimation(color),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(diff > 5 ? '+${diff.toStringAsFixed(0)}% over ideal' : diff < -5 ? '${diff.toStringAsFixed(0)}% under ideal' : 'On track',
+                  style: TextStyle(fontSize: 9, color: diff.abs() > 5 ? Colors.orange : Colors.green)),
+              ],
+            ),
+          );
+        }),
+      ],
+    ),
+  );
+}
+
+Widget _buildAnalyticsRing(String label, double value, Color color, ColorScheme cs) {
+  final pct = label == 'Improvement' ? (value / 100).clamp(-1.0, 1.0).abs() : (value / 100).clamp(0.0, 1.0);
+  return Column(
+    children: [
+      SizedBox(
+        width: 72, height: 72,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            CircularProgressIndicator(value: 1.0, strokeWidth: 6, backgroundColor: cs.surfaceContainerHighest, valueColor: const AlwaysStoppedAnimation(Colors.transparent)),
+            CircularProgressIndicator(value: pct, strokeWidth: 6, backgroundColor: Colors.transparent, valueColor: AlwaysStoppedAnimation(color)),
+            Text(label == 'Avg Score' ? '${value.toStringAsFixed(0)}' : '${value.toStringAsFixed(0)}%', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+          ],
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(label, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+    ],
+  );
+}
+
+Widget _buildAnalyticsSubjectBar(String name, double avg, int max, Color color, ColorScheme cs) {
+  final pct = (avg / max).clamp(0.0, 1.0);
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: cs.onSurface)),
+        Text('${avg.toStringAsFixed(1)} / $max avg', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+      ]),
+      const SizedBox(height: 6),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: LinearProgressIndicator(value: pct, minHeight: 10, backgroundColor: cs.surfaceContainerHighest, valueColor: AlwaysStoppedAnimation(color)),
+      ),
+    ],
+  );
+}
+
+Widget _buildRecommendationCard(String title, String advice, IconData icon, Color color, ColorScheme cs) {
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(color: cs.surface.withOpacity(0.5), borderRadius: BorderRadius.circular(12)),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, size: 18, color: color),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
+              const SizedBox(height: 2),
+              Text(advice, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, height: 1.4)),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildTargetRow(String college, int target, double current, ColorScheme cs) {
+  final diff = target - current;
+  final isAchievable = diff <= 0;
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(
+      children: [
+        Expanded(flex: 3, child: Text(college, style: TextStyle(fontSize: 12, color: cs.onSurface))),
+        Expanded(flex: 2, child: Text('$target marks', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface))),
+        Expanded(
+          flex: 2,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(color: isAchievable ? Colors.green.withOpacity(0.12) : cs.error.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+            child: Text(isAchievable ? 'Achieved!' : '+${diff.toStringAsFixed(0)} needed', textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: isAchievable ? Colors.green : cs.error)),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildEmptyAnalytics(ColorScheme cs) {
+  return Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(width: 80, height: 80, decoration: BoxDecoration(color: cs.primaryContainer, shape: BoxShape.circle), child: Icon(Icons.analytics, size: 36, color: cs.onPrimaryContainer)),
+          const SizedBox(height: 16),
+          Text('No data for analytics', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+          const SizedBox(height: 4),
+          Text('Save some mock tests to see your performance analytics and smart recommendations.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: cs.outline)),
+          const SizedBox(height: 20),
+          FilledButton.icon(onPressed: () => _tabController.animateTo(1), icon: const Icon(Icons.psychology), label: const Text('Go to Simulator')),
+        ],
+      ),
+    ),
+  );
+}
+
+
+// ═════════════════════════════════════════════════════════════════
+// TAB 5: TOOLS
+// ═════════════════════════════════════════════════════════════════
+
+Widget _buildToolsTab(ColorScheme cs) {
+  final quickResult = _calculateQuickScore();
+
+  return SingleChildScrollView(
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildExamDateCard(cs),
+        const SizedBox(height: 16),
+        _buildQuickScoreCard(cs, quickResult),
+        const SizedBox(height: 16),
+        _buildDailyTargetsCard(cs),
+        const SizedBox(height: 16),
+        _buildWeightageVisualizer(cs),
+        const SizedBox(height: 16),
+        _buildTimeSummaryCard(cs),
+        const SizedBox(height: 16),
+        _buildStudyLogCard(cs),
+        const SizedBox(height: 32),
+      ],
+    ),
+  );
+}
+
+Widget _buildExamDateCard(ColorScheme cs) {
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: [cs.primary.withOpacity(0.12), cs.surfaceContainerHighest.withOpacity(0.3)],
+        begin: Alignment.topLeft, end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: cs.primary.withOpacity(0.2)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.calendar_today, size: 18, color: cs.primary),
+            const SizedBox(width: 8),
+            Text('NEET Exam Date', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (_neetExamDate != null) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${_neetExamDate!.day}/${_neetExamDate!.month}/${_neetExamDate!.year}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface)),
+                    const SizedBox(height: 2),
+                    Text('${_getNeetCountdown()} days remaining', style: TextStyle(fontSize: 12, color: cs.primary, fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+              FilledButton.tonal(onPressed: () => _pickExamDate(), child: const Text('Change')),
+            ],
+          ),
+        ] else ...[
+          Text('Set your NEET exam date to see countdown and daily motivation', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+          const SizedBox(height: 10),
+          SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: () => _pickExamDate(), icon: const Icon(Icons.calendar_month), label: const Text('Set Exam Date'))),
+        ],
+      ],
+    ),
+  );
+}
+
+Future<void> _pickExamDate() async {
+  final now = DateTime.now();
+  final picked = await showDatePicker(
+    context: context,
+    initialDate: _neetExamDate ?? DateTime(now.year + 1, 5, 4),
+    firstDate: now,
+    lastDate: DateTime(now.year + 2, 12, 31),
+    builder: (context, child) {
+      return Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: Theme.of(context).colorScheme.copyWith(primary: Theme.of(context).colorScheme.primary),
+        ),
+        child: child!,
+      );
+    },
+  );
+  if (picked != null) {
+    setState(() => _neetExamDate = picked);
+    await _setNeetExamDate(picked.millisecondsSinceEpoch);
+  }
+}
+
+Widget _buildQuickScoreCard(ColorScheme cs, Map<String, dynamic> result) {
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerHighest.withOpacity(0.4),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.bolt, size: 18, color: const Color(0xFFFFC107)),
+            const SizedBox(width: 8),
+            Text('Quick NEET Score Calculator', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text('Enter correct, wrong & left questions to instantly calculate score & rank', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: _buildQuickInput('Correct', '+4 each', Icons.check_circle, const Color(0xFF4CAF50), _correctController)),
+            const SizedBox(width: 8),
+            Expanded(child: _buildQuickInput('Wrong', '-1 each', Icons.cancel, const Color(0xFFF44336), _wrongController)),
+            const SizedBox(width: 8),
+            Expanded(child: _buildQuickInput('Left', '0 marks', Icons.help_outline, cs.outline, _leftController)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ValueListenableBuilder(
+          valueListenable: _correctController,
+          builder: (context, _, __) => ValueListenableBuilder(
+            valueListenable: _wrongController,
+            builder: (context, _, __) => ValueListenableBuilder(
+              valueListenable: _leftController,
+              builder: (context, _, __) {
+                final res = _calculateQuickScore();
+                final totalQs = (int.tryParse(_correctController.text) ?? 0) + (int.tryParse(_wrongController.text) ?? 0) + (int.tryParse(_leftController.text) ?? 0);
+                if (totalQs == 0) return const SizedBox.shrink();
+                final scoreColor = NeetData.getMarksColor(res['score'] as int);
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(color: scoreColor.withOpacity(0.08), borderRadius: BorderRadius.circular(14), border: Border.all(color: scoreColor.withOpacity(0.2))),
+                  child: Column(
+                    children: [
+                      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Text('${res['score']}', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w800, color: scoreColor)),
+                        const SizedBox(width: 6),
+                        Text('/ 720', style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant)),
+                      ]),
+                      const SizedBox(height: 8),
+                      Wrap(spacing: 16, alignment: WrapAlignment.center, children: [
+                        _buildQuickStat('Percentile', '${(res['percentile'] as double).toStringAsFixed(2)}%', cs.primary),
+                        _buildQuickStat('Est. AIR', '${res['air']}', cs.secondary),
+                        _buildQuickStat('Rank', '${res['rankRange']}', scoreColor),
+                      ]),
+                      const SizedBox(height: 8),
+                      Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), decoration: BoxDecoration(color: scoreColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                        child: Text('${res['tier']}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: scoreColor)),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildDailyTargetsCard(ColorScheme cs) {
+  final phyPct = (_dailyPhyTarget > 0) ? (_dailyPhyDone / _dailyPhyTarget).clamp(0.0, 1.0) : 0.0;
+  final chemPct = (_dailyChemTarget > 0) ? (_dailyChemDone / _dailyChemTarget).clamp(0.0, 1.0) : 0.0;
+  final bioPct = (_dailyBioTarget > 0) ? (_dailyBioDone / _dailyBioTarget).clamp(0.0, 1.0) : 0.0;
+
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerHighest.withOpacity(0.4),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Row(
+            children: [
+              Icon(Icons.track_changes, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Text('Daily MCQ Targets', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            ],
+          ),
+          TextButton(onPressed: () => _showTargetSettings(cs), child: const Text('Edit', style: TextStyle(fontSize: 12))),
+        ]),
+        const SizedBox(height: 4),
+        Text('Tap +1 after solving MCQs to track daily progress', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(child: _buildTargetRing('Physics', _dailyPhyDone, _dailyPhyTarget, phyPct, const Color(0xFF1565C0), cs, () => _incrementDailyDone('Physics'))),
+            const SizedBox(width: 10),
+            Expanded(child: _buildTargetRing('Chemistry', _dailyChemDone, _dailyChemTarget, chemPct, const Color(0xFF2E7D32), cs, () => _incrementDailyDone('Chemistry'))),
+            const SizedBox(width: 10),
+            Expanded(child: _buildTargetRing('Biology', _dailyBioDone, _dailyBioTarget, bioPct, const Color(0xFFC62828), cs, () => _incrementDailyDone('Biology'))),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildTargetRing(String label, int done, int target, double pct, Color color, ColorScheme cs, VoidCallback onTap) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: color.withOpacity(0.06), borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withOpacity(0.15))),
+      child: Column(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(width: 56, height: 56, child: CircularProgressIndicator(value: 1.0, strokeWidth: 5, backgroundColor: cs.surfaceContainerHighest, valueColor: const AlwaysStoppedAnimation(Colors.transparent))),
+              SizedBox(width: 56, height: 56, child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0, end: pct),
+                duration: const Duration(milliseconds: 500),
+                builder: (context, value, child) => CircularProgressIndicator(value: value, strokeWidth: 5, backgroundColor: Colors.transparent, valueColor: AlwaysStoppedAnimation(color), strokeCap: StrokeCap.round),
+              )),
+              Column(mainAxisSize: MainAxisSize.min, children: [
+                Text('$done', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+                Text('/$target', style: TextStyle(fontSize: 9, color: cs.outline)),
+              ]),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onSurface)),
+          const SizedBox(height: 4),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+            child: Text('+1 MCQ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+void _showTargetSettings(ColorScheme cs) {
+  showModalBottomSheet(
+    context: context,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    builder: (ctx) => Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.bolt, size: 18, color: const Color(0xFFFFC107)),
-              const SizedBox(width: 8),
-              Text('Quick NEET Score Calculator', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text('Enter correct, wrong & left questions to instantly calculate score & rank', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+          Text('Edit Daily Targets', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+          const SizedBox(height: 16),
+          _buildTargetEditField('Physics MCQs', _dailyPhyTargetController, const Color(0xFF1565C0)),
+          const SizedBox(height: 10),
+          _buildTargetEditField('Chemistry MCQs', _dailyChemTargetController, const Color(0xFF2E7D32)),
+          const SizedBox(height: 10),
+          _buildTargetEditField('Biology MCQs', _dailyBioTargetController, const Color(0xFFC62828)),
+          const SizedBox(height: 16),
+          SizedBox(width: double.infinity, child: FilledButton(
+            onPressed: () async { await _saveDailyTargets(); await _loadDailyTargets(); if (mounted) Navigator.pop(ctx); },
+            child: const Text('Save Targets'),
+          )),
+          const SizedBox(height: 8),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _buildTargetEditField(String label, TextEditingController controller, Color color) {
+  return TextField(
+    controller: controller,
+    keyboardType: TextInputType.number,
+    decoration: InputDecoration(
+      labelText: label,
+      prefixIcon: Container(margin: const EdgeInsets.all(12), width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+  );
+}
+
+Widget _buildWeightageVisualizer(ColorScheme cs) {
+  final allChapters = <Map<String, dynamic>>[];
+  for (final entry in NeetData.chapterPresets.entries) {
+    final subject = entry.key;
+    final color = subject == 'Physics' ? const Color(0xFF1565C0) : subject == 'Chemistry' ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
+    for (final chapter in entry.value) {
+      allChapters.add({'subject': subject, 'name': chapter['name'], 'weight': chapter['weight'], 'color': color, 'ncert': chapter['ncert'], 'priority': chapter['priority']});
+    }
+  }
+  allChapters.sort((a, b) => (b['weight'] as int).compareTo(a['weight'] as int));
+
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(color: cs.surfaceContainerHighest.withOpacity(0.4), borderRadius: BorderRadius.circular(20), border: Border.all(color: cs.outlineVariant.withOpacity(0.3))),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Icon(Icons.bar_chart, size: 18, color: cs.primary),
+          const SizedBox(width: 8),
+          Text('NEET Chapter Weightage', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+        ]),
+        const SizedBox(height: 4),
+        Text('High-weight chapters should be your top priority', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 12),
+        ...allChapters.take(8).map((c) {
+          final weight = c['weight'] as int;
+          final maxWeight = allChapters.first['weight'] as int;
+          final pct = weight / maxWeight;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Container(width: 6, height: 6, decoration: BoxDecoration(color: c['color'] as Color, shape: BoxShape.circle)),
+                const SizedBox(width: 8),
+                Expanded(flex: 3, child: Text('${c['subject']} — ${c['name']}', style: TextStyle(fontSize: 11, color: cs.onSurface), overflow: TextOverflow.ellipsis)),
+                Expanded(flex: 2, child: ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(value: pct.clamp(0.0, 1.0), minHeight: 6, backgroundColor: cs.surfaceContainerHighest, valueColor: AlwaysStoppedAnimation((c['color'] as Color).withOpacity(0.7))),
+                )),
+                const SizedBox(width: 8),
+                Text('$weight%', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: c['color'] as Color)),
+              ],
+            ),
+          );
+        }),
+      ],
+    ),
+  );
+}
+
+Widget _buildTimeSummaryCard(ColorScheme cs) {
+  final timeDist = _getSubjectTimeDistribution();
+  final totalHours = timeDist.values.fold(0.0, (a, b) => a + b);
+
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      gradient: LinearGradient(colors: [cs.secondary.withOpacity(0.1), cs.surfaceContainerHighest.withOpacity(0.3)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: cs.secondary.withOpacity(0.2)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Icon(Icons.access_time, size: 18, color: cs.secondary),
+          const SizedBox(width: 8),
+          Text('Study Time Summary', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+        ]),
+        const SizedBox(height: 12),
+        if (totalHours > 0) ...[
+          Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+            _buildTimeStat('Physics', timeDist['Physics'] ?? 0, const Color(0xFF1565C0), cs),
+            _buildTimeStat('Chemistry', timeDist['Chemistry'] ?? 0, const Color(0xFF2E7D32), cs),
+            _buildTimeStat('Biology', timeDist['Biology'] ?? 0, const Color(0xFFC62828), cs),
+          ]),
+          const SizedBox(height: 10),
+          Text('Total: ${totalHours.toStringAsFixed(1)} hours recorded', style: TextStyle(fontSize: 11, color: cs.outline, fontStyle: FontStyle.italic), textAlign: TextAlign.center),
+        ] else ...[
+          Center(child: Column(children: [
+            Icon(Icons.timer_off, size: 32, color: cs.outline),
+            const SizedBox(height: 8),
+            Text('No study time recorded yet', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+            const SizedBox(height: 4),
+            Text('Add hours in component cards to track', style: TextStyle(fontSize: 11, color: cs.outline)),
+          ])),
+        ],
+      ],
+    ),
+  );
+}
+
+Widget _buildTimeStat(String subject, double hours, Color color, ColorScheme cs) {
+  return Column(
+    children: [
+      Container(width: 50, height: 50, decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle, border: Border.all(color: color.withOpacity(0.2))),
+        child: Center(child: Text('${hours.toStringAsFixed(0)}h', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color))),
+      ),
+      const SizedBox(height: 6),
+      Text(subject, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+    ],
+  );
+}
+
+// NEW: Study Log Card in Tools tab
+Widget _buildStudyLogCard(ColorScheme cs) {
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      gradient: LinearGradient(colors: [const Color(0xFF9C27B0).withOpacity(0.1), cs.surfaceContainerHighest.withOpacity(0.3)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: const Color(0xFF9C27B0).withOpacity(0.2)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Row(children: [
+            Icon(Icons.edit_note, size: 18, color: const Color(0xFF9C27B0)),
+            const SizedBox(width: 8),
+            Text('Daily Study Log', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+          ]),
+          if (_studyLogs.isNotEmpty)
+            TextButton(onPressed: () => _showAllLogs(cs), child: const Text('View All', style: TextStyle(fontSize: 12))),
+        ]),
+        const SizedBox(height: 4),
+        Text('Log what your child studied today for tracking', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          value: _selectedLogSubject,
+          decoration: InputDecoration(labelText: 'Subject', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
+          items: _subjects.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
+          onChanged: (v) => setState(() => _selectedLogSubject = v!),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _logTopicController,
+          decoration: InputDecoration(labelText: 'Topic studied', hintText: 'e.g. Newton\'s Laws', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+        ),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: TextField(
+            controller: _logHoursController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(labelText: 'Hours', prefixIcon: const Icon(Icons.timer, size: 18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: TextField(
+            controller: _logMcqsController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(labelText: 'MCQs', prefixIcon: const Icon(Icons.quiz, size: 18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: TextField(
+            controller: _logCorrectController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(labelText: 'Correct', prefixIcon: const Icon(Icons.check, size: 18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+          )),
+        ]),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _logNotesController,
+          maxLines: 2,
+          decoration: InputDecoration(labelText: 'Notes (optional)', hintText: 'Any observations...', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(width: double.infinity, child: FilledButton.icon(
+          onPressed: _addStudyLog,
+          icon: const Icon(Icons.save),
+          label: const Text('Log Study Session'),
+        )),
+        if (_studyLogs.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _buildQuickInput('Correct', '+4 each', Icons.check_circle, const Color(0xFF4CAF50), _correctController)),
-              const SizedBox(width: 8),
-              Expanded(child: _buildQuickInput('Wrong', '-1 each', Icons.cancel, const Color(0xFFF44336), _wrongController)),
-              const SizedBox(width: 8),
-              Expanded(child: _buildQuickInput('Left', '0 marks', Icons.help_outline, cs.outline, _leftController)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ValueListenableBuilder(
-            valueListenable: _correctController,
-            builder: (context, _, __) => ValueListenableBuilder(
-              valueListenable: _wrongController,
-              builder: (context, _, __) => ValueListenableBuilder(
-                valueListenable: _leftController,
-                builder: (context, _, __) {
-                  final res = _calculateQuickScore();
-                  final totalQs = (int.tryParse(_correctController.text) ?? 0) + (int.tryParse(_wrongController.text) ?? 0) + (int.tryParse(_leftController.text) ?? 0);
-                  if (totalQs == 0) return const SizedBox.shrink();
-                  final scoreColor = NeetData.getMarksColor(res['score'] as int);
-                  return Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(color: scoreColor.withOpacity(0.08), borderRadius: BorderRadius.circular(14), border: Border.all(color: scoreColor.withOpacity(0.2))),
-                    child: Column(
-                      children: [
-                        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          Text('${res['score']}', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w800, color: scoreColor)),
-                          const SizedBox(width: 6),
-                          Text('/ 720', style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant)),
+          const Divider(),
+          const SizedBox(height: 8),
+          Text('Today\'s Logs', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
+          const SizedBox(height: 8),
+          ..._studyLogs.take(3).map((log) => Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: cs.surfaceContainerHighest.withOpacity(0.3), borderRadius: BorderRadius.circular(10)),
+            child: Row(
+              children: [
+                Container(width: 8, height: 8, decoration: BoxDecoration(color: _subjectColor(log.subject), shape: BoxShape.circle)),
+                const SizedBox(width: 8),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(log.topic, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                  Text('${log.subject} • ${log.hours}h • ${log.mcqsCorrect}/${log.mcqsSolved} correct', style: TextStyle(fontSize: 10, color: cs.outline)),
+                ])),
+                if (log.notes != null && log.notes!.isNotEmpty)
+                  Icon(Icons.notes, size: 14, color: cs.outline),
+              ],
+            ),
+          )),
+        ],
+      ],
+    ),
+  );
+}
+
+void _showAllLogs(ColorScheme cs) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    builder: (ctx) => DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      maxChildSize: 0.9,
+      minChildSize: 0.5,
+      expand: false,
+      builder: (context, scrollController) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Text('Study Log History', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                itemCount: _studyLogs.length,
+                itemBuilder: (context, index) {
+                  final log = _studyLogs[index];
+                  return Dismissible(
+                    key: ValueKey('log_${log.id}'),
+                    direction: DismissDirection.endToStart,
+                    background: Container(alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: Icon(Icons.delete, color: cs.error)),
+                    onDismissed: (_) => _deleteStudyLog(log.id),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: cs.surfaceContainerHighest.withOpacity(0.3), borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.outlineVariant.withOpacity(0.2))),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Row(children: [
+                          Container(width: 8, height: 8, decoration: BoxDecoration(color: _subjectColor(log.subject), shape: BoxShape.circle)),
+                          const SizedBox(width: 8),
+                          Text(log.subject, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                          const Spacer(),
+                          Text('${log.date.day}/${log.date.month}', style: TextStyle(fontSize: 10, color: cs.outline)),
                         ]),
-                        const SizedBox(height: 8),
-                        Wrap(spacing: 16, alignment: WrapAlignment.center, children: [
-                          _buildQuickStat('Percentile', '${(res['percentile'] as double).toStringAsFixed(2)}%', cs.primary),
-                          _buildQuickStat('Est. AIR', '${res['air']}', cs.secondary),
-                          _buildQuickStat('Rank', '${res['rankRange']}', scoreColor),
+                        const SizedBox(height: 4),
+                        Text(log.topic, style: TextStyle(fontSize: 13, color: cs.onSurface)),
+                        const SizedBox(height: 4),
+                        Row(children: [
+                          Text('${log.hours}h', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                          const SizedBox(width: 12),
+                          Text('${log.mcqsSolved} MCQs', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                          const SizedBox(width: 12),
+                          Text('${log.accuracy.toStringAsFixed(0)}% accuracy', style: TextStyle(fontSize: 11, color: log.accuracy >= 70 ? Colors.green : log.accuracy >= 50 ? Colors.orange : cs.error)),
                         ]),
-                        const SizedBox(height: 8),
-                        Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), decoration: BoxDecoration(color: scoreColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                          child: Text('${res['tier']}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: scoreColor)),
-                        ),
-                      ],
+                        if (log.notes != null && log.notes!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text('Note: ${log.notes}', style: TextStyle(fontSize: 10, color: cs.outline, fontStyle: FontStyle.italic)),
+                        ],
+                      ]),
                     ),
                   );
                 },
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDailyTargetsCard(ColorScheme cs) {
-    final phyPct = (_dailyPhyTarget > 0) ? (_dailyPhyDone / _dailyPhyTarget).clamp(0.0, 1.0) : 0.0;
-    final chemPct = (_dailyChemTarget > 0) ? (_dailyChemDone / _dailyChemTarget).clamp(0.0, 1.0) : 0.0;
-    final bioPct = (_dailyBioTarget > 0) ? (_dailyBioDone / _dailyBioTarget).clamp(0.0, 1.0) : 0.0;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Row(
-              children: [
-                Icon(Icons.track_changes, size: 18, color: cs.primary),
-                const SizedBox(width: 8),
-                Text('Daily MCQ Targets', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-              ],
-            ),
-            TextButton(onPressed: () => _showTargetSettings(cs), child: const Text('Edit', style: TextStyle(fontSize: 12))),
-          ]),
-          const SizedBox(height: 4),
-          Text('Tap +1 after solving MCQs to track daily progress', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(child: _buildTargetRing('Physics', _dailyPhyDone, _dailyPhyTarget, phyPct, const Color(0xFF1565C0), cs, () => _incrementDailyDone('Physics'))),
-              const SizedBox(width: 10),
-              Expanded(child: _buildTargetRing('Chemistry', _dailyChemDone, _dailyChemTarget, chemPct, const Color(0xFF2E7D32), cs, () => _incrementDailyDone('Chemistry'))),
-              const SizedBox(width: 10),
-              Expanded(child: _buildTargetRing('Biology', _dailyBioDone, _dailyBioTarget, bioPct, const Color(0xFFC62828), cs, () => _incrementDailyDone('Biology'))),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTargetRing(String label, int done, int target, double pct, Color color, ColorScheme cs, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: color.withOpacity(0.06), borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withOpacity(0.15))),
-        child: Column(
-          children: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(width: 56, height: 56, child: CircularProgressIndicator(value: 1.0, strokeWidth: 5, backgroundColor: cs.surfaceContainerHighest, valueColor: const AlwaysStoppedAnimation(Colors.transparent))),
-                SizedBox(width: 56, height: 56, child: TweenAnimationBuilder<double>(
-                  tween: Tween<double>(begin: 0, end: pct),
-                  duration: const Duration(milliseconds: 500),
-                  builder: (context, value, child) => CircularProgressIndicator(value: value, strokeWidth: 5, backgroundColor: Colors.transparent, valueColor: AlwaysStoppedAnimation(color), strokeCap: StrokeCap.round),
-                )),
-                Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text('$done', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-                  Text('/$target', style: TextStyle(fontSize: 9, color: cs.outline)),
-                ]),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onSurface)),
-            const SizedBox(height: 4),
-            Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
-              child: Text('+1 MCQ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
-            ),
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
-  void _showTargetSettings(ColorScheme cs) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Edit Daily Targets', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
-            const SizedBox(height: 16),
-            _buildTargetEditField('Physics MCQs', _dailyPhyTargetController, const Color(0xFF1565C0)),
-            const SizedBox(height: 10),
-            _buildTargetEditField('Chemistry MCQs', _dailyChemTargetController, const Color(0xFF2E7D32)),
-            const SizedBox(height: 10),
-            _buildTargetEditField('Biology MCQs', _dailyBioTargetController, const Color(0xFFC62828)),
-            const SizedBox(height: 16),
-            SizedBox(width: double.infinity, child: FilledButton(
-              onPressed: () async { await _saveDailyTargets(); await _loadDailyTargets(); if (mounted) Navigator.pop(ctx); },
-              child: const Text('Save Targets'),
-            )),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
 
-  Widget _buildTargetEditField(String label, TextEditingController controller, Color color) {
-    return TextField(
-      controller: controller,
-      keyboardType: TextInputType.number,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Container(margin: const EdgeInsets.all(12), width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
+// ═════════════════════════════════════════════════════════════════
+// TAB 6: PARENT DASHBOARD (NEW — Most Important for Parents)
+// ═════════════════════════════════════════════════════════════════
 
-  Widget _buildWeightageVisualizer(ColorScheme cs) {
-    final allChapters = <Map<String, dynamic>>[];
-    for (final entry in NeetData.chapterPresets.entries) {
-      final subject = entry.key;
-      final color = subject == 'Physics' ? const Color(0xFF1565C0) : subject == 'Chemistry' ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
-      for (final chapter in entry.value) {
-        allChapters.add({'subject': subject, 'name': chapter['name'], 'weight': chapter['weight'], 'color': color, 'ncert': chapter['ncert'], 'priority': chapter['priority']});
-      }
-    }
-    allChapters.sort((a, b) => (b['weight'] as int).compareTo(a['weight'] as int));
+Widget _buildParentTab(ColorScheme cs) {
+  final weeklyStats = _getWeeklyStudyStats();
+  final weakTopics = _getWeakTopics();
+  final neetScore = (_currentGrade / 100) * 720;
+  final scoreGap = _targetScore - neetScore;
+  final isOnTrack = scoreGap <= 0;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: cs.surfaceContainerHighest.withOpacity(0.4), borderRadius: BorderRadius.circular(20), border: Border.all(color: cs.outlineVariant.withOpacity(0.3))),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Icon(Icons.bar_chart, size: 18, color: cs.primary),
-            const SizedBox(width: 8),
-            Text('NEET Chapter Weightage', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-          ]),
-          const SizedBox(height: 4),
-          Text('High-weight chapters should be your top priority', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-          const SizedBox(height: 12),
-          ...allChapters.take(8).map((c) {
-            final weight = c['weight'] as int;
-            final maxWeight = allChapters.first['weight'] as int;
-            final pct = weight / maxWeight;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Container(width: 6, height: 6, decoration: BoxDecoration(color: c['color'] as Color, shape: BoxShape.circle)),
-                  const SizedBox(width: 8),
-                  Expanded(flex: 3, child: Text('${c['subject']} — ${c['name']}', style: TextStyle(fontSize: 11, color: cs.onSurface), overflow: TextOverflow.ellipsis)),
-                  Expanded(flex: 2, child: ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
-                    child: LinearProgressIndicator(value: pct.clamp(0.0, 1.0), minHeight: 6, backgroundColor: cs.surfaceContainerHighest, valueColor: AlwaysStoppedAnimation((c['color'] as Color).withOpacity(0.7))),
-                  )),
-                  const SizedBox(width: 8),
-                  Text('$weight%', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: c['color'] as Color)),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimeSummaryCard(ColorScheme cs) {
-    final timeDist = _getSubjectTimeDistribution();
-    final totalHours = timeDist.values.fold(0.0, (a, b) => a + b);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [cs.secondary.withOpacity(0.1), cs.surfaceContainerHighest.withOpacity(0.3)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cs.secondary.withOpacity(0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Icon(Icons.access_time, size: 18, color: cs.secondary),
-            const SizedBox(width: 8),
-            Text('Study Time Summary', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-          ]),
-          const SizedBox(height: 12),
-          if (totalHours > 0) ...[
-            Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-              _buildTimeStat('Physics', timeDist['Physics'] ?? 0, const Color(0xFF1565C0), cs),
-              _buildTimeStat('Chemistry', timeDist['Chemistry'] ?? 0, const Color(0xFF2E7D32), cs),
-              _buildTimeStat('Biology', timeDist['Biology'] ?? 0, const Color(0xFFC62828), cs),
-            ]),
-            const SizedBox(height: 10),
-            Text('Total: ${totalHours.toStringAsFixed(1)} hours recorded', style: TextStyle(fontSize: 11, color: cs.outline, fontStyle: FontStyle.italic), textAlign: TextAlign.center),
-          ] else ...[
-            Center(child: Column(children: [
-              Icon(Icons.timer_off, size: 32, color: cs.outline),
-              const SizedBox(height: 8),
-              Text('No study time recorded yet', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-              const SizedBox(height: 4),
-              Text('Add hours in component cards to track', style: TextStyle(fontSize: 11, color: cs.outline)),
-            ])),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimeStat(String subject, double hours, Color color, ColorScheme cs) {
-    return Column(
+  return SingleChildScrollView(
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(width: 50, height: 50, decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle, border: Border.all(color: color.withOpacity(0.2))),
-          child: Center(child: Text('${hours.toStringAsFixed(0)}h', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color))),
-        ),
-        const SizedBox(height: 6),
-        Text(subject, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-      ],
-    );
-  }
-
-  // NEW: Study Log Card in Tools tab
-  Widget _buildStudyLogCard(ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [const Color(0xFF9C27B0).withOpacity(0.1), cs.surfaceContainerHighest.withOpacity(0.3)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF9C27B0).withOpacity(0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Row(children: [
-              Icon(Icons.edit_note, size: 18, color: const Color(0xFF9C27B0)),
-              const SizedBox(width: 8),
-              Text('Daily Study Log', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-            ]),
-            if (_studyLogs.isNotEmpty)
-              TextButton(onPressed: () => _showAllLogs(cs), child: const Text('View All', style: TextStyle(fontSize: 12))),
-          ]),
-          const SizedBox(height: 4),
-          Text('Log what your child studied today for tracking', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            value: _selectedLogSubject,
-            decoration: InputDecoration(labelText: 'Subject', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
-            items: _subjects.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
-            onChanged: (v) => setState(() => _selectedLogSubject = v!),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _logTopicController,
-            decoration: InputDecoration(labelText: 'Topic studied', hintText: 'e.g. Newton's Laws', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-          ),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: TextField(
-              controller: _logHoursController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: 'Hours', prefixIcon: const Icon(Icons.timer, size: 18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-            )),
-            const SizedBox(width: 8),
-            Expanded(child: TextField(
-              controller: _logMcqsController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: 'MCQs', prefixIcon: const Icon(Icons.quiz, size: 18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-            )),
-            const SizedBox(width: 8),
-            Expanded(child: TextField(
-              controller: _logCorrectController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: 'Correct', prefixIcon: const Icon(Icons.check, size: 18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-            )),
-          ]),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _logNotesController,
-            maxLines: 2,
-            decoration: InputDecoration(labelText: 'Notes (optional)', hintText: 'Any observations...', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(width: double.infinity, child: FilledButton.icon(
-            onPressed: _addStudyLog,
-            icon: const Icon(Icons.save),
-            label: const Text('Log Study Session'),
-          )),
-          if (_studyLogs.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            const Divider(),
-            const SizedBox(height: 8),
-            Text('Today's Logs', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
-            const SizedBox(height: 8),
-            ..._studyLogs.take(3).map((log) => Container(
-              margin: const EdgeInsets.only(bottom: 6),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: cs.surfaceContainerHighest.withOpacity(0.3), borderRadius: BorderRadius.circular(10)),
-              child: Row(
-                children: [
-                  Container(width: 8, height: 8, decoration: BoxDecoration(color: _subjectColor(log.subject), shape: BoxShape.circle)),
-                  const SizedBox(width: 8),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(log.topic, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                    Text('${log.subject} • ${log.hours}h • ${log.mcqsCorrect}/${log.mcqsSolved} correct', style: TextStyle(fontSize: 10, color: cs.outline)),
-                  ])),
-                  if (log.notes != null && log.notes!.isNotEmpty)
-                    Icon(Icons.notes, size: 14, color: cs.outline),
-                ],
-              ),
-            )),
-          ],
-        ],
-      ),
-    );
-  }
-
-  void _showAllLogs(ColorScheme cs) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        maxChildSize: 0.9,
-        minChildSize: 0.5,
-        expand: false,
-        builder: (context, scrollController) => Padding(
+        // Child Profile Card
+        Container(
+          width: double.infinity,
           padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [cs.primary.withOpacity(0.15), cs.surfaceContainerHighest.withOpacity(0.3)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: cs.primary.withOpacity(0.2)),
+          ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Study Log History', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  itemCount: _studyLogs.length,
-                  itemBuilder: (context, index) {
-                    final log = _studyLogs[index];
-                    return Dismissible(
-                      key: ValueKey('log_${log.id}'),
-                      direction: DismissDirection.endToStart,
-                      background: Container(alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: Icon(Icons.delete, color: cs.error)),
-                      onDismissed: (_) => _deleteStudyLog(log.id),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: cs.surfaceContainerHighest.withOpacity(0.3), borderRadius: BorderRadius.circular(12), border: Border.all(color: cs.outlineVariant.withOpacity(0.2))),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Row(children: [
-                            Container(width: 8, height: 8, decoration: BoxDecoration(color: _subjectColor(log.subject), shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text(log.subject, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                            const Spacer(),
-                            Text('${log.date.day}/${log.date.month}', style: TextStyle(fontSize: 10, color: cs.outline)),
-                          ]),
-                          const SizedBox(height: 4),
-                          Text(log.topic, style: TextStyle(fontSize: 13, color: cs.onSurface)),
-                          const SizedBox(height: 4),
-                          Row(children: [
-                            Text('${log.hours}h', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-                            const SizedBox(width: 12),
-                            Text('${log.mcqsSolved} MCQs', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-                            const SizedBox(width: 12),
-                            Text('${log.accuracy.toStringAsFixed(0)}% accuracy', style: TextStyle(fontSize: 11, color: log.accuracy >= 70 ? Colors.green : log.accuracy >= 50 ? Colors.orange : cs.error)),
-                          ]),
-                          if (log.notes != null && log.notes!.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text('Note: ${log.notes}', style: TextStyle(fontSize: 10, color: cs.outline, fontStyle: FontStyle.italic)),
-                          ],
-                        ]),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-
-  // ═════════════════════════════════════════════════════════════════
-  // TAB 6: PARENT DASHBOARD (NEW — Most Important for Parents)
-  // ═════════════════════════════════════════════════════════════════
-
-  Widget _buildParentTab(ColorScheme cs) {
-    final weeklyStats = _getWeeklyStudyStats();
-    final weakTopics = _getWeakTopics();
-    final neetScore = (_currentGrade / 100) * 720;
-    final scoreGap = _targetScore - neetScore;
-    final isOnTrack = scoreGap <= 0;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Child Profile Card
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [cs.primary.withOpacity(0.15), cs.surfaceContainerHighest.withOpacity(0.3)],
-                begin: Alignment.topLeft, end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: cs.primary.withOpacity(0.2)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 56, height: 56,
-                      decoration: BoxDecoration(color: cs.primary.withOpacity(0.15), shape: BoxShape.circle),
-                      child: Icon(Icons.child_care, size: 28, color: cs.primary),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _childName.isNotEmpty ? _childName : 'Student Profile',
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: cs.onSurface),
-                          ),
-                          const SizedBox(height: 2),
-                          Text('Target: $_targetCollege ($_targetScore/720)', style: TextStyle(fontSize: 13, color: cs.primary, fontWeight: FontWeight.w500)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildParentStatCard(
-                        'Current Score',
-                        '${neetScore.toStringAsFixed(0)}/720',
-                        isOnTrack ? Colors.green : cs.error,
-                        cs,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _buildParentStatCard(
-                        'Gap to Target',
-                        isOnTrack ? 'On Track!' : '+${scoreGap.toStringAsFixed(0)} needed',
-                        isOnTrack ? Colors.green : Colors.orange,
-                        cs,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _buildParentStatCard(
-                        'Study Streak',
-                        '$_studyStreak days 🔥',
-                        cs.secondary,
-                        cs,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Weekly Progress Card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withOpacity(0.4),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.calendar_view_week, size: 18, color: cs.primary),
-                    const SizedBox(width: 8),
-                    Text('This Week's Progress', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(child: _buildWeeklyMiniStat('Hours', '${weeklyStats['totalHours'].toStringAsFixed(1)}h', cs.primary, cs)),
-                    const SizedBox(width: 8),
-                    Expanded(child: _buildWeeklyMiniStat('MCQs', '${weeklyStats['totalMcqs']}', cs.secondary, cs)),
-                    const SizedBox(width: 8),
-                    Expanded(child: _buildWeeklyMiniStat('Accuracy', '${(weeklyStats['accuracy'] as double).toStringAsFixed(0)}%', (weeklyStats['accuracy'] as double) >= 70 ? Colors.green : Colors.orange, cs)),
-                    const SizedBox(width: 8),
-                    Expanded(child: _buildWeeklyMiniStat('Days', '${weeklyStats['daysActive']}', cs.tertiary, cs)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Weekly subject breakdown
-                if ((weeklyStats['subjectHours'] as Map<String, dynamic>?)?.isNotEmpty ?? false) ...[
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  Text('Subject-wise This Week', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                  const SizedBox(height: 8),
-                  ...((weeklyStats['subjectHours'] as Map<String, dynamic>).entries).map((e) {
-                    final color = _subjectColor(e.key);
-                    final target = e.key == 'Biology' ? _weeklyGoalBio : e.key == 'Physics' ? _weeklyGoalPhy : _weeklyGoalChem;
-                    final pct = target > 0 ? ((e.value as double) / target).clamp(0.0, 1.0) : 0.0;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-                          const SizedBox(width: 8),
-                          Text(e.key, style: TextStyle(fontSize: 12, color: cs.onSurface)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: pct, minHeight: 8,
-                                backgroundColor: cs.surfaceContainerHighest,
-                                valueColor: AlwaysStoppedAnimation(color),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text('${(e.value as double).toStringAsFixed(1)}h / $target', style: TextStyle(fontSize: 11, color: cs.outline)),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Alert Card for Parents
-          if (weakTopics.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: cs.errorContainer.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: cs.error.withOpacity(0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(Icons.notification_important, size: 20, color: cs.error),
-                      const SizedBox(width: 8),
-                      Text('Attention Needed', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: cs.error)),
-                    ],
+                  Container(
+                    width: 56, height: 56,
+                    decoration: BoxDecoration(color: cs.primary.withOpacity(0.15), shape: BoxShape.circle),
+                    child: Icon(Icons.child_care, size: 28, color: cs.primary),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '${weakTopics.length} topics are below 60% — these need immediate revision:',
-                    style: TextStyle(fontSize: 12, color: cs.onSurface, height: 1.5),
-                  ),
-                  const SizedBox(height: 8),
-                  ...weakTopics.take(5).map((w) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.arrow_right, size: 16, color: cs.error),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            '${w['name']} — ${(w['percent'] as double).toStringAsFixed(1)}% (${w['subject']})',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurface),
-                          ),
+                        Text(
+                          _childName.isNotEmpty ? _childName : 'Student Profile',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: cs.onSurface),
                         ),
+                        const SizedBox(height: 2),
+                        Text('Target: $_targetCollege ($_targetScore/720)', style: TextStyle(fontSize: 13, color: cs.primary, fontWeight: FontWeight.w500)),
                       ],
                     ),
-                  )),
-                  if (weakTopics.length > 5)
-                    Text('+${weakTopics.length - 5} more weak topics', style: TextStyle(fontSize: 11, color: cs.outline)),
+                  ),
                 ],
               ),
-            ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildParentStatCard(
+                      'Current Score',
+                      '${neetScore.toStringAsFixed(0)}/720',
+                      isOnTrack ? Colors.green : cs.error,
+                      cs,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildParentStatCard(
+                      'Gap to Target',
+                      isOnTrack ? 'On Track!' : '+${scoreGap.toStringAsFixed(0)} needed',
+                      isOnTrack ? Colors.green : Colors.orange,
+                      cs,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildParentStatCard(
+                      'Study Streak',
+                      '$_studyStreak days 🔥',
+                      cs.secondary,
+                      cs,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
 
-          const SizedBox(height: 20),
+        const SizedBox(height: 20),
 
-          // Recommended Resources Card
+        // Weekly Progress Card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.calendar_view_week, size: 18, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Text('This Week\'s Progress', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: _buildWeeklyMiniStat('Hours', '${weeklyStats['totalHours'].toStringAsFixed(1)}h', cs.primary, cs)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _buildWeeklyMiniStat('MCQs', '${weeklyStats['totalMcqs']}', cs.secondary, cs)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _buildWeeklyMiniStat('Accuracy', '${(weeklyStats['accuracy'] as double).toStringAsFixed(0)}%', (weeklyStats['accuracy'] as double) >= 70 ? Colors.green : Colors.orange, cs)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _buildWeeklyMiniStat('Days', '${weeklyStats['daysActive']}', cs.tertiary, cs)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Weekly subject breakdown
+              if ((weeklyStats['subjectHours'] as Map<String, dynamic>?)?.isNotEmpty ?? false) ...[
+                const Divider(),
+                const SizedBox(height: 8),
+                Text('Subject-wise This Week', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                const SizedBox(height: 8),
+                ...((weeklyStats['subjectHours'] as Map<String, dynamic>).entries).map((e) {
+                  final color = _subjectColor(e.key);
+                  final target = e.key == 'Biology' ? _weeklyGoalBio : e.key == 'Physics' ? _weeklyGoalPhy : _weeklyGoalChem;
+                  final pct = target > 0 ? ((e.value as double) / target).clamp(0.0, 1.0) : 0.0;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                        const SizedBox(width: 8),
+                        Text(e.key, style: TextStyle(fontSize: 12, color: cs.onSurface)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: pct, minHeight: 8,
+                              backgroundColor: cs.surfaceContainerHighest,
+                              valueColor: AlwaysStoppedAnimation(color),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text('${(e.value as double).toStringAsFixed(1)}h / $target', style: TextStyle(fontSize: 11, color: cs.outline)),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // Alert Card for Parents
+        if (weakTopics.isNotEmpty)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: cs.primaryContainer.withOpacity(0.2),
+              color: cs.errorContainer.withOpacity(0.4),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: cs.primary.withOpacity(0.15)),
+              border: Border.all(color: cs.error.withOpacity(0.3)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.menu_book, size: 18, color: cs.primary),
+                    Icon(Icons.notification_important, size: 20, color: cs.error),
                     const SizedBox(width: 8),
-                    Text('Recommended Resources', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text('Based on weak areas — help your child focus here', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-                const SizedBox(height: 12),
-                ..._buildResourceList(cs, weakTopics),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Parent Settings Card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withOpacity(0.4),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.settings, size: 18, color: cs.primary),
-                    const SizedBox(width: 8),
-                    Text('Parent Settings', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                    Text('Attention Needed', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: cs.error)),
                   ],
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: _childNameController,
-                  decoration: InputDecoration(
-                    labelText: 'Child Name',
-                    prefixIcon: const Icon(Icons.person),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: _targetCollege,
-                  decoration: InputDecoration(
-                    labelText: 'Target College',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  items: NeetData.collegeCutoffs.keys.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 13)))).toList(),
-                  onChanged: (v) => setState(() => _targetCollege = v!),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _targetScoreController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: 'Target Score (out of 720)',
-                    prefixIcon: const Icon(Icons.flag),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _parentNotesController,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: 'Parent Notes / Observations',
-                    hintText: 'e.g. Needs more focus on Organic Chemistry...',
-                    prefixIcon: const Icon(Icons.notes),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () async {
-                      await _saveParentData();
-                      await _loadParentData();
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Settings saved!'), behavior: SnackBarBehavior.floating),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.save),
-                    label: const Text('Save Settings'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Export Report Button
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.tonalIcon(
-              onPressed: () {
-                final report = _generateParentReport();
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    title: const Text('Parent Report'),
-                    content: SizedBox(
-                      width: double.maxFinite,
-                      child: SingleChildScrollView(child: SelectableText(report, style: const TextStyle(fontSize: 12, height: 1.5))),
-                    ),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-                    ],
-                  ),
-                );
-              },
-              icon: const Icon(Icons.summarize),
-              label: const Text('Generate Full Parent Report'),
-            ),
-          ),
-
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildParentStatCard(String label, String value, Color color, ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: cs.surface.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Column(
-        children: [
-          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color), textAlign: TextAlign.center),
-          const SizedBox(height: 4),
-          Text(label, style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant), textAlign: TextAlign.center),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWeeklyMiniStat(String label, String value, Color color, ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.15))),
-      child: Column(
-        children: [
-          Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
-          const SizedBox(height: 2),
-          Text(label, style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildResourceList(ColorScheme cs, List<Map<String, dynamic>> weakTopics) {
-    final widgets = <Widget>[];
-    final addedChapters = <String>{};
-
-    for (final weak in weakTopics.take(5)) {
-      final name = weak['name'] as String;
-      // Find matching chapter in resources
-      String? matchedKey;
-      for (final key in NeetData.chapterResources.keys) {
-        if (name.toLowerCase().contains(key.toLowerCase()) || key.toLowerCase().contains(name.toLowerCase())) {
-          matchedKey = key;
-          break;
-        }
-      }
-      if (matchedKey != null && !addedChapters.contains(matchedKey)) {
-        addedChapters.add(matchedKey);
-        final resources = NeetData.chapterResources[matchedKey]!;
-        widgets.add(
-          Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: cs.surface.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 6, height: 6,
-                      decoration: BoxDecoration(color: _subjectColor(weak['subject'] as String), shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(matchedKey, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: cs.error.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-                      child: Text('${(weak['percent'] as double).toStringAsFixed(0)}%', style: TextStyle(fontSize: 10, color: cs.error, fontWeight: FontWeight.w600)),
-                    ),
-                  ],
+                Text(
+                  '${weakTopics.length} topics are below 60% — these need immediate revision:',
+                  style: TextStyle(fontSize: 12, color: cs.onSurface, height: 1.5),
                 ),
                 const SizedBox(height: 8),
-                ...resources.map((r) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
+                ...weakTopics.take(5).map((w) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
                   child: Row(
                     children: [
-                      Icon(
-                        r['type'] == 'Video' ? Icons.play_circle_outline : Icons.book_outlined,
-                        size: 14,
-                        color: r['type'] == 'Video' ? Colors.red : cs.primary,
-                      ),
-                      const SizedBox(width: 6),
+                      Icon(Icons.arrow_right, size: 16, color: cs.error),
+                      const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          r['title']!,
-                          style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: (r['type'] == 'Video' ? Colors.red : cs.primary).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          r['type']!,
-                          style: TextStyle(fontSize: 9, color: r['type'] == 'Video' ? Colors.red : cs.primary),
+                          '${w['name']} — ${(w['percent'] as double).toStringAsFixed(1)}% (${w['subject']})',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurface),
                         ),
                       ),
                     ],
                   ),
                 )),
+                if (weakTopics.length > 5)
+                  Text('+${weakTopics.length - 5} more weak topics', style: TextStyle(fontSize: 11, color: cs.outline)),
               ],
             ),
           ),
-        );
+
+        const SizedBox(height: 20),
+
+        // Recommended Resources Card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cs.primaryContainer.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: cs.primary.withOpacity(0.15)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.menu_book, size: 18, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Text('Recommended Resources', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text('Based on weak areas — help your child focus here', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+              const SizedBox(height: 12),
+              ..._buildResourceList(cs, weakTopics),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // Parent Settings Card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: cs.outlineVariant.withOpacity(0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.settings, size: 18, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Text('Parent Settings', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _childNameController,
+                decoration: InputDecoration(
+                  labelText: 'Child Name',
+                  prefixIcon: const Icon(Icons.person),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                value: _targetCollege,
+                decoration: InputDecoration(
+                  labelText: 'Target College',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                items: NeetData.collegeCutoffs.keys.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 13)))).toList(),
+                onChanged: (v) => setState(() => _targetCollege = v!),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _targetScoreController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Target Score (out of 720)',
+                  prefixIcon: const Icon(Icons.flag),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _parentNotesController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  labelText: 'Parent Notes / Observations',
+                  hintText: 'e.g. Needs more focus on Organic Chemistry...',
+                  prefixIcon: const Icon(Icons.notes),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    await _saveParentData();
+                    await _loadParentData();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Settings saved!'), behavior: SnackBarBehavior.floating),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.save),
+                  label: const Text('Save Settings'),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // Export Report Button
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.tonalIcon(
+            onPressed: () {
+              final report = _generateParentReport();
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  title: const Text('Parent Report'),
+                  content: SizedBox(
+                    width: double.maxFinite,
+                    child: SingleChildScrollView(child: SelectableText(report, style: const TextStyle(fontSize: 12, height: 1.5))),
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+                  ],
+                ),
+              );
+            },
+            icon: const Icon(Icons.summarize),
+            label: const Text('Generate Full Parent Report'),
+          ),
+        ),
+
+        const SizedBox(height: 32),
+      ],
+    ),
+  );
+}
+
+Widget _buildParentStatCard(String label, String value, Color color, ColorScheme cs) {
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: cs.surface.withOpacity(0.6),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: color.withOpacity(0.2)),
+    ),
+    child: Column(
+      children: [
+        Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color), textAlign: TextAlign.center),
+        const SizedBox(height: 4),
+        Text(label, style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant), textAlign: TextAlign.center),
+      ],
+    ),
+  );
+}
+
+Widget _buildWeeklyMiniStat(String label, String value, Color color, ColorScheme cs) {
+  return Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.15))),
+    child: Column(
+      children: [
+        Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+        const SizedBox(height: 2),
+        Text(label, style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
+      ],
+    ),
+  );
+}
+
+List<Widget> _buildResourceList(ColorScheme cs, List<Map<String, dynamic>> weakTopics) {
+  final widgets = <Widget>[];
+  final addedChapters = <String>{};
+
+  for (final weak in weakTopics.take(5)) {
+    final name = weak['name'] as String;
+    // Find matching chapter in resources
+    String? matchedKey;
+    for (final key in NeetData.chapterResources.keys) {
+      if (name.toLowerCase().contains(key.toLowerCase()) || key.toLowerCase().contains(name.toLowerCase())) {
+        matchedKey = key;
+        break;
       }
     }
-
-    if (widgets.isEmpty) {
+    if (matchedKey != null && !addedChapters.contains(matchedKey)) {
+      addedChapters.add(matchedKey);
+      final resources = NeetData.chapterResources[matchedKey]!;
       widgets.add(
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'Add components and scores to see recommended resources for weak areas.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: cs.outline),
-            ),
+        Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: cs.surface.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 6, height: 6,
+                    decoration: BoxDecoration(color: _subjectColor(weak['subject'] as String), shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(matchedKey, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: cs.error.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                    child: Text('${(weak['percent'] as double).toStringAsFixed(0)}%', style: TextStyle(fontSize: 10, color: cs.error, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ...resources.map((r) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      r['type'] == 'Video' ? Icons.play_circle_outline : Icons.book_outlined,
+                      size: 14,
+                      color: r['type'] == 'Video' ? Colors.red : cs.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        r['title']!,
+                        style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: (r['type'] == 'Video' ? Colors.red : cs.primary).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        r['type']!,
+                        style: TextStyle(fontSize: 9, color: r['type'] == 'Video' ? Colors.red : cs.primary),
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+            ],
           ),
         ),
       );
     }
-
-    return widgets;
   }
+
+  if (widgets.isEmpty) {
+    widgets.add(
+      Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'Add components and scores to see recommended resources for weak areas.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: cs.outline),
+          ),
+        ),
+      ),
+    );
+  }
+
+  return widgets;
+}
 }
 
 class _PresetChip extends StatelessWidget {
