@@ -392,7 +392,7 @@ class MockTestStorage {
 
   static Future<void> save(MockTestResult test) async {
     final all = await getAll();
-    all.removeWhere((t) => t.id == id);
+    all.removeWhere((t) => t.id == test.id);
     all.add(test);
     while (all.length > 100) all.removeLast();
     final prefs = await SharedPreferences.getInstance();
@@ -437,9 +437,9 @@ class StudyLogStorage {
     await prefs.setString(_key, jsonEncode(all.map((e) => e.toJson()).toList()));
   }
 
-  static Future<void> delete(String id) async {
+  static Future<void> delete(String logId) async {
     final all = await getAll();
-    all.removeWhere((l) => l.id == id);
+    all.removeWhere((l) => l.id == logId);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, jsonEncode(all.map((e) => e.toJson()).toList()));
   }
@@ -1268,7 +1268,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
             const SizedBox(height: 16),
             Text('Great Score!', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: cs.onSurface)),
             const SizedBox(height: 8),
-            Text('$marks', style: TextStyle(fontSize: 48, fontWeight: FontWeight.w800, color: NeetData.getMarksColor(marks))),
+                        Text('$marks', style: TextStyle(fontSize: 48, fontWeight: FontWeight.w800, color: NeetData.getMarksColor(marks))),
             const SizedBox(height: 4),
             Text('${percentile.toStringAsFixed(2)} percentile', style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant)),
             Text('Estimated AIR: $air', style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant)),
@@ -1518,7 +1518,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
 
     // Weekly stats
     final weeklyStats = _getWeeklyStudyStats();
-    buffer.writeln('📅 This Week's Study:');
+    buffer.writeln("📅 This Week's Study:");
     buffer.writeln('   Hours: ${weeklyStats['totalHours'].toStringAsFixed(1)}h');
     buffer.writeln('   MCQs Solved: ${weeklyStats['totalMcqs']}');
     buffer.writeln('   Accuracy: ${weeklyStats['accuracy'].toStringAsFixed(1)}%');
@@ -1526,7 +1526,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     buffer.writeln('');
 
     // Subject breakdown
-    final subjHours = weeklyStats['subjectHours'] as Map<String, double>? ?? {};
+    final subjHours = weeklyStats['subjectHours'] as Map<String, dynamic>? ?? {};
     if (subjHours.isNotEmpty) {
       buffer.writeln('⏰ Subject-wise Hours:');
       subjHours.forEach((subj, hours) {
@@ -1597,7 +1597,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   }
 
   Future<void> _addStudyLog() async {
-    final subject = _logSubjectController.text.trim();
+    final subject = _selectedLogSubject;
     final topic = _logTopicController.text.trim();
     final hours = double.tryParse(_logHoursController.text) ?? 0;
     final mcqs = int.tryParse(_logMcqsController.text) ?? 0;
@@ -1638,8 +1638,8 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     }
   }
 
-  Future<void> _deleteStudyLog(String id) async {
-    await StudyLogStorage.delete(id);
+  Future<void> _deleteStudyLog(String logId) async {
+    await StudyLogStorage.delete(logId);
     await _loadStudyLogs();
   }
 
@@ -2899,7 +2899,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
                       border: Border.all(color: scoreColor.withOpacity(0.2)),
                     ),
                     child: Column(
-                      children: [
+                                            children: [
                         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                           Text('${res['score']}', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w800, color: scoreColor)),
                           const SizedBox(width: 6),
@@ -3079,9 +3079,9 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     );
   }
 
-  // ═════════════════════════════════════════════════════════════════
-  // TAB 3: MOCK TESTS
-  // ═════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════
+// TAB 3: MOCK TESTS
+// ═════════════════════════════════════════════════════════════════
 
   Widget _buildMockTestsTab(ColorScheme cs) {
     if (_loadingMocks) return const Center(child: CircularProgressIndicator());
@@ -3352,9 +3352,9 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   }
 
 
-  // ═════════════════════════════════════════════════════════════════
-  // TAB 4: ANALYTICS
-  // ═════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════
+// TAB 4: ANALYTICS
+// ═════════════════════════════════════════════════════════════════
 
   Widget _buildAnalyticsTab(ColorScheme cs) {
     if (_mockTests.isEmpty) return _buildEmptyAnalytics(cs);
@@ -3669,9 +3669,9 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   }
 
 
-  // ═════════════════════════════════════════════════════════════════
-  // TAB 5: TOOLS
-  // ═════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════
+// TAB 5: TOOLS
+// ═════════════════════════════════════════════════════════════════
 
   Widget _buildToolsTab(ColorScheme cs) {
     final quickResult = _calculateQuickScore();
@@ -4065,7 +4065,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     );
   }
 
-  // NEW: Study Log Card in Tools tab
+// NEW: Study Log Card in Tools tab
   Widget _buildStudyLogCard(ColorScheme cs) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -4098,7 +4098,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
           const SizedBox(height: 10),
           TextField(
             controller: _logTopicController,
-            decoration: InputDecoration(labelText: 'Topic studied', hintText: 'e.g. Newton's Laws', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+            decoration: InputDecoration(labelText: 'Topic studied', hintText: "e.g. Newton's Laws", border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
           ),
           const SizedBox(height: 10),
           Row(children: [
@@ -4136,7 +4136,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
             const SizedBox(height: 12),
             const Divider(),
             const SizedBox(height: 8),
-            Text('Today's Logs', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            Text("Today's Logs", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
             const SizedBox(height: 8),
             ..._studyLogs.take(3).map((log) => Container(
               margin: const EdgeInsets.only(bottom: 6),
@@ -4228,9 +4228,9 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   }
 
 
-  // ═════════════════════════════════════════════════════════════════
-  // TAB 6: PARENT DASHBOARD (NEW — Most Important for Parents)
-  // ═════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════
+// TAB 6: PARENT DASHBOARD (NEW — Most Important for Parents)
+// ═════════════════════════════════════════════════════════════════
 
   Widget _buildParentTab(ColorScheme cs) {
     final weeklyStats = _getWeeklyStudyStats();
@@ -4334,7 +4334,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
                   children: [
                     Icon(Icons.calendar_view_week, size: 18, color: cs.primary),
                     const SizedBox(width: 8),
-                    Text('This Week's Progress', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                    Text("This Week's Progress", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -4458,7 +4458,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text('Based on weak areas — help your child focus here', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                                Text('Based on weak areas — help your child focus here', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
                 const SizedBox(height: 12),
                 ..._buildResourceList(cs, weakTopics),
               ],
@@ -4733,3 +4733,7 @@ class _PresetChip extends StatelessWidget {
     );
   }
 }
+
+
+                         
+
