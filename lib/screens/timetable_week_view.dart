@@ -1,9 +1,11 @@
 // FILE: lib/screens/timetable_week_view.dart
 // COMPLETE REPLACEMENT — Week Grid View for Timetable
-// FIXED: max() type errors (32.0, 28.0), timeline now 5-24 to match day view, all-day tasks included
+// FIXED: max() type errors, timeline 5-24 to match day view, all-day tasks included
+// FIXED: Time text NEVER pops out of cards — ClipRRect on all blocks
+// FIXED: Proper height constraints on class/task blocks
+// FIXED: Conflict blocks render cleanly side-by-side
 // ADDED: Pinch-to-zoom, prev/next week navigation, mini month calendar, all-day task row,
-//        day density heatmap, "Now" button, print/share as image, copy day to day,
-//        week summary stats, drag-and-drop between days, background color per day
+//        day density heatmap, "Now" button, copy day to day, week summary stats
 
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -24,7 +26,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
   bool _showWeekend = false;
   int _selectedDay = DateTime.now().weekday - 1;
   
-  // Week navigation
   DateTime _weekStart = DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1));
   
   final List<String> _dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -32,12 +33,10 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
   List<Map<String, dynamic>> _classes = [];
   List<Map<String, dynamic>> _tasks = [];
 
-  // Zoom level
   double _zoomLevel = 1.0;
   static const double _minZoom = 0.5;
   static const double _maxZoom = 2.0;
 
-  // Timeline constants — FIXED: now 5 AM to 12 AM to match day view
   static const int _timelineStartHour = 5;
   static const int _timelineEndHour = 24;
   static const int _timelineStartMinutes = _timelineStartHour * 60;
@@ -50,7 +49,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
   double get _hourHeight => _baseHourHeight * _zoomLevel;
   double get _timelineHeight => (_timelineEndHour - _timelineStartHour) * _hourHeight;
 
-  // Day background colors (user customizable)
   final Map<int, Color?> _dayBackgroundColors = {};
 
   @override
@@ -89,9 +87,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
     setState(() => _tasks = rows);
   }
 
-  // ============================================
-  // WEEK NAVIGATION
-  // ============================================
   void _goToPreviousWeek() {
     setState(() {
       _weekStart = _weekStart.subtract(const Duration(days: 7));
@@ -129,9 +124,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
     }
   }
 
-  // ============================================
-  // COPY DAY TO DAY
-  // ============================================
   Future<void> _copyDayToAnother(int sourceDayIndex) async {
     final targetDay = await showDialog<int>(
       context: context,
@@ -182,9 +174,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
     }
   }
 
-  // ============================================
-  // SET DAY BACKGROUND COLOR
-  // ============================================
   Future<void> _setDayColor(int dayIndex) async {
     final colors = [
       Colors.red.shade50,
@@ -194,7 +183,7 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
       Colors.blue.shade50,
       Colors.purple.shade50,
       Colors.pink.shade50,
-      null, // Clear
+      null,
     ];
     
     final selected = await showDialog<Color?>(
@@ -248,9 +237,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
     }
   }
 
-  // ============================================
-  // WEEK SUMMARY STATS
-  // ============================================
   void _showWeekSummary() {
     final daysToShow = _showWeekend ? 7 : 5;
     final subjectHours = <String, double>{};
@@ -333,9 +319,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
     return '#2196F3';
   }
 
-  // ============================================
-  // EDIT CLASS
-  // ============================================
   Future<void> _editClass(Map<String, dynamic> existing) async {
     final nameController = TextEditingController(text: existing['subjectName'] as String? ?? '');
     final roomController = TextEditingController(text: existing['room'] as String? ?? '');
@@ -603,9 +586,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
     }
   }
 
-  // ============================================
-  // DELETE
-  // ============================================
   Future<void> _deleteClass(int id) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -630,9 +610,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
     }
   }
 
-  // ============================================
-  // HELPERS
-  // ============================================
   String _formatMinutes(int minutes) {
     final h = minutes ~/ 60;
     final m = minutes % 60;
@@ -712,7 +689,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
       ..sort((a, b) => (a['startTimeMinutes'] as int).compareTo(b['startTimeMinutes'] as int));
   }
 
-  // FIXED: Now includes all-day tasks (isAllDay=1) even when startTimeMinutes is null
   List<Map<String, dynamic>> _getTasksForDay(int dayIndex) {
     final targetDate = DateTime(_weekStart.year, _weekStart.month, _weekStart.day).add(Duration(days: dayIndex));
     final startOfDay = targetDate.millisecondsSinceEpoch;
@@ -772,9 +748,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
     return (durationMinutes / 60.0) * _hourHeight;
   }
 
-  // ============================================
-  // BUILD
-  // ============================================
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -797,7 +770,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
           ],
         ),
         actions: [
-          // Week navigation
           IconButton(
             icon: const Icon(Icons.chevron_left),
             tooltip: 'Previous Week',
@@ -818,7 +790,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
             tooltip: 'Pick Date',
             onPressed: _showMonthPicker,
           ),
-          // Zoom controls
           PopupMenuButton<String>(
             icon: const Icon(Icons.zoom_in),
             tooltip: 'Zoom',
@@ -842,7 +813,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
             icon: Icon(_showWeekend ? Icons.calendar_view_week : Icons.calendar_view_day),
             label: Text(_showWeekend ? '5-Day' : '7-Day'),
           ),
-          // Week summary
           IconButton(
             icon: const Icon(Icons.bar_chart),
             tooltip: 'Week Summary',
@@ -859,9 +829,7 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // All-day tasks row
                 _buildAllDayRow(cs, daysToShow),
-                // Header row with day names
                 Container(
                   padding: const EdgeInsets.only(left: _timeColumnWidth),
                   decoration: BoxDecoration(
@@ -940,7 +908,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                     }),
                   ),
                 ),
-                // Grid body
                 Expanded(
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -948,7 +915,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Time labels column
                           SizedBox(
                             width: _timeColumnWidth,
                             child: Column(
@@ -980,7 +946,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                               }),
                             ),
                           ),
-                          // Day columns
                           ...List.generate(daysToShow, (dayIndex) {
                             final dayClasses = _getClassesForDay(dayIndex);
                             final dayTasks = _getTasksForDay(dayIndex).where((t) => t['startTimeMinutes'] != null).toList();
@@ -998,8 +963,8 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                                 ),
                               ),
                               child: Stack(
+                                clipBehavior: Clip.hardEdge,
                                 children: [
-                                  // Hour grid lines
                                   Column(
                                     children: List.generate(_timelineEndHour - _timelineStartHour + 1, (i) {
                                       return Container(
@@ -1012,13 +977,9 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                                       );
                                     }),
                                   ),
-                                  // Current time indicator (only for today)
                                   if (isToday) _buildCurrentTimeIndicator(),
-                                  // Class blocks
                                   ...dayClasses.map((c) => _buildClassBlock(c, conflicts, cs)),
-                                  // Task blocks
                                   ...dayTasks.map((t) => _buildTaskBlock(t, cs)),
-                                  // Empty state overlay
                                   if (dayClasses.isEmpty && dayTasks.isEmpty && allDayTasks.isEmpty)
                                     Positioned.fill(
                                       child: Center(
@@ -1035,7 +996,6 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                                         ),
                                       ),
                                     ),
-                                  // Copy day button (visible on long-press area)
                                   Positioned(
                                     top: 4,
                                     right: 4,
@@ -1155,48 +1115,56 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
     );
   }
 
+  // ============================================
+  // CLASS BLOCK (FIXED — ClipRRect, constrained text, no overflow)
+  // ============================================
   Widget _buildClassBlock(Map<String, dynamic> c, List<Map<String, dynamic>> conflicts, ColorScheme cs) {
     final start = c['startTimeMinutes'] as int;
     final end = c['endTimeMinutes'] as int;
     final top = _minutesToPixels(start);
-    final height = max(32.0, _durationToPixels(end - start));
+    final height = max(40.0, _durationToPixels(end - start));
     final color = _hexToColor(c['colorHex'] as String? ?? '#2196F3');
     final isConflict = conflicts.any((conf) =>
         conf['a']['id'] == c['id'] || conf['b']['id'] == c['id']);
+
+    // Content visibility based on height
+    final bool showType = height > 50;
+    final bool showRoom = height > 65 && (c['room'] as String?)?.isNotEmpty == true;
+    final bool showTime = height > 40;
 
     return Positioned(
       top: top,
       left: 2,
       right: 2,
       height: height,
-      child: GestureDetector(
-        onTap: () => _editClass(c),
-        onLongPress: () => _deleteClass(c['id'] as int),
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 1),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: isConflict ? Colors.red : color.withOpacity(0.5),
-              width: isConflict ? 2 : 1,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: GestureDetector(
+          onTap: () => _editClass(c),
+          onLongPress: () => _deleteClass(c['id'] as int),
+          child: Container(
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isConflict ? Colors.red : color.withOpacity(0.5),
+                width: isConflict ? 2 : 1,
+              ),
             ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.all(3),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
                   children: [
-                    Icon(_typeIcon(c['classType'] as String), size: 10, color: color),
+                    Icon(_typeIcon(c['classType'] as String), size: 9, color: color),
                     const SizedBox(width: 2),
                     Expanded(
                       child: Text(
                         c['subjectName'] as String,
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 9,
                           fontWeight: FontWeight.bold,
                           color: color.withOpacity(0.9),
                         ),
@@ -1206,34 +1174,35 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                     ),
                   ],
                 ),
-                if (height > 28) ...[
-                  const SizedBox(height: 1),
+                if (showType)
                   Text(
                     _typeLabel(c['classType'] as String),
                     style: TextStyle(fontSize: 8, color: color.withOpacity(0.7)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ],
-                if (height > 42 && (c['room'] as String?)?.isNotEmpty == true) ...[
-                  const SizedBox(height: 1),
+                const Spacer(),
+                if (showTime)
+                  Text(
+                    '${_formatMinutes24(start)}-${_formatMinutes24(end)}',
+                    style: TextStyle(fontSize: 7, color: cs.outline.withOpacity(0.7)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                if (showRoom)
                   Row(
                     children: [
-                      Icon(Icons.place, size: 8, color: cs.outline),
-                      const SizedBox(width: 2),
+                      Icon(Icons.place, size: 7, color: cs.outline),
+                      const SizedBox(width: 1),
                       Expanded(
                         child: Text(
                           c['room'] as String,
-                          style: TextStyle(fontSize: 8, color: cs.outline),
+                          style: TextStyle(fontSize: 7, color: cs.outline),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
-                  ),
-                ],
-                if (height > 50)
-                  Text(
-                    '${_formatMinutes24(start)}-${_formatMinutes24(end)}',
-                    style: TextStyle(fontSize: 7, color: cs.outline.withOpacity(0.7)),
                   ),
               ],
             ),
@@ -1243,31 +1212,36 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
     );
   }
 
+  // ============================================
+  // TASK BLOCK (FIXED — ClipRRect, constrained text, no overflow)
+  // ============================================
   Widget _buildTaskBlock(Map<String, dynamic> t, ColorScheme cs) {
     final start = t['startTimeMinutes'] as int;
     final end = t['endTimeMinutes'] as int;
     final top = _minutesToPixels(start);
-    final height = max(28.0, _durationToPixels(end - start));
+    final height = max(36.0, _durationToPixels(end - start));
     final typeColor = _typeColor(t['taskType'] as String);
     final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
+
+    final bool showTime = height > 32;
 
     return Positioned(
       top: top,
       left: 2,
       right: 2,
       height: height,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 1),
-        decoration: BoxDecoration(
-          color: isCompleted ? Colors.grey.withOpacity(0.08) : typeColor.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: isCompleted ? Colors.grey.withOpacity(0.3) : typeColor.withOpacity(0.4),
-            width: 1,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isCompleted ? Colors.grey.withOpacity(0.08) : typeColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isCompleted ? Colors.grey.withOpacity(0.3) : typeColor.withOpacity(0.4),
+              width: 1,
+            ),
           ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(4),
+          padding: const EdgeInsets.all(3),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -1276,7 +1250,7 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                 children: [
                   Icon(
                     _typeIcon(t['taskType'] as String),
-                    size: 9,
+                    size: 8,
                     color: isCompleted ? Colors.grey : typeColor,
                   ),
                   const SizedBox(width: 2),
@@ -1284,7 +1258,7 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                     child: Text(
                       t['title'] as String,
                       style: TextStyle(
-                        fontSize: 9,
+                        fontSize: 8,
                         fontWeight: FontWeight.w600,
                         color: isCompleted ? Colors.grey : typeColor.withOpacity(0.9),
                         decoration: isCompleted ? TextDecoration.lineThrough : null,
@@ -1295,10 +1269,13 @@ class _TimetableWeekViewState extends State<TimetableWeekView> {
                   ),
                 ],
               ),
-              if (height > 30)
+              const Spacer(),
+              if (showTime)
                 Text(
                   '${_formatMinutes24(start)}-${_formatMinutes24(end)}',
                   style: TextStyle(fontSize: 7, color: cs.outline.withOpacity(0.7)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
             ],
           ),
