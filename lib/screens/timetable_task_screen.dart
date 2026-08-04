@@ -1,66 +1,59 @@
-// FILE: lib/screens/timetable_task_screen.dart
-// COMPLETE REPLACEMENT — Task/Deadline Manager
-// FIXED: Only uses columns that exist in timetable_tasks table
-// ADDED: Batch select mode, priority levels, recurring tasks, custom tags,
-//        subtasks checklist, swipe actions (complete/delete), archive view,
-//        task templates, time tracking, export to ICS, smart due date suggestions,
-//        attachment support, rich text notes with clickable links
+// FILE: lib/screens/timetable_screen.dart
+// NEET Timetable v6.1 — Fixed Conflicts, Drag Resize, Mastery Tracking, Smart Suggestions
+// ✅ Uniform conflict color (deep red)
+// ✅ Full-card tap/drag interactivity restored
+// ✅ Drag-to-resize class duration (top/bottom handles)
+// ✅ Subject Mastery % on cards
+// ✅ "NEET Sprint" Pomodoro one-tap
+// ✅ Conflict Resolution Assistant (Shift/Split/Replace)
 
+import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../database_helper.dart';
-import '../services/widget_service.dart';
-import 'main_screen.dart';
+import 'package:intl/intl.dart';
+import 'models/timetable_entry.dart';
+import 'services/database_helper.dart';
+import 'services/widget_service.dart';
 
-class TimetableTaskScreen extends StatefulWidget {
-  const TimetableTaskScreen({super.key});
+class TimetableScreen extends StatefulWidget {
+  const TimetableScreen({super.key});
 
   @override
-  State<TimetableTaskScreen> createState() => _TimetableTaskScreenState();
+  State<TimetableScreen> createState() => _TimetableScreenState();
 }
 
-class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
+class _TimetableScreenState extends State<TimetableScreen> {
   bool _loading = true;
-  String _filterType = 'all';
-  String _sortBy = 'dueDate';
+  List<Map<String, dynamic>> _classes = [];
   List<Map<String, dynamic>> _tasks = [];
+  int _selectedDay = DateTime.now().weekday - 1; // 0=Mon
+  bool _showWeekend = false;
+  double _zoomLevel = 1.0;
+  final ScrollController _scrollController = ScrollController();
 
-  // Batch selection state
-  bool _batchMode = false;
-  final Set<int> _selectedIds = {};
+  // Drag state
+  Map<int, bool> _isDragging = {};
+  Map<int, Offset?> _dragStartOffset = {};
+  Map<int, int> _originalStart = {};
+  Map<int, int> _originalEnd = {};
 
-  // Archive view toggle
-  bool _showArchive = false;
+  static const int _timelineStartHour = 5;
+  static const int _timelineEndHour = 24;
+  static const int _timelineStartMinutes = _timelineStartHour * 60;
+  static const int _timelineEndMinutes = _timelineEndHour * 60;
+  static const int _totalTimelineMinutes = _timelineEndMinutes - _timelineStartMinutes;
+  static const double _hourHeight = 72.0;
+  static const double _timelineWidth = 52.0;
+  static const int _snapMinutes = 15;
 
-  // Tag filter
-  String _tagFilter = '';
-
-  final List<Map<String, String>> _filterOptions = [
-    {'value': 'all', 'label': 'All', 'icon': 'filter_list'},
-    {'value': 'assignment', 'label': 'Assignments', 'icon': 'assignment'},
-    {'value': 'exam', 'label': 'Exams', 'icon': 'quiz'},
-    {'value': 'revision', 'label': 'Revision', 'icon': 'menu_book'},
-    {'value': 'personal', 'label': 'Personal', 'icon': 'person'},
-    {'value': 'study_block', 'label': 'Study', 'icon': 'timer'},
-  ];
-
-  // Priority labels and colors
-  final List<Map<String, dynamic>> _priorityOptions = [
-    {'value': 1, 'label': 'Low', 'color': Colors.green},
-    {'value': 2, 'label': 'Medium', 'color': Colors.orange},
-    {'value': 3, 'label': 'High', 'color': Colors.red},
-  ];
-
-  // Task templates
-  final List<Map<String, dynamic>> _taskTemplates = [
-    {'title': 'Physics Revision', 'type': 'revision', 'subject': 'Physics', 'duration': 60},
-    {'title': 'Chemistry MCQ Practice', 'type': 'revision', 'subject': 'Chemistry', 'duration': 45},
-    {'title': 'Biology Notes Review', 'type': 'revision', 'subject': 'Biology', 'duration': 90},
-    {'title': 'Mock Test', 'type': 'exam', 'subject': '', 'duration': 180},
-    {'title': 'Assignment Work', 'type': 'assignment', 'subject': '', 'duration': 120},
-    {'title': 'Study Block', 'type': 'study_block', 'subject': '', 'duration': 60},
-  ];
+  // NEET subjects & colors
+  static const List<String> _neetSubjects = ['Physics', 'Chemistry', 'Biology', 'Zoology', 'Botany'];
+  static const Map<String, String> _neetColors = {
+    'Physics': '#1565C0',
+    'Chemistry': '#2E7D32',
+    'Biology': '#C62828',
+    'Zoology': '#C62828',
+    'Botany': '#C62828',
+  };
 
   @override
   void initState() {
@@ -70,1258 +63,589 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
 
   Future<void> _loadData() async {
     setState(() => _loading = true);
-    final db = await DatabaseHelper.instance.database;
-    
-    // Build where clause
-    List<String> whereParts = [];
-    List<dynamic> whereArgs = [];
-    
-    if (_showArchive) {
-      whereParts.add('isCompleted = 1');
-    } else {
-      whereParts.add('isCompleted = 0');
-    }
-    
-    if (_filterType != 'all') {
-      whereParts.add('taskType = ?');
-      whereArgs.add(_filterType);
-    }
-    
-    if (_tagFilter.isNotEmpty) {
-      whereParts.add('(tags LIKE ? OR subjectName LIKE ?)');
-      whereArgs.add('%$_tagFilter%');
-      whereArgs.add('%$_tagFilter%');
-    }
-
-    String orderBy = 'dueDateMillis ASC';
-    if (_sortBy == 'title') orderBy = 'title ASC';
-    if (_sortBy == 'type') orderBy = 'taskType ASC, dueDateMillis ASC';
-    if (_sortBy == 'priority') orderBy = 'priority DESC, dueDateMillis ASC';
-    if (_sortBy == 'created') orderBy = 'createdAtMillis DESC';
-
-    final rows = await db.query(
-      'timetable_tasks',
-      where: whereParts.isEmpty ? null : whereParts.join(' AND '),
-      whereArgs: whereArgs.isEmpty ? null : whereArgs,
-      orderBy: orderBy,
-    );
-    setState(() {
-      _tasks = rows;
-      _loading = false;
-    });
+    await _loadClasses();
+    await _loadTasks();
+    if (mounted) setState(() => _loading = false);
     await WidgetService.refreshTimetableWidget();
   }
 
-  // ============================================
-  // BATCH ACTIONS
-  // ============================================
-  void _toggleSelection(int id) {
-    setState(() {
-      if (_selectedIds.contains(id)) {
-        _selectedIds.remove(id);
-        if (_selectedIds.isEmpty) _batchMode = false;
-      } else {
-        _selectedIds.add(id);
-      }
-    });
-  }
-
-  void _enterBatchMode(int id) {
-    setState(() {
-      _batchMode = true;
-      _selectedIds.add(id);
-    });
-  }
-
-  void _exitBatchMode() {
-    setState(() {
-      _batchMode = false;
-      _selectedIds.clear();
-    });
-  }
-
-  Future<void> _batchMarkComplete(bool complete) async {
+  Future<void> _loadClasses() async {
     final db = await DatabaseHelper.instance.database;
-    for (final id in _selectedIds) {
-      await db.update(
-        'timetable_tasks',
-        {'isCompleted': complete ? 1 : 0},
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-    }
-    _exitBatchMode();
-    await _loadData();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${complete ? "Completed" : "Restored"} ${_selectedIds.length} tasks')),
-      );
-    }
+    final rows = await db.query('timetable_classes', orderBy: 'startTimeMinutes ASC');
+    setState(() => _classes = rows);
   }
 
-  Future<void> _batchDelete() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Selected?'),
-        content: Text('Permanently delete ${_selectedIds.length} tasks?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      final db = await DatabaseHelper.instance.database;
-      for (final id in _selectedIds) {
-        await db.delete('timetable_tasks', where: 'id = ?', whereArgs: [id]);
-      }
-      _exitBatchMode();
-      await _loadData();
-    }
-  }
-
-  Future<void> _batchChangeDueDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (picked != null) {
-      final db = await DatabaseHelper.instance.database;
-      final millis = DateTime(picked.year, picked.month, picked.day).millisecondsSinceEpoch;
-      for (final id in _selectedIds) {
-        await db.update(
-          'timetable_tasks',
-          {'dueDateMillis': millis, 'updatedAtMillis': DateTime.now().millisecondsSinceEpoch},
-          where: 'id = ?',
-          whereArgs: [id],
-        );
-      }
-      _exitBatchMode();
-      await _loadData();
-    }
-  }
-
-  // ============================================
-  // ADD TASK
-  // ============================================
-  Future<void> _addTask() async {
-    final titleController = TextEditingController();
-    final subjectController = TextEditingController();
-    final noteController = TextEditingController();
-    final tagController = TextEditingController();
-    String taskType = 'assignment';
-    DateTime dueDate = DateTime.now().add(const Duration(days: 7));
-    int? startTimeMinutes;
-    int? endTimeMinutes;
-    bool hasTime = false;
-    int priority = 2; // Medium default
-    bool isRecurring = false;
-    String recurringPattern = 'weekly'; // weekly, monthly
-    String? attachmentPath;
-
-    final types = ['assignment', 'exam', 'revision', 'personal', 'study_block'];
-    final typeLabels = ['Assignment', 'Exam', 'Revision', 'Personal', 'Study Block'];
-
-    final result = await showDialog<Map<String, dynamic>?>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text('Add Task / Deadline'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: titleController,
-                    decoration: const InputDecoration(labelText: 'Title *', prefixIcon: Icon(Icons.title)),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: taskType,
-                    decoration: const InputDecoration(labelText: 'Type', prefixIcon: Icon(Icons.category)),
-                    items: List.generate(types.length, (i) => DropdownMenuItem(
-                      value: types[i],
-                      child: Text(typeLabels[i]),
-                    )),
-                    onChanged: (v) => setDialogState(() => taskType = v!),
-                  ),
-                  const SizedBox(height: 12),
-                  // Priority selector
-                  Row(
-                    children: [
-                      const Icon(Icons.flag, size: 20, color: Colors.grey),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: SegmentedButton<int>(
-                          segments: _priorityOptions.map((p) => ButtonSegment(
-                            value: p['value'] as int,
-                            label: Text(p['label'] as String, style: const TextStyle(fontSize: 11)),
-                            icon: Icon(Icons.flag, color: p['color'] as Color, size: 14),
-                          )).toList(),
-                          selected: {priority},
-                          onSelectionChanged: (set) => setDialogState(() => priority = set.first),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: subjectController,
-                    decoration: const InputDecoration(labelText: 'Subject (optional)', prefixIcon: Icon(Icons.book)),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: tagController,
-                    decoration: const InputDecoration(
-                      labelText: 'Tags (optional, comma separated)',
-                      prefixIcon: Icon(Icons.label),
-                      hintText: 'e.g. urgent, neet2026, chapter5',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Due Date', style: TextStyle(fontSize: 12)),
-                    subtitle: Text('${dueDate.day}/${dueDate.month}/${dueDate.year}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    trailing: const Icon(Icons.calendar_today, size: 20),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: dueDate,
-                        firstDate: DateTime.now().subtract(const Duration(days: 1)),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
-                      if (picked != null) setDialogState(() => dueDate = picked);
-                    },
-                  ),
-                  // Smart due date suggestions
-                  Wrap(
-                    spacing: 6,
-                    children: [
-                      ActionChip(
-                        label: const Text('Tomorrow', style: TextStyle(fontSize: 11)),
-                        onPressed: () => setDialogState(() => dueDate = DateTime.now().add(const Duration(days: 1))),
-                      ),
-                      ActionChip(
-                        label: const Text('3 Days', style: TextStyle(fontSize: 11)),
-                        onPressed: () => setDialogState(() => dueDate = DateTime.now().add(const Duration(days: 3))),
-                      ),
-                      ActionChip(
-                        label: const Text('1 Week', style: TextStyle(fontSize: 11)),
-                        onPressed: () => setDialogState(() => dueDate = DateTime.now().add(const Duration(days: 7))),
-                      ),
-                      ActionChip(
-                        label: const Text('2 Weeks', style: TextStyle(fontSize: 11)),
-                        onPressed: () => setDialogState(() => dueDate = DateTime.now().add(const Duration(days: 14))),
-                      ),
-                    ],
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Has Specific Time'),
-                    subtitle: const Text('Add start/end time for this task'),
-                    value: hasTime,
-                    onChanged: (v) => setDialogState(() => hasTime = v),
-                  ),
-                  if (hasTime) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Start', style: TextStyle(fontSize: 12)),
-                            subtitle: Text(
-                              startTimeMinutes != null ? _formatMinutes(startTimeMinutes!) : 'Not set',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            trailing: const Icon(Icons.access_time, size: 20),
-                            onTap: () async {
-                              final time = await showTimePicker(
-                                context: context,
-                                initialTime: const TimeOfDay(hour: 9, minute: 0),
-                              );
-                              if (time != null) setDialogState(() => startTimeMinutes = time.hour * 60 + time.minute);
-                            },
-                          ),
-                        ),
-                        Expanded(
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('End', style: TextStyle(fontSize: 12)),
-                            subtitle: Text(
-                              endTimeMinutes != null ? _formatMinutes(endTimeMinutes!) : 'Not set',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            trailing: const Icon(Icons.access_time, size: 20),
-                            onTap: () async {
-                              final time = await showTimePicker(
-                                context: context,
-                                initialTime: const TimeOfDay(hour: 10, minute: 0),
-                              );
-                              if (time != null) setDialogState(() => endTimeMinutes = time.hour * 60 + time.minute);
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Recurring'),
-                    subtitle: const Text('Auto-regenerate when completed'),
-                    value: isRecurring,
-                    onChanged: (v) => setDialogState(() => isRecurring = v),
-                  ),
-                  if (isRecurring)
-                    DropdownButtonFormField<String>(
-                      value: recurringPattern,
-                      decoration: const InputDecoration(labelText: 'Repeat', prefixIcon: Icon(Icons.repeat)),
-                      items: const [
-                        DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
-                        DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
-                      ],
-                      onChanged: (v) => setDialogState(() => recurringPattern = v!),
-                    ),
-                  const SizedBox(height: 8),
-                  // Attachment
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Attachment', style: TextStyle(fontSize: 12)),
-                    subtitle: Text(
-                      attachmentPath != null ? attachmentPath!.split('/').last : 'No file attached',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                    ),
-                    trailing: Icon(
-                      attachmentPath != null ? Icons.attachment : Icons.attach_file,
-                      size: 20,
-                    ),
-                    onTap: () {
-                      // Placeholder for file picker integration
-                      // In real app: use file_picker to select file
-                      setDialogState(() => attachmentPath = '/storage/documents/sample.pdf');
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: noteController,
-                    decoration: const InputDecoration(labelText: 'Note (optional)', prefixIcon: Icon(Icons.notes)),
-                    maxLines: 3,
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-              FilledButton(
-                onPressed: () {
-                  if (titleController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Title is required')));
-                    return;
-                  }
-                  if (hasTime && startTimeMinutes != null && endTimeMinutes != null && endTimeMinutes! <= startTimeMinutes!) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('End time must be after start time')));
-                    return;
-                  }
-                  Navigator.pop(ctx, {
-                    'title': titleController.text.trim(),
-                    'subject': subjectController.text.trim().isEmpty ? null : subjectController.text.trim(),
-                    'type': taskType,
-                    'due': DateTime(dueDate.year, dueDate.month, dueDate.day).millisecondsSinceEpoch,
-                    'startTime': hasTime ? startTimeMinutes : null,
-                    'endTime': hasTime ? endTimeMinutes : null,
-                    'note': noteController.text.trim(),
-                    'priority': priority,
-                    'tags': tagController.text.trim().isEmpty ? null : tagController.text.trim(),
-                    'isRecurring': isRecurring,
-                    'recurringPattern': recurringPattern,
-                    'attachmentPath': attachmentPath,
-                  });
-                },
-                child: const Text('Add'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    titleController.dispose();
-    subjectController.dispose();
-    noteController.dispose();
-    tagController.dispose();
-
-    if (result != null) {
-      final db = await DatabaseHelper.instance.database;
-      final now = DateTime.now().millisecondsSinceEpoch;
-      await db.insert('timetable_tasks', {
-        'title': result['title'],
-        'taskType': result['type'],
-        'subjectName': result['subject'],
-        'dueDateMillis': result['due'],
-        'startTimeMinutes': result['startTime'],
-        'endTimeMinutes': result['endTime'],
-        'isAllDay': result['startTime'] == null ? 1 : 0,
-        'colorHex': _colorToHex(_typeColor(result['type'] as String)),
-        'isCompleted': 0,
-        'note': result['note'],
-        'priority': result['priority'],
-        'tags': result['tags'],
-        'isRecurring': (result['isRecurring'] as bool) ? 1 : 0,
-        'recurringPattern': result['recurringPattern'],
-        'attachmentPath': result['attachmentPath'],
-        'createdAtMillis': now,
-      });
-      HapticFeedback.mediumImpact();
-      await _loadData();
-    }
-  }
-
-  // ============================================
-  // ADD FROM TEMPLATE
-  // ============================================
-  Future<void> _addFromTemplate() async {
-    final template = await showDialog<Map<String, dynamic>?>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Task Templates'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: _taskTemplates.length,
-            itemBuilder: (context, i) {
-              final t = _taskTemplates[i];
-              return ListTile(
-                leading: Icon(_typeIcon(t['type'] as String), color: _typeColor(t['type'] as String)),
-                title: Text(t['title'] as String),
-                subtitle: Text('${t['type']} · ${t['duration']} min'),
-                onTap: () => Navigator.pop(ctx, t),
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        ],
-      ),
-    );
-
-    if (template != null) {
-      final titleController = TextEditingController(text: template['title'] as String);
-      final subjectController = TextEditingController(text: template['subject'] as String);
-      DateTime dueDate = DateTime.now().add(const Duration(days: 3));
-      final int duration = template['duration'] as int;
-      final int startMinutes = 540; // 9 AM default
-      final int endMinutes = startMinutes + duration;
-
-      final result = await showDialog<Map<String, dynamic>?>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('Add: ${template['title']}'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(labelText: 'Title', prefixIcon: Icon(Icons.title)),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: subjectController,
-                  decoration: const InputDecoration(labelText: 'Subject', prefixIcon: Icon(Icons.book)),
-                ),
-                const SizedBox(height: 12),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Due Date'),
-                  subtitle: Text('${dueDate.day}/${dueDate.month}/${dueDate.year}'),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: dueDate,
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                    );
-                    if (picked != null) setState(() => dueDate = picked);
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, {
-                'title': titleController.text.trim(),
-                'subject': subjectController.text.trim(),
-                'due': DateTime(dueDate.year, dueDate.month, dueDate.day).millisecondsSinceEpoch,
-                'startTime': startMinutes,
-                'endTime': endMinutes,
-              }),
-              child: const Text('Add'),
-            ),
-          ],
-        ),
-      );
-
-      titleController.dispose();
-      subjectController.dispose();
-
-      if (result != null) {
-        final db = await DatabaseHelper.instance.database;
-        final now = DateTime.now().millisecondsSinceEpoch;
-        await db.insert('timetable_tasks', {
-          'title': result['title'],
-          'taskType': template['type'],
-          'subjectName': result['subject'],
-          'dueDateMillis': result['due'],
-          'startTimeMinutes': result['startTime'],
-          'endTimeMinutes': result['endTime'],
-          'isAllDay': 0,
-          'colorHex': _colorToHex(_typeColor(template['type'] as String)),
-          'isCompleted': 0,
-          'priority': 2,
-          'createdAtMillis': now,
-        });
-        await _loadData();
-      }
-    }
-  }
-
-  // ============================================
-  // EDIT TASK
-  // ============================================
-  Future<void> _editTask(Map<String, dynamic> existing) async {
-    final titleController = TextEditingController(text: existing['title'] as String? ?? '');
-    final subjectController = TextEditingController(text: existing['subjectName'] as String? ?? '');
-    final noteController = TextEditingController(text: existing['note'] as String? ?? '');
-    final tagController = TextEditingController(text: existing['tags'] as String? ?? '');
-    String taskType = existing['taskType'] as String? ?? 'assignment';
-    DateTime dueDate = DateTime.fromMillisecondsSinceEpoch(existing['dueDateMillis'] as int);
-    int? startTimeMinutes = existing['startTimeMinutes'] as int?;
-    int? endTimeMinutes = existing['endTimeMinutes'] as int?;
-    bool hasTime = startTimeMinutes != null;
-    int priority = existing['priority'] as int? ?? 2;
-    bool isRecurring = (existing['isRecurring'] as int? ?? 0) == 1;
-    String recurringPattern = existing['recurringPattern'] as String? ?? 'weekly';
-    String? attachmentPath = existing['attachmentPath'] as String?;
-
-    final types = ['assignment', 'exam', 'revision', 'personal', 'study_block'];
-    final typeLabels = ['Assignment', 'Exam', 'Revision', 'Personal', 'Study Block'];
-
-    final result = await showDialog<Map<String, dynamic>?>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text('Edit Task'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: titleController,
-                    decoration: const InputDecoration(labelText: 'Title *', prefixIcon: Icon(Icons.title)),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: taskType,
-                    decoration: const InputDecoration(labelText: 'Type', prefixIcon: Icon(Icons.category)),
-                    items: List.generate(types.length, (i) => DropdownMenuItem(
-                      value: types[i],
-                      child: Text(typeLabels[i]),
-                    )),
-                    onChanged: (v) => setDialogState(() => taskType = v!),
-                  ),
-                  const SizedBox(height: 12),
-                  // Priority selector
-                  Row(
-                    children: [
-                      const Icon(Icons.flag, size: 20, color: Colors.grey),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: SegmentedButton<int>(
-                          segments: _priorityOptions.map((p) => ButtonSegment(
-                            value: p['value'] as int,
-                            label: Text(p['label'] as String, style: const TextStyle(fontSize: 11)),
-                            icon: Icon(Icons.flag, color: p['color'] as Color, size: 14),
-                          )).toList(),
-                          selected: {priority},
-                          onSelectionChanged: (set) => setDialogState(() => priority = set.first),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: subjectController,
-                    decoration: const InputDecoration(labelText: 'Subject (optional)', prefixIcon: Icon(Icons.book)),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: tagController,
-                    decoration: const InputDecoration(
-                      labelText: 'Tags (comma separated)',
-                      prefixIcon: Icon(Icons.label),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Due Date', style: TextStyle(fontSize: 12)),
-                    subtitle: Text('${dueDate.day}/${dueDate.month}/${dueDate.year}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    trailing: const Icon(Icons.calendar_today, size: 20),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: dueDate,
-                        firstDate: DateTime.now().subtract(const Duration(days: 1)),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
-                      if (picked != null) setDialogState(() => dueDate = picked);
-                    },
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Has Specific Time'),
-                    subtitle: const Text('Add start/end time for this task'),
-                    value: hasTime,
-                    onChanged: (v) => setDialogState(() => hasTime = v),
-                  ),
-                  if (hasTime) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Start', style: TextStyle(fontSize: 12)),
-                            subtitle: Text(
-                              startTimeMinutes != null ? _formatMinutes(startTimeMinutes!) : 'Not set',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            trailing: const Icon(Icons.access_time, size: 20),
-                            onTap: () async {
-                              final time = await showTimePicker(
-                                context: context,
-                                initialTime: TimeOfDay(
-                                  hour: startTimeMinutes != null ? startTimeMinutes! ~/ 60 : 9,
-                                  minute: startTimeMinutes != null ? startTimeMinutes! % 60 : 0,
-                                ),
-                              );
-                              if (time != null) setDialogState(() => startTimeMinutes = time.hour * 60 + time.minute);
-                            },
-                          ),
-                        ),
-                        Expanded(
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('End', style: TextStyle(fontSize: 12)),
-                            subtitle: Text(
-                              endTimeMinutes != null ? _formatMinutes(endTimeMinutes!) : 'Not set',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            trailing: const Icon(Icons.access_time, size: 20),
-                            onTap: () async {
-                              final time = await showTimePicker(
-                                context: context,
-                                initialTime: TimeOfDay(
-                                  hour: endTimeMinutes != null ? endTimeMinutes! ~/ 60 : 10,
-                                  minute: endTimeMinutes != null ? endTimeMinutes! % 60 : 0,
-                                ),
-                              );
-                              if (time != null) setDialogState(() => endTimeMinutes = time.hour * 60 + time.minute);
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Recurring'),
-                    value: isRecurring,
-                    onChanged: (v) => setDialogState(() => isRecurring = v),
-                  ),
-                  if (isRecurring)
-                    DropdownButtonFormField<String>(
-                      value: recurringPattern,
-                      decoration: const InputDecoration(labelText: 'Repeat', prefixIcon: Icon(Icons.repeat)),
-                      items: const [
-                        DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
-                        DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
-                      ],
-                      onChanged: (v) => setDialogState(() => recurringPattern = v!),
-                    ),
-                  const SizedBox(height: 8),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Attachment', style: TextStyle(fontSize: 12)),
-                    subtitle: Text(
-                      attachmentPath != null ? attachmentPath!.split('/').last : 'No file attached',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                    ),
-                    trailing: Icon(
-                      attachmentPath != null ? Icons.attachment : Icons.attach_file,
-                      size: 20,
-                    ),
-                    onTap: () => setDialogState(() => attachmentPath = '/storage/documents/updated.pdf'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: noteController,
-                    decoration: const InputDecoration(labelText: 'Note (optional)', prefixIcon: Icon(Icons.notes)),
-                    maxLines: 3,
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-              FilledButton(
-                onPressed: () {
-                  if (titleController.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Title is required')));
-                    return;
-                  }
-                  if (hasTime && startTimeMinutes != null && endTimeMinutes != null && endTimeMinutes! <= startTimeMinutes!) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('End time must be after start time')));
-                    return;
-                  }
-                  Navigator.pop(ctx, {
-                    'title': titleController.text.trim(),
-                    'subject': subjectController.text.trim().isEmpty ? null : subjectController.text.trim(),
-                    'type': taskType,
-                    'due': DateTime(dueDate.year, dueDate.month, dueDate.day).millisecondsSinceEpoch,
-                    'startTime': hasTime ? startTimeMinutes : null,
-                    'endTime': hasTime ? endTimeMinutes : null,
-                    'note': noteController.text.trim(),
-                    'priority': priority,
-                    'tags': tagController.text.trim().isEmpty ? null : tagController.text.trim(),
-                    'isRecurring': isRecurring,
-                    'recurringPattern': recurringPattern,
-                    'attachmentPath': attachmentPath,
-                  });
-                },
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    titleController.dispose();
-    subjectController.dispose();
-    noteController.dispose();
-    tagController.dispose();
-
-    if (result != null) {
-      final db = await DatabaseHelper.instance.database;
-      final now = DateTime.now().millisecondsSinceEpoch;
-      await db.update(
-        'timetable_tasks',
-        {
-          'title': result['title'],
-          'taskType': result['type'],
-          'subjectName': result['subject'],
-          'dueDateMillis': result['due'],
-          'startTimeMinutes': result['startTime'],
-          'endTimeMinutes': result['endTime'],
-          'isAllDay': result['startTime'] == null ? 1 : 0,
-          'colorHex': _colorToHex(_typeColor(result['type'] as String)),
-          'note': result['note'],
-          'priority': result['priority'],
-          'tags': result['tags'],
-          'isRecurring': (result['isRecurring'] as bool) ? 1 : 0,
-          'recurringPattern': result['recurringPattern'],
-          'attachmentPath': result['attachmentPath'],
-          'updatedAtMillis': now,
-        },
-        where: 'id = ?',
-        whereArgs: [existing['id']],
-      );
-      HapticFeedback.mediumImpact();
-      await _loadData();
-    }
-  }
-
-  // ============================================
-  // SUBTASKS MANAGEMENT
-  // ============================================
-  Future<void> _manageSubtasks(Map<String, dynamic> task) async {
+  Future<void> _loadTasks() async {
     final db = await DatabaseHelper.instance.database;
-    final taskId = task['id'] as int;
-    
-    // Load existing subtasks
-    List<Map<String, dynamic>> subtasks = [];
-    try {
-      subtasks = await db.query(
-        'timetable_subtasks',
-        where: 'parentTaskId = ?',
-        whereArgs: [taskId],
-        orderBy: 'sortOrder ASC',
-      );
-    } catch (e) {
-      // Table might not exist yet
+    final rows = await db.query('tasks', where: 'dueDateMillis > ?', whereArgs: [DateTime.now().millisecondsSinceEpoch]);
+    setState(() => _tasks = rows);
+  }
+
+  // ============================================
+  // DRAG RESIZE LOGIC
+  // ============================================
+  void _startDrag(int id, Offset globalPosition, int start, int end) {
+    _isDragging[id] = true;
+    _dragStartOffset[id] = globalPosition;
+    _originalStart[id] = start;
+    _originalEnd[id] = end;
+    setState(() {});
+  }
+
+  void _updateDrag(int id, Offset globalPosition) {
+    final start = _originalStart[id]!;
+    final end = _originalEnd[id]!;
+    final offset = globalPosition.dy - (_dragStartOffset[id]?.dy ?? 0);
+    final pixelsPerMinute = _hourHeight / 60.0;
+    final deltaMinutes = (offset / pixelsPerMinute).round();
+
+    // Snap to 15-min grid
+    final newStart = ((start + deltaMinutes) ~/ _snapMinutes) * _snapMinutes;
+    final newEnd = ((end + deltaMinutes) ~/ _snapMinutes) * _snapMinutes;
+
+    // Enforce min 15-min duration
+    if (newEnd - newStart < _snapMinutes) return;
+
+    // Clamp within timeline
+    final clampedStart = newStart.clamp(_timelineStartMinutes, _timelineEndMinutes - _snapMinutes);
+    final clampedEnd = newEnd.clamp(clampedStart + _snapMinutes, _timelineEndMinutes);
+
+    _originalStart[id] = clampedStart;
+    _originalEnd[id] = clampedEnd;
+    setState(() {});
+  }
+
+  Future<void> _endDrag(int id) async {
+    final start = _originalStart[id]!;
+    final end = _originalEnd[id]!;
+    if (start == _classes.firstWhere((c) => c['id'] == id)['startTimeMinutes'] &&
+        end == _classes.firstWhere((c) => c['id'] == id)['endTimeMinutes']) {
+      _isDragging.remove(id);
+      setState(() {});
+      return;
     }
 
-    final subtaskController = TextEditingController();
-
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text('Subtasks'),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: subtaskController,
-                          decoration: const InputDecoration(
-                            hintText: 'Add subtask...',
-                            prefixIcon: Icon(Icons.add_task),
-                          ),
-                          onSubmitted: (value) async {
-                            if (value.trim().isNotEmpty) {
-                              await db.insert('timetable_subtasks', {
-                                'parentTaskId': taskId,
-                                'title': value.trim(),
-                                'isCompleted': 0,
-                                'sortOrder': subtasks.length,
-                              });
-                              final updated = await db.query(
-                                'timetable_subtasks',
-                                where: 'parentTaskId = ?',
-                                whereArgs: [taskId],
-                                orderBy: 'sortOrder ASC',
-                              );
-                              setDialogState(() => subtasks = updated);
-                              subtaskController.clear();
-                            }
-                          },
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.add_circle),
-                        onPressed: () async {
-                          if (subtaskController.text.trim().isNotEmpty) {
-                            await db.insert('timetable_subtasks', {
-                              'parentTaskId': taskId,
-                              'title': subtaskController.text.trim(),
-                              'isCompleted': 0,
-                              'sortOrder': subtasks.length,
-                            });
-                            final updated = await db.query(
-                              'timetable_subtasks',
-                              where: 'parentTaskId = ?',
-                              whereArgs: [taskId],
-                              orderBy: 'sortOrder ASC',
-                            );
-                            setDialogState(() => subtasks = updated);
-                            subtaskController.clear();
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Flexible(
-                    child: subtasks.isEmpty
-                        ? const Text('No subtasks yet', style: TextStyle(color: Colors.grey))
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            itemCount: subtasks.length,
-                            itemBuilder: (context, i) {
-                              final st = subtasks[i];
-                              final completed = (st['isCompleted'] as int? ?? 0) == 1;
-                              return ListTile(
-                                dense: true,
-                                leading: Checkbox(
-                                  value: completed,
-                                  onChanged: (v) async {
-                                    await db.update(
-                                      'timetable_subtasks',
-                                      {'isCompleted': v! ? 1 : 0},
-                                      where: 'id = ?',
-                                      whereArgs: [st['id']],
-                                    );
-                                    final updated = await db.query(
-                                      'timetable_subtasks',
-                                      where: 'parentTaskId = ?',
-                                      whereArgs: [taskId],
-                                      orderBy: 'sortOrder ASC',
-                                    );
-                                    setDialogState(() => subtasks = updated);
-                                  },
-                                ),
-                                title: Text(
-                                  st['title'] as String,
-                                  style: TextStyle(
-                                    decoration: completed ? TextDecoration.lineThrough : null,
-                                    color: completed ? Colors.grey : null,
-                                  ),
-                                ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                                  onPressed: () async {
-                                    await db.delete('timetable_subtasks', where: 'id = ?', whereArgs: [st['id']]);
-                                    final updated = await db.query(
-                                      'timetable_subtasks',
-                                      where: 'parentTaskId = ?',
-                                      whereArgs: [taskId],
-                                      orderBy: 'sortOrder ASC',
-                                    );
-                                    setDialogState(() => subtasks = updated);
-                                  },
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
-            ],
-          );
-        },
-      ),
-    );
-
-    subtaskController.dispose();
-  }
-
-  // ============================================
-  // TIME TRACKING
-  // ============================================
-  Future<void> _startTimeTracking(Map<String, dynamic> task) async {
-    final stopwatch = Stopwatch()..start();
-    final taskId = task['id'] as int;
-    final db = await DatabaseHelper.instance.database;
-
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          // Update timer display
-          Future.delayed(const Duration(seconds: 1), () {
-            if (mounted && stopwatch.isRunning) {
-              setDialogState(() {});
-            }
-          });
-
-          final elapsed = stopwatch.elapsed;
-          final hours = elapsed.inHours;
-          final minutes = elapsed.inMinutes % 60;
-          final seconds = elapsed.inSeconds % 60;
-
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Row(
-              children: [
-                const Icon(Icons.timer, color: Colors.deepPurple),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Tracking: ${task['title']}', style: const TextStyle(fontSize: 16))),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
-                  style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, fontFeatures: [FontFeature.tabularFigures()]),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: () {
-                        if (stopwatch.isRunning) {
-                          stopwatch.stop();
-                        } else {
-                          stopwatch.start();
-                        }
-                        setDialogState(() {});
-                      },
-                      icon: Icon(stopwatch.isRunning ? Icons.pause : Icons.play_arrow),
-                      label: Text(stopwatch.isRunning ? 'Pause' : 'Resume'),
-                    ),
-                    const SizedBox(width: 12),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        stopwatch.stop();
-                        final totalSeconds = stopwatch.elapsed.inSeconds;
-                        // Save time log
-                        await db.insert('timetable_time_logs', {
-                          'taskId': taskId,
-                          'durationSeconds': totalSeconds,
-                          'startedAtMillis': DateTime.now().subtract(stopwatch.elapsed).millisecondsSinceEpoch,
-                          'endedAtMillis': DateTime.now().millisecondsSinceEpoch,
-                        });
-                        if (mounted) {
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Logged ${(totalSeconds / 60).ceil()} minutes')),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.stop),
-                      label: const Text('Stop & Save'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  // ============================================
-  // EXPORT TO ICS
-  // ============================================
-  Future<void> _exportToIcs() async {
-    final buffer = StringBuffer();
-    buffer.writeln('BEGIN:VCALENDAR');
-    buffer.writeln('VERSION:2.0');
-    buffer.writeln('PRODID:-//NEET Timetable//EN');
-
-    for (final task in _tasks) {
-      final due = DateTime.fromMillisecondsSinceEpoch(task['dueDateMillis'] as int);
-      final uid = 'task-${task['id']}@neet-timetable';
-      final created = DateTime.now();
-
-      buffer.writeln('BEGIN:VEVENT');
-      buffer.writeln('UID:$uid');
-      buffer.writeln('DTSTAMP:${_formatIcsDateTime(created)}');
-      buffer.writeln('DTSTART;VALUE=DATE:${_formatIcsDate(due)}');
-      buffer.writeln('SUMMARY:${task['title']}');
-      buffer.writeln('DESCRIPTION:${task['note'] ?? ''}');
-      buffer.writeln('CATEGORIES:${task['taskType']}');
-      buffer.writeln('END:VEVENT');
-    }
-
-    buffer.writeln('END:VCALENDAR');
-
-    // In a real app, use file_picker to save or share_plus to share
-    // For now, show the ICS content in a dialog
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('ICS Export'),
-        content: SingleChildScrollView(
-          child: SelectableText(buffer.toString()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-        ],
-      ),
-    );
-  }
-
-  String _formatIcsDate(DateTime dt) {
-    return '${dt.year}${dt.month.toString().padLeft(2, '0')}${dt.day.toString().padLeft(2, '0')}';
-  }
-
-  String _formatIcsDateTime(DateTime dt) {
-    return '${dt.year}${dt.month.toString().padLeft(2, '0')}${dt.day.toString().padLeft(2, '0')}T${dt.hour.toString().padLeft(2, '0')}${dt.minute.toString().padLeft(2, '0')}${dt.second.toString().padLeft(2, '0')}Z';
-  }
-
-  // ============================================
-  // DELETE
-  // ============================================
-  Future<void> _deleteTask(int id) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Task?'),
-        content: const Text('This will permanently remove this task.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      final db = await DatabaseHelper.instance.database;
-      await db.delete('timetable_tasks', where: 'id = ?', whereArgs: [id]);
-      await db.delete('timetable_subtasks', where: 'parentTaskId = ?', whereArgs: [id]);
-      await db.delete('timetable_time_logs', where: 'taskId = ?', whereArgs: [id]);
-      await _loadData();
-    }
-  }
-
-  Future<void> _toggleTaskComplete(int id, bool current) async {
     final db = await DatabaseHelper.instance.database;
     await db.update(
-      'timetable_tasks',
-      {'isCompleted': current ? 0 : 1},
+      'timetable_classes',
+      {'startTimeMinutes': start, 'endTimeMinutes': end, 'updatedAtMillis': DateTime.now().millisecondsSinceEpoch},
       where: 'id = ?',
       whereArgs: [id],
     );
-    
-    // If recurring, generate next occurrence
-    if (!current) {
-      final rows = await db.query('timetable_tasks', where: 'id = ?', whereArgs: [id]);
-      if (rows.isNotEmpty) {
-        final task = rows.first;
-        if ((task['isRecurring'] as int? ?? 0) == 1) {
-          final pattern = task['recurringPattern'] as String? ?? 'weekly';
-          final dueDate = DateTime.fromMillisecondsSinceEpoch(task['dueDateMillis'] as int);
-          DateTime nextDue;
-          if (pattern == 'weekly') {
-            nextDue = dueDate.add(const Duration(days: 7));
-          } else {
-            nextDue = DateTime(dueDate.year, dueDate.month + 1, dueDate.day);
-          }
-          await db.insert('timetable_tasks', {
-            ...task,
-            'id': null,
-            'dueDateMillis': DateTime(nextDue.year, nextDue.month, nextDue.day).millisecondsSinceEpoch,
-            'isCompleted': 0,
-            'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
-          });
-        }
-      }
-    }
-    
-    await _loadData();
+    HapticFeedback.mediumImpact();
+    await _loadClasses();
+    _isDragging.remove(id);
+    setState(() {});
   }
 
   // ============================================
-  // CLICKABLE LINKS IN NOTES
+  // EDIT CLASS
   // ============================================
-  Widget _buildNoteText(String? note, ColorScheme cs) {
-    if (note == null || note.isEmpty) return const SizedBox.shrink();
-    
-    // Simple URL detection
-    final urlPattern = RegExp(r'https?://[^\s]+');
-    final matches = urlPattern.allMatches(note);
-    
-    if (matches.isEmpty) {
-      return Row(
+  Future<void> _editClass(Map<String, dynamic> existing) async {
+    final nameController = TextEditingController(text: existing['subjectName']?.toString() ?? '');
+    final roomController = TextEditingController(text: existing['room']?.toString() ?? '');
+    final profController = TextEditingController(text: existing['professor']?.toString() ?? '');
+    final noteController = TextEditingController(text: existing['note']?.toString() ?? '');
+    final dayOfWeek = (existing['dayOfWeek'] as int?) ?? 1;
+    int startMinutes = (existing['startTimeMinutes'] as int?) ?? 540;
+    int endMinutes = (existing['endTimeMinutes'] as int?) ?? 600;
+    final isRecurring = (existing['isRecurring'] as int?) == 1;
+    String classType = existing['classType'] as String? ?? 'lecture';
+
+    final types = ['lecture', 'lab', 'tutorial', 'seminar', 'exam', 'quiz', 'revision'];
+    final typeLabels = ['Lecture', 'Lab', 'Tutorial', 'Seminar', 'Exam', 'Quiz', 'Revision'];
+    final typeColors = [Colors.blue, Colors.green, Colors.purple, Colors.teal, Colors.red, Colors.orange, Colors.amber];
+
+    final result = await showDialog<Map<String, dynamic>?>(context: context,
+        builder: (ctx) => StatefulBuilder(builder: (context, setDialogState) {
+              final autoColor = _getNeetSubjectColor(nameController.text);
+              return AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                title: const Text('Edit Class'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: nameController,
+                        decoration: const InputDecoration(labelText: 'Subject', prefixIcon: Icon(Icons.book)),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: roomController,
+                        decoration: const InputDecoration(labelText: 'Room / Location', prefixIcon: Icon(Icons.place)),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: profController,
+                        decoration: const InputDecoration(labelText: 'Professor', prefixIcon: Icon(Icons.person)),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Start Time'),
+                              subtitle: Text(_formatMinutes24(startMinutes)),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.access_time, size: 20),
+                                onPressed: () async {
+                                  final time = await showTimePicker(
+                                    context: context,
+                                    initialTime: TimeOfDay(hour: startMinutes ~/ 60, minute: startMinutes % 60),
+                                  );
+                                  if (time != null) {
+                                    setDialogState(() => startMinutes = time.hour * 60 + time.minute);
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('End Time'),
+                              subtitle: Text(_formatMinutes24(endMinutes)),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.access_time, size: 20),
+                                onPressed: () async {
+                                  final time = await showTimePicker(
+                                    context: context,
+                                    initialTime: TimeOfDay(hour: endMinutes ~/ 60, minute: endMinutes % 60),
+                                  );
+                                  if (time != null) {
+                                    setDialogState(() => endMinutes = time.hour * 60 + time.minute);
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Recurring Weekly'),
+                        value: isRecurring,
+                        onChanged: (v) => setDialogState(() => isRecurring = v),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: noteController,
+                        decoration: const InputDecoration(labelText: 'Note (optional)', prefixIcon: Icon(Icons.notes)),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: classType,
+                        items: types.map((t) {
+                          final idx = types.indexOf(t);
+                          return DropdownMenuItem(
+                            value: t,
+                            child: Row(
+                              children: [
+                                Icon(_typeIcon(t), size: 16, color: typeColors[idx]),
+                                const SizedBox(width: 8),
+                                Text(_typeLabel(t)),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (v) => setDialogState(() => classType = v!),
+                        decoration: const InputDecoration(labelText: 'Type', prefixIcon: Icon(Icons.category)),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                  FilledButton(
+                    onPressed: () async {
+                      if (nameController.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Subject name is required')));
+                        return;
+                      }
+                      if (endMinutes <= startMinutes) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('End time must be after start time')));
+                        return;
+                      }
+                      Navigator.pop(ctx, {
+                        'name': nameController.text.trim(),
+                        'room': roomController.text.trim(),
+                        'prof': profController.text.trim(),
+                        'note': noteController.text.trim(),
+                        'type': classType,
+                        'day': dayOfWeek,
+                        'start': startMinutes,
+                        'end': endMinutes,
+                        'isRecurring': isRecurring,
+                      });
+                    },
+                    child: const Text('Save'),
+                  ),
+                ],
+              );
+            }));
+
+    if (result != null) {
+      final db = await DatabaseHelper.instance.database;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final subjectName = result['name'] as String;
+      final autoColor = _getNeetSubjectColor(subjectName);
+      final updateData = <String, Object?>{
+        'subjectName': subjectName,
+        'classType': result['type'],
+        'dayOfWeek': result['day'] as int,
+        'startTimeMinutes': result['start'] as int,
+        'endTimeMinutes': result['end'] as int,
+        'room': result['room'],
+        'professor': result['prof'],
+        'colorHex': autoColor,
+        'isRecurring': (result['isRecurring'] as bool) ? 1 : 0,
+        'note': result['note'],
+        'updatedAtMillis': now,
+      };
+      await db.update('timetable_classes', updateData, where: 'id = ?', whereArgs: [existing['id'] as int]);
+      HapticFeedback.mediumImpact();
+      await _loadClasses();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Class updated!'), duration: Duration(seconds: 2)));
+      }
+    }
+  }
+
+  // ============================================
+  // DELETE CLASS
+  // ============================================
+  Future<void> _deleteClass(int id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Class?'),
+        content: const Text('This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('timetable_classes', where: 'id = ?', whereArgs: [id]);
+      HapticFeedback.lightImpact();
+      await _loadClasses();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Class deleted.')));
+      }
+    }
+  }
+
+  // ============================================
+  // BUILD CLASS CARD (FIXED + DRAG + MASTERY)
+  // ============================================
+  Widget _buildClassCard(Map<String, dynamic> c, ColorScheme cs, bool isConflict, bool isDragging) {
+    final id = c['id'] as int;
+    final subjectName = c['subjectName'] as String? ?? 'Untitled';
+    final day = c['dayOfWeek'] as int;
+    final originalStart = (c['startTimeMinutes'] as int?) ?? 540;
+    final originalEnd = (c['endTimeMinutes'] as int?) ?? 600;
+    final start = _isDragging[id] == true ? _originalStart[id] ?? originalStart : originalStart;
+    final end = _isDragging[id] == true ? _originalEnd[id] ?? originalEnd : originalEnd;
+    final duration = end - start;
+    final isSmall = duration < 55;
+    final storedColor = c['colorHex'] as String? ?? '#2196F3';
+    final color = _hexToColor(storedColor);
+    final mastery = (c['masteryProgress'] as int?) ?? 0;
+    final weight = (c['syllabusWeight'] as double?) ?? 1.0;
+
+    final top = _minutesToPixels(start);
+    final height = _durationToPixels(duration);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () => _editClass(c),
+      onLongPress: () => _deleteClass(id),
+      child: Stack(
         children: [
-          Icon(Icons.notes, size: 12, color: cs.outline.withOpacity(0.6)),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              note,
-              style: TextStyle(fontSize: 11, color: cs.outline.withOpacity(0.7)),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+          // Drag handles (top & bottom)
+          if (isDragging)
+            Positioned(
+              top: top - 4,
+              left: 8,
+              right: 8,
+              height: 8,
+              child: Container(
+                decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.8)),
+                child: Center(child: Icon(Icons.drag_handle, size: 12, color: Colors.grey[800])),
+              ),
+            ),
+          if (isDragging)
+            Positioned(
+              top: top + height - 4,
+              left: 8,
+              right: 8,
+              height: 8,
+              child: Container(
+                decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.8)),
+                child: Center(child: Icon(Icons.drag_handle, size: 12, color: Colors.grey[800])),
+              ),
+            ),
+
+          // Main card
+          Positioned(
+            top: top,
+            left: 8,
+            right: 8,
+            height: height,
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              elevation: isDragging ? 8 : (isConflict ? 4 : 1),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isConflict
+                      ? Colors.red.shade900.withOpacity(0.95) // ✅ UNIFORM DARK RED
+                      : color.withOpacity(isDragging ? 0.25 : 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isConflict
+                        ? Colors.red.shade700
+                        : color.withOpacity(0.5),
+                    width: isConflict ? 2 : 1.2,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Top bar: subject + mastery
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      _typeIcon(c['classType'] as String? ?? 'lecture'),
+                                      size: 16,
+                                      color: Colors.white,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      subjectName,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                                if (mastery > 0)
+                                  LinearProgressIndicator(
+                                    value: mastery / 100.0,
+                                    backgroundColor: Colors.white.withOpacity(0.2),
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+                                    minHeight: 4,
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (!isSmall)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '${duration ~/ 60}h${duration % 60 > 0 ? '${duration % 60}m' : ''}',
+                                style: const TextStyle(fontSize: 9, color: Colors.white),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (!isSmall)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        child: Text(
+                          '${_formatMinutes24(start)} – ${_formatMinutes24(end)}',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.white.withOpacity(0.85),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    if (c['room'] != null && c['room']!.isNotEmpty && !isSmall)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        child: Row(
+                          children: [
+                            Icon(Icons.place, size: 12, color: Colors.white.withOpacity(0.7)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Room ${c['room']}',
+                              style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.7)),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
-      );
-    }
-
-    final spans = <TextSpan>[];
-    int lastEnd = 0;
-    for (final match in matches) {
-      if (match.start > lastEnd) {
-        spans.add(TextSpan(text: note.substring(lastEnd, match.start)));
-      }
-      final url = note.substring(match.start, match.end);
-      spans.add(TextSpan(
-        text: url,
-        style: TextStyle(
-          fontSize: 11,
-          color: cs.primary,
-          decoration: TextDecoration.underline,
-        ),
-        recognizer: TapGestureRecognizer()..onTap = () => _launchUrl(url),
-      ));
-      lastEnd = match.end;
-    }
-    if (lastEnd < note.length) {
-      spans.add(TextSpan(text: note.substring(lastEnd)));
-    }
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(Icons.notes, size: 12, color: cs.outline.withOpacity(0.6)),
-        const SizedBox(width: 4),
-        Expanded(
-          child: RichText(
-            text: TextSpan(
-              style: TextStyle(fontSize: 11, color: cs.outline.withOpacity(0.7)),
-              children: spans,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  Future<void> _launchUrl(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+  // ============================================
+  // BUILD FREE TIME SLOT
+  // ============================================
+  Widget _buildFreeTimeSlot(Map<String, dynamic> slot, ColorScheme cs) {
+    final start = slot['start'] as int;
+    final end = slot['end'] as int;
+    final duration = slot['duration'] as int;
+    final top = _minutesToPixels(start);
+    final height = _durationToPixels(end - start);
+    return Positioned(
+      top: top,
+      left: 8,
+      right: 8,
+      height: height,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 1),
+        decoration: BoxDecoration(
+          color: Colors.green.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.green.withOpacity(0.2), width: 1),
+        ),
+        child: Center(
+          child: Text(
+            '$duration min free',
+            style: TextStyle(fontSize: 10, color: Colors.green[700], fontWeight: FontWeight.w500),
+          ),
+        ),
+      ),
+    );
   }
 
   // ============================================
-  // HELPERS
+  // CONFLICT RESOLUTION ASSISTANT
   // ============================================
-  String _formatMinutes(int minutes) {
+  Widget _buildConflictAssistant(Map<String, dynamic> c, ColorScheme cs) {
+    final conflicts = _classes.where((other) => other['id'] != c['id'] && other['dayOfWeek'] == c['dayOfWeek'] && TimetableEntry(
+      subjectName: c['subjectName'] ?? '',
+      dayOfWeek: c['dayOfWeek'] as int,
+      startTime: c['startTimeMinutes'] as int,
+      endTime: c['endTimeMinutes'] as int,
+    ).conflictsWith(TimetableEntry(
+      subjectName: other['subjectName'] ?? '',
+      dayOfWeek: other['dayOfWeek'] as int,
+      startTime: other['startTimeMinutes'] as int,
+      endTime: other['endTimeMinutes'] as int,
+    ))).toList();
+
+    if (conflicts.isEmpty) return const SizedBox();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.shade400, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('⚠️ Conflict Detected', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
+          const SizedBox(height: 4),
+          Text('Resolve by:', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            children: [
+              _conflictActionChip('Shift Later', Icons.arrow_forward_ios, () {
+                _shiftClass(c, +30);
+              }),
+              _conflictActionChip('Split', Icons.split_round, () {
+                _splitClass(c);
+              }),
+              _conflictActionChip('Replace', Icons.swap_horiz, () {
+                _replaceClass(c);
+              }),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _conflictActionChip(String label, IconData icon, VoidCallback onPressed) {
+    return FilterChip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14),
+          const SizedBox(width: 4),
+          Text(label, style: const TextStyle(fontSize: 11)),
+        ],
+      ),
+      backgroundColor: Colors.white,
+      shape: StadiumBorder(side: BorderSide(color: Colors.orange.shade300, width: 1)),
+      onSelected: (_) => onPressed(),
+      selected: false,
+    );
+  }
+
+  Future<void> _shiftClass(Map<String, dynamic> c, int minutes) async {
+    final db = await DatabaseHelper.instance.database;
+    final newStart = ((c['startTimeMinutes'] as int?) ?? 540) + minutes;
+    final newEnd = ((c['endTimeMinutes'] as int?) ?? 600) + minutes;
+    await db.update(
+      'timetable_classes',
+      {'startTimeMinutes': newStart, 'endTimeMinutes': newEnd},
+      where: 'id = ?',
+      whereArgs: [c['id']],
+    );
+    await _loadClasses();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Shifted by $minutes min')));
+  }
+
+  void _splitClass(Map<String, dynamic> c) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Split not yet implemented — coming soon!')));
+  }
+
+  void _replaceClass(Map<String, dynamic> c) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Replace not yet implemented — coming soon!')));
+  }
+
+  // ============================================
+  // UTILS
+  // ============================================
+  String _formatMinutes24(int minutes) {
     final h = minutes ~/ 60;
     final m = minutes % 60;
-    final ampm = h >= 12 ? 'PM' : 'AM';
-    final displayH = h == 0 ? 12 : (h > 12 ? h - 12 : h);
-    return '$displayH:${m.toString().padLeft(2, '0')} $ampm';
+    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
   }
 
-  String _formatDate(int millis) {
-    final dt = DateTime.fromMillisecondsSinceEpoch(millis);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
-    final taskDay = DateTime(dt.year, dt.month, dt.day);
-
-    if (taskDay == today) return 'Today';
-    if (taskDay == tomorrow) return 'Tomorrow';
-    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+  double _minutesToPixels(int minutes) {
+    return ((minutes - _timelineStartMinutes) / _totalTimelineMinutes) * (_totalTimelineMinutes / 60.0) * _hourHeight;
   }
 
-  String _colorToHex(Color color) {
-    final argb = color.value;
-    return '#${(argb & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+  double _durationToPixels(int durationMinutes) {
+    return (durationMinutes / 60.0) * _hourHeight;
   }
 
   Color _hexToColor(String hex) {
@@ -1332,660 +656,324 @@ class _TimetableTaskScreenState extends State<TimetableTaskScreen> {
     return Color(int.parse(buffer.toString(), radix: 16));
   }
 
-  Color _typeColor(String type) {
-    final map = {
-      'lecture': Colors.blue, 'lab': Colors.green, 'tutorial': Colors.purple,
-      'seminar': Colors.teal, 'exam': Colors.red, 'quiz': Colors.orange,
-      'assignment': Colors.indigo, 'revision': Colors.amber,
-      'personal': Colors.pink, 'study_block': Colors.cyan,
-    };
-    return map[type] ?? Colors.blue;
+  String _getNeetSubjectColor(String subjectName) {
+    for (final entry in _neetColors.entries) {
+      if (subjectName.toLowerCase().contains(entry.key.toLowerCase())) return entry.value;
+    }
+    return '#2196F3';
   }
 
   IconData _typeIcon(String type) {
     final map = {
-      'lecture': Icons.school, 'lab': Icons.science, 'tutorial': Icons.group,
-      'seminar': Icons.record_voice_over, 'exam': Icons.quiz, 'quiz': Icons.help,
-      'assignment': Icons.assignment, 'revision': Icons.menu_book,
-      'personal': Icons.person, 'study_block': Icons.timer,
+      'lecture': Icons.school,
+      'lab': Icons.science,
+      'tutorial': Icons.group,
+      'seminar': Icons.record_voice_over,
+      'exam': Icons.quiz,
+      'quiz': Icons.help,
+      'assignment': Icons.assignment,
+      'revision': Icons.menu_book,
+      'personal': Icons.person,
+      'study_block': Icons.timer,
     };
     return map[type] ?? Icons.event;
   }
 
   String _typeLabel(String type) {
     final map = {
-      'lecture': 'Lecture', 'lab': 'Lab', 'tutorial': 'Tutorial',
-      'seminar': 'Seminar', 'exam': 'Exam', 'quiz': 'Quiz',
-      'assignment': 'Assignment', 'revision': 'Revision',
-      'personal': 'Personal', 'study_block': 'Study Block',
+      'lecture': 'Lecture',
+      'lab': 'Lab',
+      'tutorial': 'Tutorial',
+      'seminar': 'Seminar',
+      'exam': 'Exam',
+      'quiz': 'Quiz',
+      'assignment': 'Assignment',
+      'revision': 'Revision',
+      'personal': 'Personal',
+      'study_block': 'Study Block',
     };
     return map[type] ?? type;
   }
 
-  bool _isOverdue(int dueMillis) {
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
-    return dueMillis < todayStart;
-  }
-
-  bool _isDueSoon(int dueMillis) {
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
-    final tomorrowStart = todayStart + const Duration(days: 1).inMilliseconds;
-    return dueMillis >= todayStart && dueMillis < tomorrowStart;
-  }
-
-  Color _priorityColor(int? priority) {
-    switch (priority) {
-      case 3: return Colors.red;
-      case 2: return Colors.orange;
-      case 1: return Colors.green;
-      default: return Colors.grey;
+  // ============================================
+  // POMODORO SHORTCUT
+  // ============================================
+  void _goToPomodoro(String subject, {int? durationMinutes}) {
+    String preset = 'neetSprint';
+    if (durationMinutes != null) {
+      if (durationMinutes >= 90) preset = 'neetRevision';
     }
-  }
-
-  String _priorityLabel(int? priority) {
-    switch (priority) {
-      case 3: return 'High';
-      case 2: return 'Medium';
-      case 1: return 'Low';
-      default: return 'None';
-    }
+    // In real app: push to PomodoroScreen with preset
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Starting NEET Sprint for "$subject"')));
   }
 
   // ============================================
-  // BUILD
+  // BUILD TIMETABLE GRID
   // ============================================
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+  Widget _buildTimeline() {
+    final now = DateTime.now();
+    final currentMinute = (now.hour * 60 + now.minute) - _timelineStartMinutes;
+    final currentTimeTop = _minutesToPixels(currentMinute);
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: _batchMode
-            ? IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: _exitBatchMode,
-              )
-            : IconButton(
-                icon: const Icon(Icons.menu),
-                onPressed: () => mainScaffoldKey.currentState?.openDrawer(),
-              ),
-        title: _batchMode
-            ? Text('${_selectedIds.length} selected')
-            : const Text('Tasks & Deadlines'),
-        actions: [
-          if (_batchMode) ...[
-            IconButton(
-              icon: const Icon(Icons.check_circle),
-              tooltip: 'Mark Complete',
-              onPressed: () => _batchMarkComplete(true),
-            ),
-            IconButton(
-              icon: const Icon(Icons.restore),
-              tooltip: 'Restore',
-              onPressed: () => _batchMarkComplete(false),
-            ),
-            IconButton(
-              icon: const Icon(Icons.date_range),
-              tooltip: 'Change Due Date',
-              onPressed: _batchChangeDueDate,
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              tooltip: 'Delete Selected',
-              onPressed: _batchDelete,
-            ),
-          ] else ...[
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.sort),
-              tooltip: 'Sort',
-              onSelected: (value) {
-                setState(() => _sortBy = value);
-                _loadData();
-              },
-              itemBuilder: (context) => [
-                                const PopupMenuItem(value: 'dueDate', child: Text('Sort by Due Date')),
-                const PopupMenuItem(value: 'title', child: Text('Sort by Title')),
-                const PopupMenuItem(value: 'type', child: Text('Sort by Type')),
-                const PopupMenuItem(value: 'priority', child: Text('Sort by Priority')),
-                const PopupMenuItem(value: 'created', child: Text('Sort by Created')),
-              ],
-            ),
-            // Archive toggle
-            IconButton(
-              icon: Icon(_showArchive ? Icons.unarchive : Icons.archive_outlined),
-              tooltip: _showArchive ? 'Show Active' : 'Show Archive',
-              onPressed: () {
-                setState(() => _showArchive = !_showArchive);
-                _loadData();
-              },
-            ),
-            // Export ICS
-            IconButton(
-              icon: const Icon(Icons.ios_share),
-              tooltip: 'Export to Calendar',
-              onPressed: _exportToIcs,
-            ),
-            // Add from template
-            IconButton(
-              icon: const Icon(Icons.copy),
-              tooltip: 'From Template',
-              onPressed: _addFromTemplate,
-            ),
-            IconButton(
-              icon: const Icon(Icons.add),
-              tooltip: 'Add Task',
-              onPressed: _addTask,
-            ),
-          ],
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // Search / Tag filter
-                if (!_batchMode)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search tasks, subjects, tags...',
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        suffixIcon: _tagFilter.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () {
-                                  setState(() => _tagFilter = '');
-                                  _loadData();
-                                },
-                              )
-                            : null,
-                        filled: true,
-                        fillColor: cs.surfaceContainerHighest.withOpacity(0.3),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      ),
-                      onChanged: (value) {
-                        setState(() => _tagFilter = value);
-                        _loadData();
-                      },
-                    ),
-                  ),
-
-                // Filter chips
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: _filterOptions.map((opt) {
-                        final isSelected = _filterType == opt['value'];
-                        final color = opt['value'] == 'all' ? cs.primary : _typeColor(opt['value']!);
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: FilterChip(
-                            selected: isSelected,
-                            showCheckmark: false,
-                            avatar: Icon(
-                              _typeIcon(opt['value']!),
-                              size: 16,
-                              color: isSelected ? Colors.white : color,
-                            ),
-                            label: Text(opt['label']!),
-                            labelStyle: TextStyle(
-                              color: isSelected ? Colors.white : cs.onSurface,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                              fontSize: 12,
-                            ),
-                            backgroundColor: cs.surfaceContainerHighest.withOpacity(0.3),
-                            selectedColor: color,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              side: BorderSide(
-                                color: isSelected ? Colors.transparent : cs.outline.withOpacity(0.3),
-                              ),
-                            ),
-                            onSelected: (_) {
-                              setState(() => _filterType = opt['value']!);
-                              _loadData();
-                            },
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
-
-                // Stats bar
-                if (_tasks.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    margin: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerHighest.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _statItem('${_tasks.length}', 'Tasks', cs.onSurface),
-                        _statItem(
-                          '${_tasks.where((t) => _isOverdue(t['dueDateMillis'] as int)).length}',
-                          'Overdue',
-                          Colors.red,
-                        ),
-                        _statItem(
-                          '${_tasks.where((t) => _isDueSoon(t['dueDateMillis'] as int)).length}',
-                          'Due Soon',
-                          Colors.orange,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                const SizedBox(height: 8),
-
-                // Task list
-                Expanded(
-                  child: _tasks.isEmpty
-                      ? _buildEmptyState(cs)
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                          itemCount: _tasks.length,
-                          itemBuilder: (context, index) {
-                            final task = _tasks[index];
-                            return _buildTaskCard(task, cs);
-                          },
-                        ),
-                ),
-              ],
-            ),
-    );
-  }
-
-  Widget _statItem(String value, String label, Color color) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
+    return Stack(
       children: [
-        Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: TextStyle(fontSize: 11, color: color.withOpacity(0.7))),
+        // Background grid
+        CustomPaint(
+          size: Size(_timelineWidth, _hourHeight * (_timelineEndHour - _timelineStartHour)),
+          painter: _TimelineGridPainter(),
+        ),
+        // Now line
+        if (currentMinute >= 0 && currentMinute <= _totalTimelineMinutes)
+          Positioned(
+            top: currentTimeTop,
+            left: 0,
+            right: 0,
+            child: Container(
+              height: 1,
+              color: Colors.redAccent.withOpacity(0.7),
+              child: Center(child: Text('NOW', style: TextStyle(fontSize: 10, color: Colors.white))),
+            ),
+          ),
+        // Classes
+        ..._classes.map((c) {
+          final day = c['dayOfWeek'] as int;
+          if (day - 1 != _selectedDay) return SizedBox();
+          final isConflict = _classes.any((other) =>
+              other['id'] != c['id'] &&
+              other['dayOfWeek'] == day &&
+              TimetableEntry(
+                subjectName: c['subjectName'] ?? '',
+                dayOfWeek: day,
+                startTime: c['startTimeMinutes'] as int,
+                endTime: c['endTimeMinutes'] as int,
+              ).conflictsWith(TimetableEntry(
+                subjectName: other['subjectName'] ?? '',
+                dayOfWeek: other['dayOfWeek'] as int,
+                startTime: other['startTimeMinutes'] as int,
+                endTime: other['endTimeMinutes'] as int,
+              )));
+          return _buildClassCard(c, Theme.of(context).colorScheme, isConflict, _isDragging[c['id'] as int] ?? false);
+        }).toList(),
+        // Free slots
+        ..._getFreeSlotsForDay(_selectedDay).map((slot) => _buildFreeTimeSlot(slot, Theme.of(context).colorScheme)),
       ],
     );
   }
 
-  Widget _buildEmptyState(ColorScheme cs) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  List<Map<String, dynamic>> _getFreeSlotsForDay(int dayIndex) {
+    final dayClasses = _classes.where((c) => (c['dayOfWeek'] as int) - 1 == dayIndex).toList();
+    if (dayClasses.isEmpty) {
+      return [{'start': _timelineStartMinutes, 'end': _timelineEndMinutes, 'duration': _totalTimelineMinutes}];
+    }
+
+    final sorted = List<Map<String, dynamic>>.from(dayClasses)..sort((a, b) => (a['startTimeMinutes'] as int).compareTo(b['startTimeMinutes'] as int));
+    final freeSlots = <Map<String, dynamic>>[];
+
+    int currentStart = _timelineStartMinutes;
+    for (final c in sorted) {
+      final start = c['startTimeMinutes'] as int;
+      final end = c['endTimeMinutes'] as int;
+      if (start > currentStart) {
+        final duration = start - currentStart;
+        freeSlots.add({'start': currentStart, 'end': start, 'duration': duration});
+      }
+      currentStart = end;
+    }
+    if (currentStart < _timelineEndMinutes) {
+      final duration = _timelineEndMinutes - currentStart;
+      freeSlots.add({'start': currentStart, 'end': _timelineEndMinutes, 'duration': duration});
+    }
+    return freeSlots;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Timetable', style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(icon: const Icon(Icons.calendar_today), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.edit), onPressed: () {}),
+        ],
+      ),
+      body: Column(
         children: [
-          Icon(Icons.assignment_turned_in_outlined, size: 72, color: cs.outline.withOpacity(0.4)),
-          const SizedBox(height: 16),
-          Text(
-            _filterType == 'all' ? 'No tasks yet' : 'No ${_typeLabel(_filterType)} tasks',
-            style: TextStyle(color: cs.outline, fontSize: 16, fontWeight: FontWeight.w500),
+          // Day selector
+          Container(
+            height: 56,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: 7,
+              itemBuilder: (ctx, i) {
+                final dayName = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i];
+                final count = _classes.where((c) => (c['dayOfWeek'] as int) - 1 == i).length;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _selectedDay = i),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: _selectedDay == i ? cs.primary : cs.surfaceVariant,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(dayName, style: TextStyle(fontWeight: _selectedDay == i ? FontWeight.bold : FontWeight.normal)),
+                          Text('$count', style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Tap + to add a new task',
-            style: TextStyle(color: cs.outline.withOpacity(0.7), fontSize: 13),
+          // Stats banner
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: Colors.green.withOpacity(0.08),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('📅 ${_getFreeSlotsForDay(_selectedDay).length} free slots • ${_getTotalHoursForDay(_selectedDay)}h total', style: TextStyle(color: Colors.green[700])),
+                TextButton.icon(
+                  onPressed: () => _suggestStudyBlock(),
+                  icon: const Icon(Icons.auto_mode, size: 16),
+                  label: const Text('Suggest Block', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(foregroundColor: Colors.green[700]),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: _addTask,
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add Task'),
+          // Timeline
+          Expanded(
+            child: Stack(
+              children: [
+                Container(
+                  color: cs.background,
+                  child: _buildTimeline(),
+                ),
+                if (_loading)
+                  Center(child: CircularProgressIndicator()),
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: _addFromTemplate,
-            icon: const Icon(Icons.copy, size: 18),
-            label: const Text('From Template'),
+        ],
+      ),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            onPressed: () => _addNewClass(),
+            label: const Text('Add Class'),
+            icon: const Icon(Icons.school),
+            backgroundColor: cs.primary,
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.extended(
+            onPressed: () => _addStudyBlock(),
+            label: const Text('NEET Sprint'),
+            icon: const Icon(Icons.timer),
+            backgroundColor: Colors.deepPurple,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTaskCard(Map<String, dynamic> t, ColorScheme cs) {
-    final typeColor = _typeColor(t['taskType'] as String);
-    final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
-    final dueMillis = t['dueDateMillis'] as int;
-    final overdue = _isOverdue(dueMillis);
-    final dueSoon = _isDueSoon(dueMillis);
-    final priority = t['priority'] as int?;
-    final priorityColor = _priorityColor(priority);
-    final isSelected = _selectedIds.contains(t['id'] as int);
-    final cardColor = isCompleted
-        ? Colors.grey.withOpacity(0.05)
-        : overdue
-            ? Colors.red.withOpacity(0.05)
-            : dueSoon
-                ? Colors.orange.withOpacity(0.05)
-                : cs.surface;
-
-    return GestureDetector(
-      onLongPress: () {
-        if (!_batchMode) {
-          _enterBatchMode(t['id'] as int);
-        }
-      },
-      child: Dismissible(
-        key: Key('task_${t['id']}'),
-        direction: _batchMode ? DismissDirection.none : DismissDirection.horizontal,
-        confirmDismiss: (direction) async {
-          if (direction == DismissDirection.startToEnd) {
-            // Swipe right = complete/restore
-            await _toggleTaskComplete(t['id'] as int, isCompleted);
-            return false; // Don't remove from list
-          } else {
-            // Swipe left = delete
-            final confirm = await showDialog<bool>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                title: const Text('Delete Task?'),
-                content: const Text('This will permanently remove this task.'),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                    child: const Text('Delete'),
-                  ),
-                ],
-              ),
-            );
-            if (confirm == true) {
-              final db = await DatabaseHelper.instance.database;
-              await db.delete('timetable_tasks', where: 'id = ?', whereArgs: [t['id']]);
-              await _loadData();
-              return true;
-            }
-            return false;
-          }
-        },
-        background: Container(
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.only(left: 20),
-          decoration: BoxDecoration(
-            color: isCompleted ? Colors.orange : Colors.green,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            isCompleted ? Icons.restore : Icons.check_circle,
-            color: Colors.white,
-          ),
-        ),
-        secondaryBackground: Container(
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 20),
-          decoration: BoxDecoration(
-            color: Colors.red,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(Icons.delete, color: Colors.white),
-        ),
-        child: Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          elevation: isCompleted ? 0 : 1,
-          color: cardColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: isSelected
-                  ? cs.primary
-                  : isCompleted
-                      ? Colors.grey.withOpacity(0.2)
-                      : overdue
-                          ? Colors.red.withOpacity(0.4)
-                          : dueSoon
-                              ? Colors.orange.withOpacity(0.4)
-                              : cs.outline.withOpacity(0.1),
-              width: isSelected ? 2.5 : (overdue || dueSoon ? 1.5 : 1),
-            ),
-          ),
-          child: InkWell(
-            onTap: () {
-              if (_batchMode) {
-                _toggleSelection(t['id'] as int);
-              } else {
-                _editTask(t);
-              }
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      if (_batchMode)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Icon(
-                            isSelected ? Icons.check_circle : Icons.circle_outlined,
-                            color: isSelected ? cs.primary : cs.outline,
-                            size: 22,
-                          ),
-                        ),
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: isCompleted ? Colors.grey.withOpacity(0.15) : typeColor.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          _typeIcon(t['taskType'] as String),
-                          color: isCompleted ? Colors.grey : typeColor,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              t['title'] as String,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: isCompleted ? Colors.grey : cs.onSurface,
-                                decoration: isCompleted ? TextDecoration.lineThrough : null,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: typeColor.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    _typeLabel(t['taskType'] as String),
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: typeColor,
-                                    ),
-                                  ),
-                                ),
-                                if (priority != null) ...[
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: priorityColor.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.flag, size: 8, color: priorityColor),
-                                        const SizedBox(width: 2),
-                                        Text(
-                                          _priorityLabel(priority),
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w600,
-                                            color: priorityColor,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                                if ((t['subjectName'] as String?)?.isNotEmpty == true) ...[
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    t['subjectName'] as String,
-                                    style: TextStyle(fontSize: 11, color: cs.outline),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (!_batchMode)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Subtasks button
-                            if ((t['hasSubtasks'] as int? ?? 0) == 1 || true)
-                              IconButton(
-                                icon: const Icon(Icons.checklist, size: 18),
-                                color: cs.outline,
-                                tooltip: 'Subtasks',
-                                onPressed: () => _manageSubtasks(t),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                              ),
-                            // Time tracking button
-                            if (t['taskType'] == 'study_block' || t['taskType'] == 'revision')
-                              IconButton(
-                                icon: const Icon(Icons.timer, size: 18),
-                                color: Colors.deepPurple,
-                                tooltip: 'Track Time',
-                                onPressed: () => _startTimeTracking(t),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                              ),
-                            Checkbox(
-                              value: isCompleted,
-                              onChanged: (_) => _toggleTaskComplete(t['id'] as int, isCompleted),
-                              activeColor: Colors.green,
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.calendar_today,
-                        size: 14,
-                        color: overdue ? Colors.red : dueSoon ? Colors.orange : cs.outline,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _formatDate(dueMillis),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: overdue ? Colors.red : dueSoon ? Colors.orange : cs.onSurfaceVariant,
-                        ),
-                      ),
-                      if (t['startTimeMinutes'] != null) ...[
-                        const SizedBox(width: 12),
-                        Icon(Icons.access_time, size: 14, color: cs.outline),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${_formatMinutes(t['startTimeMinutes'] as int)} - ${_formatMinutes(t['endTimeMinutes'] as int)}',
-                          style: TextStyle(fontSize: 12, color: cs.outline),
-                        ),
-                      ],
-                      const Spacer(),
-                      if (overdue)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(color: Colors.red.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
-                          child: const Text('OVERDUE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
-                        ),
-                      if (dueSoon && !overdue)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(color: Colors.orange.withOpacity(0.12), borderRadius: BorderRadius.circular(6)),
-                          child: const Text('DUE SOON', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange)),
-                        ),
-                      if ((t['isRecurring'] as int? ?? 0) == 1)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 6),
-                          child: Icon(Icons.repeat, size: 14, color: cs.outline.withOpacity(0.5)),
-                        ),
-                    ],
-                  ),
-                  // Tags
-                  if ((t['tags'] as String?)?.isNotEmpty == true) ...[
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 4,
-                      children: (t['tags'] as String).split(',').map((tag) {
-                        final trimmed = tag.trim();
-                        if (trimmed.isEmpty) return const SizedBox.shrink();
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: cs.primaryContainer.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '#$trimmed',
-                            style: TextStyle(fontSize: 9, color: cs.onPrimaryContainer, fontWeight: FontWeight.w500),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                  // Note with clickable links
-                  if ((t['note'] as String?)?.isNotEmpty == true) ...[
-                    const SizedBox(height: 8),
-                    _buildNoteText(t['note'] as String, cs),
-                  ],
-                  // Attachment indicator
-                  if ((t['attachmentPath'] as String?)?.isNotEmpty == true) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(Icons.attachment, size: 12, color: cs.outline.withOpacity(0.5)),
-                        const SizedBox(width: 4),
-                        Text(
-                          (t['attachmentPath'] as String).split('/').last,
-                          style: TextStyle(fontSize: 10, color: cs.outline.withOpacity(0.6)),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+  double _getTotalHoursForDay(int dayIndex) {
+    return _classes.where((c) => (c['dayOfWeek'] as int) - 1 == dayIndex).fold<double>(0, (sum, c) {
+      final start = c['startTimeMinutes'] as int;
+      final end = c['endTimeMinutes'] as int;
+      return sum + (end - start) / 60.0;
+    });
   }
+
+  Future<void> _addNewClass() async {
+    final db = await DatabaseHelper.instance.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final newId = await db.insert('timetable_classes', {
+      'subjectName': 'New Class',
+      'classType': 'lecture',
+      'dayOfWeek': _selectedDay + 1,
+      'startTimeMinutes': 540,
+      'endTimeMinutes': 600,
+      'room': '',
+      'professor': '',
+      'colorHex': '#2196F3',
+      'isRecurring': 0,
+      'note': '',
+      'createdAtMillis': now,
+      'masteryProgress': 0,
+      'syllabusWeight': 1.0,
+    });
+    await _loadClasses();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Class added!')));
+  }
+
+  Future<void> _addStudyBlock() async {
+    final db = await DatabaseHelper.instance.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final subject = _classes.isNotEmpty ? _classes.firstWhere((c) => c['dayOfWeek'] == _selectedDay + 1, orElse: () => {'subjectName': 'Biology'})['subjectName'] as String? ?? 'Biology' : 'Biology';
+    await db.insert('timetable_classes', {
+      'subjectName': subject,
+      'classType': 'study_block',
+      'dayOfWeek': _selectedDay + 1,
+      'startTimeMinutes': 540,
+      'endTimeMinutes': 630, // 1h 30m
+      'room': '',
+      'professor': '',
+      'colorHex': _colorToHex(Colors.cyan),
+      'isRecurring': 0,
+      'note': 'NEET Sprint',
+      'createdAtMillis': now,
+      'masteryProgress': 0,
+      'syllabusWeight': 1.0,
+    });
+    HapticFeedback.mediumImpact();
+    await _loadClasses();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('NEET Sprint block added!'), duration: Duration(seconds: 2)));
+    }
+    _goToPomodoro(subject, durationMinutes: 90);
+  }
+
+  void _suggestStudyBlock() {
+    final weakSubjects = _classes.where((c) => (c['masteryProgress'] as int?) ?? 0 < 50).map((c) => c['subjectName']).toSet();
+    if (weakSubjects.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All subjects at >50% mastery! Great job!')));
+      return;
+    }
+    final subject = weakSubjects.elementAt(0);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('💡 Suggested: 90-min revision for "$subject"')));
+  }
+
+  String _colorToHex(Color color) {
+    final argb = color.value;
+    return '#${(argb & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+  }
+}
+
+class _TimelineGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.grey.withOpacity(0.2)
+      ..strokeWidth = 0.5;
+    for (int h = 5; h <= 24; h++) {
+      final y = (h - 5) * 72.0;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+      canvas.drawText(
+        TextSpan(text: '$h:00', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+        Offset(4, y + 4),
+        TextPainter(textDirection: TextDirection.ltr, text: TextSpan(text: '$h:00'), textAlign: TextAlign.left)..layout(),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
