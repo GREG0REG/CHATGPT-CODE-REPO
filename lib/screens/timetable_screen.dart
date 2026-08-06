@@ -1139,7 +1139,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
       whereArgs: [c['id']],
     );
     await _loadData();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Shortened to $newDuration min')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Shortened to $newDuration min')));
   }
 
   // ============================================
