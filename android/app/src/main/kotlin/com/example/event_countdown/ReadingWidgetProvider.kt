@@ -64,9 +64,7 @@ class ReadingWidgetProvider : AppWidgetProvider() {
             try {
                 val views = RemoteViews(context.packageName, R.layout.reading_widget_layout)
                 
-                // Use the plugin to retrieve data (this is the crucial line that must work)
-                val widgetData = HomeWidgetPlugin.getData(context, "com.example.event_countdown.ReadingWidgetProvider")
-                
+                val widgetData = HomeWidgetPlugin.getData(context)
                 val bookCount = widgetData.getInt("reading_book_count", 0)
                 val totalBooksAdded = widgetData.getInt("reading_total_books_added", 0)
                 val totalPagesToday = widgetData.getInt("reading_total_pages_today", 0)
