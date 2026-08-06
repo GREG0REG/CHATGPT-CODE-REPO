@@ -3049,7 +3049,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
           const SizedBox(height: 10),
           Row(
             children: [
-                      child: Column(
+            Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -3114,7 +3114,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
             ],
           ],
         ),
-      ),
+      ],
     );
   }
 
