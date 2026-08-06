@@ -11,7 +11,7 @@ import 'dart:developer' as dev;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
-import '../db/database_helper.dart';
+import '../database_helper.dart';
 import '../services/widget_service.dart';
 import 'main_screen.dart';
 
