@@ -1698,7 +1698,7 @@ class _TimetableScreenState extends State<TimetableScreen> {
       return [
         Positioned(
           top: top,
-          left: 4,
+                    left: 4,
           right: 4,
           height: height,
           child: isTask
@@ -2164,4 +2164,247 @@ class _TimetableScreenState extends State<TimetableScreen> {
                 ],
               ),
             ),
-         
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      if (_entryTab == 0) {
+                        _addClassFromDrawer();
+                      } else {
+                        _addTaskFromDrawer();
+                      }
+                    },
+                    icon: Icon(_entryTab == 0 ? Icons.school : Icons.assignment),
+                    label: Text(_entryTab == 0 ? 'Add New Class' : 'Add New Task'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_entryTab == 0)
+              OutlinedButton.icon(
+                onPressed: _suggestStudyBlock,
+                icon: const Icon(Icons.auto_fix_high),
+                label: const Text('Suggest Study Block'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================
+  // TASK DETAILS BOTTOM SHEET
+  // ============================================
+  void _showTaskDetails(Map<String, dynamic> t) {
+    final typeColor = _typeColor(t['taskType'] as String);
+    final isCompleted = (t['isCompleted'] as int? ?? 0) == 1;
+    final dueDate = DateTime.fromMillisecondsSinceEpoch(t['dueDateMillis'] as int);
+    final daysLeft = dueDate.difference(DateTime.now()).inDays;
+    final subject = t['subjectName'] as String? ?? '';
+    final isStudyBlock = t['taskType'] == 'study_block';
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(color: typeColor.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                  child: Icon(_typeIcon(t['taskType'] as String), color: typeColor),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(t['title'] as String, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(_typeLabel(t['taskType'] as String), style: TextStyle(fontSize: 14, color: typeColor)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _detailRow(Icons.calendar_today, 'Due Date', '${dueDate.day}/${dueDate.month}/${dueDate.year}'),
+            _detailRow(Icons.hourglass_bottom, 'Days Left',
+              daysLeft < 0 ? 'Overdue!' : daysLeft == 0 ? 'Due today!' : '$daysLeft days left',
+              valueColor: daysLeft <= 1 ? Colors.red : null,
+            ),
+            if (t['startTimeMinutes'] != null)
+              _detailRow(Icons.access_time, 'Time', '${_formatMinutes(t['startTimeMinutes'] as int)} - ${_formatMinutes(t['endTimeMinutes'] as int)}'),
+            if ((t['subjectName'] as String?)?.isNotEmpty == true)
+              _detailRow(Icons.book, 'Subject', t['subjectName'] as String),
+            if ((t['note'] as String?)?.isNotEmpty == true)
+              _detailRow(Icons.notes, 'Note', t['note'] as String),
+            const SizedBox(height: 16),
+            if (isStudyBlock)
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _goToPomodoro(subject.isNotEmpty ? subject : 'Study');
+                },
+                icon: const Icon(Icons.timer),
+                label: const Text('Start Pomodoro'),
+                style: FilledButton.styleFrom(backgroundColor: Colors.deepPurple, minimumSize: const Size(double.infinity, 48)),
+              ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _toggleTaskComplete(t['id'] as int, isCompleted);
+                    },
+                    icon: Icon(isCompleted ? Icons.check_box_outline_blank : Icons.check_box),
+                    label: Text(isCompleted ? 'Mark Incomplete' : 'Mark Complete'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _deleteTask(t['id'] as int);
+                    },
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(IconData icon, String label, String value, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Colors.grey),
+          const SizedBox(width: 10),
+          Text('$label: ', style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w500)),
+          Expanded(
+            child: Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: valueColor), maxLines: 2, overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================
+  // WEEK VIEW
+  // ============================================
+  Widget _buildWeekView(ColorScheme cs) {
+    final now = DateTime.now();
+    final weekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: 7,
+      itemBuilder: (context, dayIndex) {
+        final dayDate = weekStart.add(Duration(days: dayIndex));
+        final dayItems = _getUnifiedItemsForDay(dayIndex);
+        final dayAllDay = _getAllDayTasksForDay(dayIndex);
+        final isToday = dayIndex == (now.weekday - 1);
+        final conflicts = _detectConflicts(dayItems);
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          elevation: isToday ? 2 : 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: isToday ? cs.primary : cs.outlineVariant.withOpacity(0.25), width: isToday ? 2 : 1),
+          ),
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                _selectedDay = dayIndex;
+                _weekView = false;
+              });
+            },
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(width: 10, height: 10, decoration: BoxDecoration(color: isToday ? cs.primary : cs.outline, shape: BoxShape.circle)),
+                      const SizedBox(width: 8),
+                      Text('${_dayNames[dayIndex]} ${dayDate.day}/${dayDate.month}', style: TextStyle(fontWeight: isToday ? FontWeight.bold : FontWeight.w600, color: isToday ? cs.primary : cs.onSurface)),
+                      const Spacer(),
+                      if (conflicts.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                          child: Text('${conflicts.length} conflict${conflicts.length == 1 ? '' : 's'}', style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.w600)),
+                        ),
+                      const SizedBox(width: 8),
+                      Text('${dayItems.length + dayAllDay.length} items', style: TextStyle(fontSize: 12, color: cs.outline)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (dayItems.isEmpty && dayAllDay.isEmpty)
+                    Text('No classes or tasks', style: TextStyle(fontSize: 13, color: cs.outline.withOpacity(0.6)))
+                  else
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        ...dayAllDay.map((t) {
+                          final color = _typeColor(t['taskType'] as String);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: color.withOpacity(0.3)),
+                            ),
+                            child: Text('${t['title']} (all-day)', style: TextStyle(fontSize: 10, color: color.withOpacity(0.9), fontWeight: FontWeight.w500)),
+                          );
+                        }),
+                        ...dayItems.map((item) {
+                          final isTask = item['_type'] == 'task';
+                          final color = isTask
+                              ? _typeColor(item['taskType'] as String)
+                              : _hexToColor(item['colorHex'] as String? ?? '#2196F3');
+                          final label = isTask
+                              ? item['title'] as String
+                              : '${item['subjectName']} • ${_formatMinutes24(item['startTimeMinutes'] as int)}';
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: color.withOpacity(0.3)),
+                            ),
+                            child: Text(label, style: TextStyle(fontSize: 10, color: color.withOpacity(0.9), fontWeight: FontWeight.w500)),
+                          );
+                        }),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
