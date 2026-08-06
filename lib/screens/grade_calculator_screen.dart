@@ -2975,214 +2975,258 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
     );
   }
 
-  // ═════════════════════════════════════════════════════════════════
+    // ═════════════════════════════════════════════════════════════════
   // TAB 2: NEET SIMULATOR
   // ═════════════════════════════════════════════════════════════════
 
   Widget _buildNeetSimulatorTab(ColorScheme cs) {
-  final total = _simulatedTotal;
-  final percentile = NeetData.getPercentile(total);
-  final air = NeetData.getAir(percentile);
-  final marksColor = NeetData.getMarksColor(total);
+    final total = _simulatedTotal;
+    final percentile = NeetData.getPercentile(total);
+    final air = NeetData.getAir(percentile);
+    final marksColor = NeetData.getMarksColor(total);
+    final quickScore = _calculateQuickScore();
 
-  return SingleChildScrollView(
-    padding: const EdgeInsets.all(20),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [marksColor.withOpacity(0.15), cs.surfaceContainerHighest.withOpacity(0.3)],
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Score Display Card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [marksColor.withOpacity(0.15), cs.surfaceContainerHighest.withOpacity(0.3)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: marksColor.withOpacity(0.2)),
             ),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: marksColor.withOpacity(0.2)),
+            child: Column(
+              children: [
+                Text('NEET Score Simulator', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('$total', style: TextStyle(fontSize: 56, fontWeight: FontWeight.w800, color: marksColor)),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8, left: 4),
+                      child: Text('/ 720', style: TextStyle(fontSize: 18, color: cs.onSurfaceVariant)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  decoration: BoxDecoration(color: marksColor.withOpacity(0.12), borderRadius: BorderRadius.circular(20)),
+                  child: Text(NeetData.getCollegePrediction(total),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: marksColor)),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(child: _buildStatBox('Percentile', '${percentile.toStringAsFixed(2)}%', cs.primary, cs)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildStatBox('Est. AIR', air.toString(), cs.secondary, cs)),
+                  ],
+                ),
+              ],
+            ),
           ),
-          child: Column(
+          const SizedBox(height: 20),
+
+          // Subject Inputs
+          Text('Enter Your Marks', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+          const SizedBox(height: 12),
+          _buildSubjectInput('Physics', '0-180', const Color(0xFF1565C0), _physicsMarksController, cs),
+          const SizedBox(height: 10),
+          _buildSubjectInput('Chemistry', '0-180', const Color(0xFF2E7D32), _chemistryMarksController, cs),
+          const SizedBox(height: 10),
+          _buildSubjectInput('Biology', '0-360', const Color(0xFFC62828), _biologyMarksController, cs),
+          const SizedBox(height: 20),
+
+          // Quick Score Calculator
+          Text('Quick Score Calculator (Optional)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+          const SizedBox(height: 8),
+          Text('Enter correct, wrong & left questions to auto-calculate marks', style: TextStyle(fontSize: 11, color: cs.outline)),
+          const SizedBox(height: 10),
+          Row(
             children: [
-              Text('NEET Score Simulator', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('$total', style: TextStyle(fontSize: 56, fontWeight: FontWeight.w800, color: marksColor)),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8, left: 4),
-                    child: Text('/ 720', style: TextStyle(fontSize: 18, color: cs.onSurfaceVariant)),
+              Expanded(
+                child: TextField(
+                  controller: _correctController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Correct',
+                    prefixIcon: const Icon(Icons.check_circle_outline),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                ],
+                ),
               ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(color: marksColor.withOpacity(0.12), borderRadius: BorderRadius.circular(20)),
-                child: Text(NeetData.getCollegePrediction(total),
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: marksColor)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _wrongController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Wrong',
+                    prefixIcon: const Icon(Icons.cancel_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
               ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(child: _buildStatBox('Percentile', '${percentile.toStringAsFixed(2)}%', cs.primary, cs)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildStatBox('Est. AIR', air.toString(), cs.secondary, cs)),
-                ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _leftController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Left',
+                    prefixIcon: const Icon(Icons.help_outline),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 20),
-        Text('Enter Your Marks', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
-        const SizedBox(height: 12),
-        _buildSubjectInput('Physics', '0-180', const Color(0xFF1565C0), _physicsMarksController, cs),
-        const SizedBox(height: 10),
-        _buildSubjectInput('Chemistry', '0-180', const Color(0xFF2E7D32), _chemistryMarksController, cs),
-        const SizedBox(height: 10),
-        _buildSubjectInput('Biology', '0-360', const Color(0xFFC62828), _biologyMarksController, cs),
-        const SizedBox(height: 20),
-        Text('Quick Score Calculator (Optional)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-        const SizedBox(height: 8),
-        Text('Enter correct, wrong & left questions to auto-calculate marks', style: TextStyle(fontSize: 11, color: cs.outline)),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Row(children: [
-                    Icon(Icons.bookmark, size: 18, color: const Color(0xFFE91E63)),
-                    const SizedBox(width: 8),
-                    Text('Bookmark Weak Questions', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                  ]),
-                  if (_bookmarks.isNotEmpty)
-                    TextButton(onPressed: () => _showAllBookmarks(cs), child: Text('${_bookmarks.length}', style: TextStyle(fontSize: 12))),
-                ]),
-                const SizedBox(height: 4),
-                Text('Save difficult questions for revision later', style: TextStyle(fontSize: 11, color: cs.outline)),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _selectedBookmarkSubject,
-                  decoration: InputDecoration(labelText: 'Subject', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                  items: _subjects.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
-                  onChanged: (v) => setState(() => _selectedBookmarkSubject = v!),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _bookmarkQuestionController,
-                  maxLines: 2,
-                  decoration: InputDecoration(labelText: 'Question / Concept', hintText: 'e.g. Why does sky appear blue?'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _bookmarkAnswerController,
-                  maxLines: 2,
-                  decoration: InputDecoration(labelText: 'Answer / Explanation (optional)', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(width: double.infinity, child: FilledButton.icon(
-                  onPressed: _addBookmark,
-                  icon: const Icon(Icons.bookmark_add),
-                  label: const Text('Bookmark Question'),
-                )),
-                if (_bookmarks.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  const Divider(),
+          const SizedBox(height: 12),
+          if (quickScore['score'] != 0)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: cs.primaryContainer.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: cs.primary.withOpacity(0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Quick Calculation Result', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.primary)),
                   const SizedBox(height: 8),
-                  Text('Recent Bookmarks', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.primary)),
-                  const SizedBox(height: 8),
-                  ..._bookmarks.take(3).map((bm) => Container(
-                    margin: const EdgeInsets.only(bottom: 6),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: cs.surfaceContainerHighest.withOpacity(0.3), borderRadius: BorderRadius.circular(12)),
-                    child: Row(
-                      children: [
-                        Container(width: 8, height: 8, decoration: BoxDecoration(color: _subjectColor(bm.subject), borderRadius: BorderRadius.circular(4))),
-                        const SizedBox(width: 8),
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(bm.question, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
-                          Text(bm.subject, style: TextStyle(fontSize: 10, color: cs.outline)),
-                        ])),
-                        if (bm.answer != null && bm.answer!.isNotEmpty)
-                          Icon(Icons.check_circle, size: 14, color: Colors.green),
-                      ],
-                    ),
-                  )).toList(),
+                  Text('Score: ${quickScore['score']} | Percentile: ${(quickScore['percentile'] as double).toStringAsFixed(2)}%', style: TextStyle(fontSize: 12, color: cs.onSurface)),
+                  Text('AIR: ${quickScore['air']} | Rank: ${quickScore['rankRange']} | ${quickScore['tier']}', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                 ],
-              ],
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-}
-
-void _showAllBookmarks(ColorScheme cs) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-    builder: (ctx) => DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      maxChildSize: 0.9,
-      minChildSize: 0.5,
-      expand: false,
-      builder: (context, scrollController) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Text('Bookmarked Questions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                itemCount: _bookmarks.length,
-                itemBuilder: (context, index) {
-                  final bm = _bookmarks[index];
-                  return Dismissible(
-                    key: ValueKey('bm_${bm.id}'),
-                    direction: DismissDirection.endToStart,
-                    background: Container(alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), color: Colors.red, child: const Icon(Icons.delete, color: Colors.white)),
-                    onDismissed: (_) => _deleteBookmark(bm.id),
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: cs.surfaceContainerHighest.withOpacity(0.3), borderRadius: BorderRadius.circular(12)),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Row(children: [
-                          Container(width: 8, height: 8, decoration: BoxDecoration(color: _subjectColor(bm.subject), borderRadius: BorderRadius.circular(4))),
-                          const SizedBox(width: 8),
-                          Text(bm.subject, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.primary)),
-                          const Spacer(),
-                          Text('${bm.bookmarkedDate.day}/${bm.bookmarkedDate.month}', style: TextStyle(fontSize: 10, color: cs.outline)),
-                        ]),
-                        const SizedBox(height: 6),
-                        Text(bm.question, style: TextStyle(fontSize: 13, color: cs.onSurface)),
-                        if (bm.answer != null && bm.answer!.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(color: Colors.green.withOpacity(0.08), borderRadius: BorderRadius.circular(8)),
-                            child: Text('Ans: ${bm.answer}', style: TextStyle(fontSize: 11, color: Colors.green)),
-                          ),
-                        ],
-                      ]),
-                    ),
-                  );
-                },
               ),
             ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
+          const SizedBox(height: 20),
 
+          // Add Mock Test Button
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _addMockTest,
+              icon: const Icon(Icons.add_chart),
+              label: const Text('Save as Mock Test'),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Bookmark Section
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Row(children: [
+              Icon(Icons.bookmark, size: 18, color: const Color(0xFFE91E63)),
+              const SizedBox(width: 8),
+              Text('Bookmark Weak Questions', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            ]),
+            if (_bookmarks.isNotEmpty)
+              TextButton(onPressed: () => _showAllBookmarks(cs), child: Text('${_bookmarks.length}', style: TextStyle(fontSize: 12))),
+          ]),
+          const SizedBox(height: 4),
+          Text('Save difficult questions for revision later', style: TextStyle(fontSize: 11, color: cs.outline)),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: _selectedBookmarkSubject,
+            decoration: InputDecoration(labelText: 'Subject', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+            items: _subjects.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
+            onChanged: (v) => setState(() => _selectedBookmarkSubject = v!),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _bookmarkQuestionController,
+            maxLines: 2,
+            decoration: InputDecoration(labelText: 'Question / Concept', hintText: 'e.g. Why does sky appear blue?', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _bookmarkAnswerController,
+            maxLines: 2,
+            decoration: InputDecoration(labelText: 'Answer / Explanation (optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton.icon(
+            onPressed: _addBookmark,
+            icon: const Icon(Icons.bookmark_add),
+            label: const Text('Bookmark Question'),
+          )),
+          if (_bookmarks.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text('Recent Bookmarks', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.primary)),
+            const SizedBox(height: 8),
+            ..._bookmarks.take(3).map((bm) => Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: cs.surfaceContainerHighest.withOpacity(0.3), borderRadius: BorderRadius.circular(12)),
+              child: Row(
+                children: [
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: _subjectColor(bm.subject), borderRadius: BorderRadius.circular(4))),
+                  const SizedBox(width: 8),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(bm.question, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text(bm.subject, style: TextStyle(fontSize: 10, color: cs.outline)),
+                  ])),
+                  if (bm.answer != null && bm.answer!.isNotEmpty)
+                    Icon(Icons.check_circle, size: 14, color: Colors.green),
+                ],
+              ),
+            )).toList(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Helper: Stat Box
+  Widget _buildStatBox(String label, String value, Color color, ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cs.surface.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        children: [
+          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color), textAlign: TextAlign.center),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant), textAlign: TextAlign.center),
+        ],
+      ),
+    );
+  }
+
+  // Helper: Subject Input
+  Widget _buildSubjectInput(String label, String hint, Color color, TextEditingController controller, ColorScheme cs) {
+    return TextField(
+      controller: controller,
+      keyboardType: TextInputType.number,
+      onChanged: (_) => setState(() {}),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: Icon(Icons.school, color: color),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: color, width: 2)),
+      ),
+    );
+  }
+
+  // Show All Bookmarks (single declaration - fixed duplicate)
   void _showAllBookmarks(ColorScheme cs) {
     showModalBottomSheet(
       context: context,
@@ -3208,7 +3252,7 @@ void _showAllBookmarks(ColorScheme cs) {
                     return Dismissible(
                       key: ValueKey('bm_${bm.id}'),
                       direction: DismissDirection.endToStart,
-                      background: Container(alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: Icon(Icons.delete, color: cs.error)),
+                      background: Container(alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), color: cs.error, child: Icon(Icons.delete, color: cs.onError)),
                       onDismissed: (_) => _deleteBookmark(bm.id),
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 8),
@@ -3241,6 +3285,572 @@ void _showAllBookmarks(ColorScheme cs) {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // TAB 3: MOCK TESTS
+  // ═════════════════════════════════════════════════════════════════
+
+  Widget _buildMockTestsTab(ColorScheme cs) {
+    if (_loadingMocks) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_mockTests.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.history, size: 64, color: cs.outline.withOpacity(0.5)),
+            const SizedBox(height: 16),
+            Text('No Mock Tests Yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface)),
+            const SizedBox(height: 8),
+            Text('Go to Simulator tab to add your first mock test', style: TextStyle(fontSize: 13, color: cs.outline)),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: _mockTests.length,
+      itemBuilder: (context, index) {
+        final test = _mockTests[index];
+        final marksColor = NeetData.getMarksColor(test.totalScore);
+        return Dismissible(
+          key: ValueKey('mock_${test.id}'),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(16)),
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            child: Icon(Icons.delete_outline, color: cs.onErrorContainer),
+          ),
+          onDismissed: (_) => _deleteMockTest(test.id),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 50, height: 50,
+                      decoration: BoxDecoration(color: marksColor.withOpacity(0.12), shape: BoxShape.circle),
+                      child: Center(child: Text('${test.totalScore}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: marksColor))),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(test.testName, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                          Text('${test.date.day}/${test.date.month}/${test.date.year}', style: TextStyle(fontSize: 11, color: cs.outline)),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(color: marksColor.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+                      child: Text('${test.percentile.toStringAsFixed(1)}%', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: marksColor)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: _buildMiniStat('Physics', '${test.physicsScore}/180', const Color(0xFF1565C0), cs)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _buildMiniStat('Chemistry', '${test.chemistryScore}/180', const Color(0xFF2E7D32), cs)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _buildMiniStat('Biology', '${test.biologyScore}/360', const Color(0xFFC62828), cs)),
+                  ],
+                ),
+                if (test.air != null) ...[
+                  const SizedBox(height: 8),
+                  Text('Estimated AIR: ${test.air}', style: TextStyle(fontSize: 12, color: cs.primary, fontWeight: FontWeight.w500)),
+                ],
+                if (test.notes != null && test.notes!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(test.notes!, style: TextStyle(fontSize: 11, color: cs.outline, fontStyle: FontStyle.italic)),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMiniStat(String label, String value, Color color, ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(8)),
+      child: Column(
+        children: [
+          Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+          const SizedBox(height: 2),
+          Text(label, style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // TAB 4: ANALYTICS
+  // ═════════════════════════════════════════════════════════════════
+
+  Widget _buildAnalyticsTab(ColorScheme cs) {
+    final weeklyStats = _getWeeklyStudyStats();
+    final subjectTime = _getSubjectTimeDistribution();
+    final mastery = _getChapterMastery();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Weekly Stats
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [cs.primary.withOpacity(0.15), cs.surfaceContainerHighest.withOpacity(0.3)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: cs.primary.withOpacity(0.2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Study Analytics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: cs.onSurface)),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(child: _buildAnalyticCard('Hours', '${weeklyStats['totalHours'].toStringAsFixed(1)}h', cs.primary, cs)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _buildAnalyticCard('MCQs', '${weeklyStats['totalMcqs']}', cs.secondary, cs)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _buildAnalyticCard('Accuracy', '${(weeklyStats['accuracy'] as double).toStringAsFixed(0)}%', (weeklyStats['accuracy'] as double) >= 70 ? Colors.green : Colors.orange, cs)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Subject Time Distribution
+          if (subjectTime.values.any((v) => v > 0)) ...[
+            Text('Study Time Distribution', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withOpacity(0.4),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+              ),
+              child: Column(
+                children: subjectTime.entries.where((e) => e.value > 0).map((e) {
+                  final color = _subjectColor(e.key);
+                  final maxVal = subjectTime.values.reduce((a, b) => a > b ? a : b);
+                  final pct = maxVal > 0 ? (e.value / maxVal).clamp(0.0, 1.0) : 0.0;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      children: [
+                        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                        const SizedBox(width: 10),
+                        Text(e.key, style: TextStyle(fontSize: 13, color: cs.onSurface)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: pct, minHeight: 10,
+                              backgroundColor: cs.surfaceContainerHighest,
+                              valueColor: AlwaysStoppedAnimation(color),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text('${e.value.toStringAsFixed(1)}h', style: TextStyle(fontSize: 12, color: cs.outline)),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+
+          // Chapter Mastery
+          if (mastery.isNotEmpty) ...[
+            Text('Chapter Mastery', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+            const SizedBox(height: 12),
+            ...mastery.map((m) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withOpacity(0.4),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  Container(width: 10, height: 10, decoration: BoxDecoration(color: m['color'] as Color, shape: BoxShape.circle)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${m['name']}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                        Text(m['label'] as String, style: TextStyle(fontSize: 11, color: m['color'] as Color)),
+                      ],
+                    ),
+                  ),
+                  Text('${(m['percent'] as double).toStringAsFixed(1)}%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: cs.onSurface)),
+                ],
+              ),
+            )),
+          ],
+
+          // Mock Test Trend
+          if (_mockTests.length >= 2) ...[
+            const SizedBox(height: 20),
+            Text('Mock Test Trend', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withOpacity(0.4),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+              ),
+              child: Column(
+                children: _mockTests.take(10).toList().asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final test = entry.value;
+                  final isLast = i == _mockTests.take(10).length - 1;
+                  final trend = i < _mockTests.take(10).length - 1
+                      ? test.totalScore - _mockTests[i + 1].totalScore
+                      : 0;
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36, height: 36,
+                          decoration: BoxDecoration(color: NeetData.getMarksColor(test.totalScore).withOpacity(0.12), shape: BoxShape.circle),
+                          child: Center(child: Text('${test.totalScore}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: NeetData.getMarksColor(test.totalScore)))),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(test.testName, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                              Text('${test.date.day}/${test.date.month}/${test.date.year}', style: TextStyle(fontSize: 10, color: cs.outline)),
+                            ],
+                          ),
+                        ),
+                        if (trend != 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: trend > 0 ? Colors.green.withOpacity(0.12) : Colors.red.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text('${trend > 0 ? '+' : ''}$trend', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: trend > 0 ? Colors.green : Colors.red)),
+                          ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalyticCard(String label, String value, Color color, ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cs.surface.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        children: [
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color), textAlign: TextAlign.center),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant), textAlign: TextAlign.center),
+        ],
+      ),
+    );
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // TAB 5: TOOLS
+  // ═════════════════════════════════════════════════════════════════
+
+  Widget _buildToolsTab(ColorScheme cs) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Formula Sheet
+          Text('Formula Sheet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildFormulaSubjectChip('Physics', 0, cs),
+              const SizedBox(width: 8),
+              _buildFormulaSubjectChip('Chemistry', 1, cs),
+              const SizedBox(width: 8),
+              _buildFormulaSubjectChip('Biology', 2, cs),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ..._buildFormulaList(cs),
+          const SizedBox(height: 24),
+
+          // PYQ Year-wise Tracker
+          Text('PYQ Year-wise Tracker', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+          const SizedBox(height: 12),
+          ...NeetData.pyqYears.map((pyq) => Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withOpacity(0.4),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 50, height: 50,
+                  decoration: BoxDecoration(color: cs.primary.withOpacity(0.12), shape: BoxShape.circle),
+                  child: Center(child: Text('${pyq.year}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: cs.primary))),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text('Difficulty: ', style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                          Text(pyq.difficulty, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: pyq.difficulty == 'Hard' ? Colors.red : pyq.difficulty == 'Easy' ? Colors.green : Colors.orange)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text('Cutoff General: ${pyq.cutoffGeneral} | OBC: ${pyq.cutoffObc}', style: TextStyle(fontSize: 11, color: cs.outline)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )),
+          const SizedBox(height: 24),
+
+          // Daily Targets
+          Text('Daily Targets', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+          const SizedBox(height: 12),
+          _buildDailyTargetCard('Physics', _dailyPhyDone, _dailyPhyTarget, const Color(0xFF1565C0), cs),
+          const SizedBox(height: 10),
+          _buildDailyTargetCard('Chemistry', _dailyChemDone, _dailyChemTarget, const Color(0xFF2E7D32), cs),
+          const SizedBox(height: 10),
+          _buildDailyTargetCard('Biology', _dailyBioDone, _dailyBioTarget, const Color(0xFFC62828), cs),
+          const SizedBox(height: 20),
+
+          // Study Log Section
+          Text('Study Log', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: _selectedLogSubject,
+            decoration: InputDecoration(labelText: 'Subject', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+            items: _subjects.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
+            onChanged: (v) => setState(() => _selectedLogSubject = v!),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _logTopicController,
+            decoration: InputDecoration(labelText: 'Topic', hintText: 'e.g. Organic Chemistry - Alkanes', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _logHoursController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: 'Hours', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _logMcqsController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: 'MCQs Solved', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _logCorrectController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: 'Correct', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _logNotesController,
+            maxLines: 2,
+            decoration: InputDecoration(labelText: 'Notes (optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _addStudyLog,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Study Log'),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Recent Study Logs
+          if (_studyLogs.isNotEmpty) ...[
+            Text('Recent Logs', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.primary)),
+            const SizedBox(height: 8),
+            ..._studyLogs.take(5).map((log) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: cs.surfaceContainerHighest.withOpacity(0.3), borderRadius: BorderRadius.circular(12)),
+              child: Row(
+                children: [
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: _subjectColor(log.subject), shape: BoxShape.circle)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(log.topic, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                        Text('${log.subject} | ${log.hours}h | ${log.mcqsSolved} MCQs | ${log.accuracy.toStringAsFixed(0)}% accuracy', style: TextStyle(fontSize: 10, color: cs.outline)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.delete_outline, size: 18, color: cs.error),
+                    onPressed: () => _deleteStudyLog(log.id),
+                  ),
+                ],
+              ),
+            )).toList(),
+          ],
+
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormulaSubjectChip(String label, int index, ColorScheme cs) {
+    final isSelected = _selectedFormulaSubject == index;
+    return ChoiceChip(
+      label: Text(label, style: TextStyle(fontSize: 12, color: isSelected ? cs.onPrimary : cs.onSurface)),
+      selected: isSelected,
+      onSelected: (_) => setState(() => _selectedFormulaSubject = index),
+      selectedColor: cs.primary,
+      backgroundColor: cs.surfaceContainerHighest,
+    );
+  }
+
+  List<Widget> _buildFormulaList(ColorScheme cs) {
+    final subject = ['Physics', 'Chemistry', 'Biology'][_selectedFormulaSubject];
+    final formulas = NeetData.quickFormulas[subject] ?? [];
+    return formulas.map((f) => Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(f['name']!, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.primary)),
+          const SizedBox(height: 4),
+          Text(f['formula']!, style: TextStyle(fontSize: 12, color: cs.onSurface, fontFamily: 'monospace')),
+        ],
+      ),
+    )).toList();
+  }
+
+  Widget _buildDailyTargetCard(String subject, int done, int target, Color color, ColorScheme cs) {
+    final pct = target > 0 ? (done / target).clamp(0.0, 1.0) : 0.0;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+              const SizedBox(width: 8),
+              Text(subject, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+              const Spacer(),
+              Text('$done / $target MCQs', style: TextStyle(fontSize: 12, color: cs.outline)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: pct, minHeight: 10,
+              backgroundColor: cs.surfaceContainerHighest,
+              valueColor: AlwaysStoppedAnimation(color),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton.icon(
+                onPressed: () => _incrementDailyDone(subject),
+                icon: Icon(Icons.add, size: 16, color: color),
+                label: Text('Add 1', style: TextStyle(fontSize: 11, color: color)),
+                style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4)),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -3322,7 +3932,7 @@ void _showAllBookmarks(ColorScheme cs) {
                     Expanded(
                       child: _buildParentStatCard(
                         'Study Streak',
-                        '$_studyStreak days 🔥',
+                        '$_studyStreak days',
                         cs.secondary,
                         cs,
                       ),
@@ -3627,7 +4237,6 @@ void _showAllBookmarks(ColorScheme cs) {
 
     for (final weak in weakTopics.take(5)) {
       final name = weak['name'] as String;
-      // Find matching chapter in resources
       String? matchedKey;
       for (final key in NeetData.chapterResources.keys) {
         if (name.toLowerCase().contains(key.toLowerCase()) || key.toLowerCase().contains(name.toLowerCase())) {
