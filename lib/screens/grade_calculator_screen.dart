@@ -3562,6 +3562,7 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
 
     for (final weak in weakTopics.take(5)) {
       final name = weak['name'] as String;
+      // Find matching chapter in resources
       String? matchedKey;
       for (final key in NeetData.chapterResources.keys) {
         if (name.toLowerCase().contains(key.toLowerCase()) || key.toLowerCase().contains(name.toLowerCase())) {
@@ -3579,3 +3580,100 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
             decoration: BoxDecoration(
               color: cs.surface.withOpacity(0.5),
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: cs.outlineVariant.withOpacity(0.2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 6, height: 6,
+                      decoration: BoxDecoration(color: _subjectColor(weak['subject'] as String), shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(matchedKey, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: cs.error.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                      child: Text('${(weak['percent'] as double).toStringAsFixed(0)}%', style: TextStyle(fontSize: 10, color: cs.error, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ...resources.map((r) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        r['type'] == 'Video' ? Icons.play_circle_outline : Icons.book_outlined,
+                        size: 14,
+                        color: r['type'] == 'Video' ? Colors.red : cs.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          r['title']!,
+                          style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: (r['type'] == 'Video' ? Colors.red : cs.primary).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          r['type']!,
+                          style: TextStyle(fontSize: 9, color: r['type'] == 'Video' ? Colors.red : cs.primary),
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    if (widgets.isEmpty) {
+      widgets.add(
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Add components and scores to see recommended resources for weak areas.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: cs.outline),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return widgets;
+  }
+}
+
+class _PresetChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  const _PresetChip({required this.label, required this.icon, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      avatar: Icon(icon, size: 16, color: color),
+      label: Text(label, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600)),
+      backgroundColor: color.withOpacity(0.08),
+      side: BorderSide(color: color.withOpacity(0.25)),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      onPressed: onTap,
+    );
+  }
+}
