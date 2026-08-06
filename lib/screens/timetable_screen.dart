@@ -1035,12 +1035,15 @@ class _TimetableScreenState extends State<TimetableScreen> {
       HapticFeedback.mediumImpact();
       await _loadData();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Study block added!'), duration: Duration(seconds: 2)),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Study block added!'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
+}
 
   // ============================================
   // CONFLICT RESOLUTION ASSISTANT
