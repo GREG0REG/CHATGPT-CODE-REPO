@@ -2980,143 +2980,208 @@ class _GradeCalculatorScreenState extends State<GradeCalculatorScreen>
   // ═════════════════════════════════════════════════════════════════
 
   Widget _buildNeetSimulatorTab(ColorScheme cs) {
-    final total = _simulatedTotal;
-    final percentile = NeetData.getPercentile(total);
-    final air = NeetData.getAir(percentile);
-    final marksColor = NeetData.getMarksColor(total);
+  final total = _simulatedTotal;
+  final percentile = NeetData.getPercentile(total);
+  final air = NeetData.getAir(percentile);
+  final marksColor = NeetData.getMarksColor(total);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [marksColor.withOpacity(0.15), cs.surfaceContainerHighest.withOpacity(0.3)],
-                begin: Alignment.topLeft, end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: marksColor.withOpacity(0.2)),
+  return SingleChildScrollView(
+    padding: const EdgeInsets.all(20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [marksColor.withOpacity(0.15), cs.surfaceContainerHighest.withOpacity(0.3)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
             ),
-            child: Column(
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: marksColor.withOpacity(0.2)),
+          ),
+          child: Column(
+            children: [
+              Text('NEET Score Simulator', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('$total', style: TextStyle(fontSize: 56, fontWeight: FontWeight.w800, color: marksColor)),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8, left: 4),
+                    child: Text('/ 720', style: TextStyle(fontSize: 18, color: cs.onSurfaceVariant)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(color: marksColor.withOpacity(0.12), borderRadius: BorderRadius.circular(20)),
+                child: Text(NeetData.getCollegePrediction(total),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: marksColor)),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(child: _buildStatBox('Percentile', '${percentile.toStringAsFixed(2)}%', cs.primary, cs)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildStatBox('Est. AIR', air.toString(), cs.secondary, cs)),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text('Enter Your Marks', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+        const SizedBox(height: 12),
+        _buildSubjectInput('Physics', '0-180', const Color(0xFF1565C0), _physicsMarksController, cs),
+        const SizedBox(height: 10),
+        _buildSubjectInput('Chemistry', '0-180', const Color(0xFF2E7D32), _chemistryMarksController, cs),
+        const SizedBox(height: 10),
+        _buildSubjectInput('Biology', '0-360', const Color(0xFFC62828), _biologyMarksController, cs),
+        const SizedBox(height: 20),
+        Text('Quick Score Calculator (Optional)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+        const SizedBox(height: 8),
+        Text('Enter correct, wrong & left questions to auto-calculate marks', style: TextStyle(fontSize: 11, color: cs.outline)),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('NEET Score Simulator', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('$total', style: TextStyle(fontSize: 56, fontWeight: FontWeight.w800, color: marksColor, height: 1)),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8, left: 4),
-                      child: Text('/ 720', style: TextStyle(fontSize: 18, color: cs.onSurfaceVariant)),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Row(children: [
+                    Icon(Icons.bookmark, size: 18, color: const Color(0xFFE91E63)),
+                    const SizedBox(width: 8),
+                    Text('Bookmark Weak Questions', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                  ]),
+                  if (_bookmarks.isNotEmpty)
+                    TextButton(onPressed: () => _showAllBookmarks(cs), child: Text('${_bookmarks.length}', style: TextStyle(fontSize: 12))),
+                ]),
+                const SizedBox(height: 4),
+                Text('Save difficult questions for revision later', style: TextStyle(fontSize: 11, color: cs.outline)),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _selectedBookmarkSubject,
+                  decoration: InputDecoration(labelText: 'Subject', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                  items: _subjects.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
+                  onChanged: (v) => setState(() => _selectedBookmarkSubject = v!),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _bookmarkQuestionController,
+                  maxLines: 2,
+                  decoration: InputDecoration(labelText: 'Question / Concept', hintText: 'e.g. Why does sky appear blue?'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _bookmarkAnswerController,
+                  maxLines: 2,
+                  decoration: InputDecoration(labelText: 'Answer / Explanation (optional)', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(width: double.infinity, child: FilledButton.icon(
+                  onPressed: _addBookmark,
+                  icon: const Icon(Icons.bookmark_add),
+                  label: const Text('Bookmark Question'),
+                )),
+                if (_bookmarks.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  Text('Recent Bookmarks', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.primary)),
+                  const SizedBox(height: 8),
+                  ..._bookmarks.take(3).map((bm) => Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: cs.surfaceContainerHighest.withOpacity(0.3), borderRadius: BorderRadius.circular(12)),
+                    child: Row(
+                      children: [
+                        Container(width: 8, height: 8, decoration: BoxDecoration(color: _subjectColor(bm.subject), borderRadius: BorderRadius.circular(4))),
+                        const SizedBox(width: 8),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(bm.question, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                          Text(bm.subject, style: TextStyle(fontSize: 10, color: cs.outline)),
+                        ])),
+                        if (bm.answer != null && bm.answer!.isNotEmpty)
+                          Icon(Icons.check_circle, size: 14, color: Colors.green),
+                      ],
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  decoration: BoxDecoration(color: marksColor.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
-                  child: Text(NeetData.getCollegePrediction(total),
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: marksColor)),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(child: _buildStatBox('Percentile', '${percentile.toStringAsFixed(2)}%', cs.primary, cs)),
-                    const SizedBox(width: 12),
-                    Expanded(child: _buildStatBox('Est. AIR', air.toString(), cs.secondary, cs)),
-                  ],
-                ),
+                  )).toList(),
+                ],
               ],
             ),
-          ),
-          const SizedBox(height: 20),
-          Text('Enter Your Marks', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
-          const SizedBox(height: 12),
-          _buildSubjectInput('Physics', '0-180', const Color(0xFF1565C0), _physicsMarksController, cs),
-          const SizedBox(height: 10),
-          _buildSubjectInput('Chemistry', '0-180', const Color(0xFF2E7D32), _chemistryMarksController, cs),
-          const SizedBox(height: 10),
-          _buildSubjectInput('Biology', '0-360', const Color(0xFFC62828), _biologyMarksController, cs),
-          const SizedBox(height: 20),
-          Text('Quick Score Calculator (Optional)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-          const SizedBox(height: 8),
-          Text('Enter correct, wrong & left questions to auto-calculate marks', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-            Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Row(children: [
-                Icon(Icons.bookmark, size: 18, color: const Color(0xFFE91E63)),
-                const SizedBox(width: 8),
-                Text('Bookmark Weak Questions', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface)),
-              ]),
-              if (_bookmarks.isNotEmpty)
-                TextButton(onPressed: () => _showAllBookmarks(cs), child: Text('${_bookmarks.length}', style: const TextStyle(fontSize: 12))),
-            ]),
-            const SizedBox(height: 4),
-            Text('Save difficult questions for revision later', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: _selectedBookmarkSubject,
-              decoration: InputDecoration(labelText: 'Subject', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
-              items: _subjects.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
-              onChanged: (v) => setState(() => _selectedBookmarkSubject = v!),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _bookmarkQuestionController,
-              maxLines: 2,
-              decoration: InputDecoration(labelText: 'Question / Concept', hintText: 'e.g. Why does sky appear blue?', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _bookmarkAnswerController,
-              maxLines: 2,
-              decoration: InputDecoration(labelText: 'Answer / Explanation (optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(width: double.infinity, child: FilledButton.icon(
-              onPressed: _addBookmark,
-              icon: const Icon(Icons.bookmark_add),
-              label: const Text('Bookmark Question'),
-            )),
-            if (_bookmarks.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Divider(),
-              const SizedBox(height: 8),
-              Text('Recent Bookmarks', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface)),
-              const SizedBox(height: 8),
-              ..._bookmarks.take(3).map((bm) => Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: cs.surfaceContainerHighest.withOpacity(0.3), borderRadius: BorderRadius.circular(10)),
-                child: Row(
-                  children: [
-                    Container(width: 8, height: 8, decoration: BoxDecoration(color: _subjectColor(bm.subject), shape: BoxShape.circle)),
-                    const SizedBox(width: 8),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(bm.question, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface), maxLines: 2, overflow: TextOverflow.ellipsis),
-                      Text(bm.subject, style: TextStyle(fontSize: 10, color: cs.outline)),
-                    ])),
-                    if (bm.answer != null && bm.answer!.isNotEmpty)
-                      Icon(Icons.check_circle, size: 14, color: Colors.green),
-                  ],
-                ),
-              )),
-            ],
           ],
         ),
       ],
-    );
-  }
+    ),
+  );
+}
+
+void _showAllBookmarks(ColorScheme cs) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    builder: (ctx) => DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      maxChildSize: 0.9,
+      minChildSize: 0.5,
+      expand: false,
+      builder: (context, scrollController) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Text('Bookmarked Questions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface)),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                itemCount: _bookmarks.length,
+                itemBuilder: (context, index) {
+                  final bm = _bookmarks[index];
+                  return Dismissible(
+                    key: ValueKey('bm_${bm.id}'),
+                    direction: DismissDirection.endToStart,
+                    background: Container(alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), color: Colors.red, child: const Icon(Icons.delete, color: Colors.white)),
+                    onDismissed: (_) => _deleteBookmark(bm.id),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: cs.surfaceContainerHighest.withOpacity(0.3), borderRadius: BorderRadius.circular(12)),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Row(children: [
+                          Container(width: 8, height: 8, decoration: BoxDecoration(color: _subjectColor(bm.subject), borderRadius: BorderRadius.circular(4))),
+                          const SizedBox(width: 8),
+                          Text(bm.subject, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.primary)),
+                          const Spacer(),
+                          Text('${bm.bookmarkedDate.day}/${bm.bookmarkedDate.month}', style: TextStyle(fontSize: 10, color: cs.outline)),
+                        ]),
+                        const SizedBox(height: 6),
+                        Text(bm.question, style: TextStyle(fontSize: 13, color: cs.onSurface)),
+                        if (bm.answer != null && bm.answer!.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(color: Colors.green.withOpacity(0.08), borderRadius: BorderRadius.circular(8)),
+                            child: Text('Ans: ${bm.answer}', style: TextStyle(fontSize: 11, color: Colors.green)),
+                          ),
+                        ],
+                      ]),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
 
   void _showAllBookmarks(ColorScheme cs) {
     showModalBottomSheet(
