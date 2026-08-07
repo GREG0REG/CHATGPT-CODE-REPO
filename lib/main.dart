@@ -1,10 +1,10 @@
 // FILE: lib/main.dart
-// COMPLETE REPLACEMENT — Fixed BackupService calls, uses new singleton API
+// COMPLETE REPLACEMENT — Added Syllabus Widget support
 // CHANGES:
-//   1. Replaced old BackupService static calls with BackupService.instance
-//   2. Workmanager backup task now calls BackupService.instance.createAutoBackup()
-//   3. Removed old ExportImportService import
-//   4. First-launch restore uses BackupService.instance.importFromPath()
+//   1. Added kSyllabusWidgetRefreshTaskName constant
+//   2. Added case for "updateSyllabusWidget" in callbackDispatcher
+//   3. Registered periodic task for syllabus widget refresh
+//   4. Added refreshSyllabusWidget() call in lifecycle resume
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -31,6 +31,8 @@ const String kAttendanceWidgetRefreshTaskName = 'event_countdown_attendance_widg
 const String kTimetableWidgetRefreshTaskName = 'event_countdown_timetable_widget_refresh';
 const String kNeetCountdownTaskName = 'event_countdown_neet_widget_refresh';
 const String kNeetMotivationTaskName = 'event_countdown_neet_motivation';
+// NEW: Syllabus widget refresh task
+const String kSyllabusWidgetRefreshTaskName = 'event_countdown_syllabus_widget_refresh';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -84,7 +86,6 @@ void callbackDispatcher() {
         return false;
       }
     } else if (task == kBackupTaskName) {
-      // FIXED: Use new BackupService singleton API
       try {
         await BackupService.instance.createAutoBackup();
         return true;
@@ -109,6 +110,16 @@ void callbackDispatcher() {
         return true;
       } catch (e) {
         debugPrint('NEET motivation notification error: $e');
+        return false;
+      }
+    }
+    // NEW: Syllabus widget refresh
+    else if (task == kSyllabusWidgetRefreshTaskName) {
+      try {
+        await WidgetService.refreshSyllabusWidget();
+        return true;
+      } catch (e) {
+        debugPrint('Syllabus widget refresh error: $e');
         return false;
       }
     }
@@ -190,11 +201,20 @@ Future<void> main() async {
     existingWorkPolicy: ExistingWorkPolicy.replace,
   );
 
-  // FIXED: Register weekly backup using Workmanager directly (no old static method)
+  // Register weekly backup
   await Workmanager().registerPeriodicTask(
     kBackupTaskName,
     kBackupTaskName,
     frequency: const Duration(days: 7),
+    constraints: Constraints(networkType: NetworkType.not_required),
+    existingWorkPolicy: ExistingWorkPolicy.keep,
+  );
+
+  // NEW: Register syllabus widget refresh (every 6 hours)
+  await Workmanager().registerPeriodicTask(
+    kSyllabusWidgetRefreshTaskName,
+    kSyllabusWidgetRefreshTaskName,
+    frequency: const Duration(hours: 6),
     constraints: Constraints(networkType: NetworkType.not_required),
     existingWorkPolicy: ExistingWorkPolicy.keep,
   );
@@ -208,6 +228,8 @@ Future<void> main() async {
     await WidgetService.refreshSubjectStreakWidget();
     await WidgetService.refreshMcqTargetWidget();
     await WidgetService.refreshRevisionRoundWidget();
+    // NEW: Refresh syllabus widget on startup
+    await WidgetService.refreshSyllabusWidget();
   } catch (e) {
     debugPrint('Widget refresh error: $e');
   }
@@ -249,6 +271,8 @@ class EventCountdownAppState extends State<EventCountdownApp>
       WidgetService.refreshSubjectStreakWidget();
       WidgetService.refreshMcqTargetWidget();
       WidgetService.refreshRevisionRoundWidget();
+      // NEW: Refresh syllabus widget when app resumes
+      WidgetService.refreshSyllabusWidget();
       PomodoroService.instance.recalculateFromEndTime();
     }
   }
@@ -262,7 +286,6 @@ class EventCountdownAppState extends State<EventCountdownApp>
 
     if (!mounted) return;
 
-    // FIXED: Use new BackupService.instance.findRecentBackup()
     final backupPath = await BackupService.instance.findRecentBackup();
     if (backupPath == null) return;
     if (!mounted) return;
@@ -289,7 +312,6 @@ class EventCountdownAppState extends State<EventCountdownApp>
 
     if (shouldRestore == true) {
       try {
-        // FIXED: Use new BackupService.instance.importFromPath()
         final result = await BackupService.instance.importFromPath(backupPath);
         final count = result.eventCount ?? 0;
         final events = await DatabaseHelper.instance.getAllEventsSorted();
@@ -302,6 +324,8 @@ class EventCountdownAppState extends State<EventCountdownApp>
         await WidgetService.refreshSubjectStreakWidget();
         await WidgetService.refreshMcqTargetWidget();
         await WidgetService.refreshRevisionRoundWidget();
+        // NEW: Refresh syllabus widget after restore
+        await WidgetService.refreshSyllabusWidget();
 
         if (mounted) {
           ScaffoldMessenger.of(navigatorKey.currentContext!).showSnackBar(
