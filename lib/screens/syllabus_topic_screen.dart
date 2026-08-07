@@ -44,21 +44,31 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen> {
 
   Future<void> _updateTopicStatus(TopicStatus newStatus) async {
     if (_topic == null) return;
-    final updated = SyllabusTopic(
-      id: _topic!.id,
-      unitId: _topic!.unitId,
-      name: _topic!.name,
-      orderIndex: _topic!.orderIndex,
-      status: newStatus.name,
-      difficulty: _topic!.difficulty,
-      estimatedMinutes: _topic!.estimatedMinutes,
-      createdAtMillis: _topic!.createdAtMillis,
-    );
+    final updated = _topic!.copyWith(status: newStatus.name);
     await DatabaseHelper.instance.updateSyllabusTopic(updated);
-    // If completed, auto-generate revision schedule
     if (newStatus == TopicStatus.completed) {
       await DatabaseHelper.instance.generateRevisionSchedules(_topic!.id!);
     }
+    await _loadData();
+  }
+
+  Future<void> _addSubtopic() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SyllabusAddEditScreen(
+          level: 'subtopic',
+          parentTopicId: widget.topicId,
+        ),
+      ),
+    );
+    if (result == true) await _loadData();
+  }
+
+  Future<void> _toggleSubtopic(SyllabusSubtopic subtopic) async {
+    final newStatus = subtopic.status == 'completed' ? 'notStarted' : 'completed';
+    final updated = subtopic.copyWith(status: newStatus);
+    await DatabaseHelper.instance.updateSyllabusSubtopic(updated);
     await _loadData();
   }
 
@@ -67,9 +77,7 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_topic?.name ?? 'Topic'),
-      ),
+      appBar: AppBar(title: Text(_topic?.name ?? 'Topic')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -77,8 +85,7 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Status selector
-                  Text('Status', style: Theme.of(context).textTheme.titleMedium),
+                  const Text('Status', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   SegmentedButton<TopicStatus>(
                     segments: const [
@@ -93,63 +100,39 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen> {
                     },
                   ),
                   const SizedBox(height: 20),
-
-                  // Subtopics
-                  Text('Subtopics', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
+                  const Text('Subtopics', style: TextStyle(fontWeight: FontWeight.bold)),
                   ..._subtopics.map((st) => CheckboxListTile(
                         title: Text(st.name),
                         value: st.status == 'completed',
-                        onChanged: (value) async {
-                          final updated = SyllabusSubtopic(
-                            id: st.id,
-                            topicId: st.topicId,
-                            name: st.name,
-                            orderIndex: st.orderIndex,
-                            status: value == true ? 'completed' : 'notStarted',
-                            notes: st.notes,
-                            createdAtMillis: st.createdAtMillis,
-                          );
-                          await DatabaseHelper.instance.updateSyllabusSubtopic(updated);
-                          await _loadData();
-                        },
+                        onChanged: (_) => _toggleSubtopic(st),
+                        controlAffinity: ListTileControlAffinity.leading,
                       )),
                   const SizedBox(height: 20),
-
-                  // Resources
-                  Text('Resources', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
+                  const Text('Resources', style: TextStyle(fontWeight: FontWeight.bold)),
                   ..._resources.map((r) => ListTile(
                         leading: const Icon(Icons.attach_file),
                         title: Text(r.title),
                         subtitle: Text(r.resourceType),
                       )),
                   const SizedBox(height: 20),
-
-                  // Revision Schedule
-                  Text('Revision Schedule', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
+                  const Text('Revision Schedule', style: TextStyle(fontWeight: FontWeight.bold)),
                   ..._revisions.map((r) => ListTile(
-                        leading: r.completed ? const Icon(Icons.check_circle, color: Colors.green) : const Icon(Icons.pending),
+                        leading: r.completed
+                            ? const Icon(Icons.check_circle, color: Colors.green)
+                            : const Icon(Icons.pending),
                         title: Text('Revision ${r.revisionNumber}'),
-                        subtitle: Text(DateTime.fromMillisecondsSinceEpoch(r.scheduledDateMillis).toString().substring(0, 10)),
+                        subtitle: Text(
+                          DateTime.fromMillisecondsSinceEpoch(r.scheduledDateMillis)
+                              .toLocal()
+                              .toString()
+                              .substring(0, 10),
+                        ),
                       )),
                 ],
               ),
             ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => SyllabusAddEditScreen(
-                parentTopicId: widget.topicId,
-                level: 'subtopic',
-              ),
-            ),
-          );
-          if (result == true) await _loadData();
-        },
+        onPressed: _addSubtopic,
         icon: const Icon(Icons.add),
         label: const Text('Add Subtopic'),
       ),
