@@ -1,12 +1,6 @@
-// FILE: lib/db/database_helper.dart
-// COMPLETE REPLACEMENT — Version 16 (NEET Edition)
-// FIXED: Import paths resolved, getAllClassSchedules() added
-// FIXED: Event._validateMap now accepts bool AND int for boolean fields
-// NEW: gpa_courses table with proper GPA schema
-// NEW: NEET fields in events and study_sessions tables
-// NEW: 5 NEET analytics methods
-// NEW: DateTime convenience overloads for timetable, habit, reading APIs
-// ALL v1-v15 migrations preserved, v15→v16 migration added
+// FILE: lib/database_helper.dart
+// COMPLETE REPLACEMENT – v17 with full Syllabus & Study Planner support
+// Includes all CRUD, analytics, and generation methods.
 
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -22,15 +16,17 @@ import 'package:event_countdown/models/flashcard.dart';
 import 'package:event_countdown/models/study_schedule.dart';
 import 'package:event_countdown/models/daily_goal.dart';
 import 'package:event_countdown/models/study_subject.dart';
-import '../models/syllabus_subject.dart';
-import '../models/syllabus_unit.dart';
-import '../models/syllabus_topic.dart';
-import '../models/syllabus_subtopic.dart';
-import '../models/syllabus_resource.dart';
-import '../models/syllabus_study_link.dart';
-import '../models/syllabus_revision_schedule.dart';
-import '../models/study_plan.dart';
-import '../models/study_plan_item.dart';
+
+// === Syllabus imports ===
+import 'package:event_countdown/models/syllabus_subject.dart';
+import 'package:event_countdown/models/syllabus_unit.dart';
+import 'package:event_countdown/models/syllabus_topic.dart';
+import 'package:event_countdown/models/syllabus_subtopic.dart';
+import 'package:event_countdown/models/syllabus_resource.dart';
+import 'package:event_countdown/models/syllabus_study_link.dart';
+import 'package:event_countdown/models/syllabus_revision_schedule.dart';
+import 'package:event_countdown/models/study_plan.dart';
+import 'package:event_countdown/models/study_plan_item.dart';
 
 class DatabaseHelper {
   DatabaseHelper._internal();
@@ -49,7 +45,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 17, // BUMPED: v16 adds NEET fields + gpa_courses + fixes
+      version: 17,
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -68,13 +64,13 @@ class DatabaseHelper {
         if (oldVersion < 13) await _migrateV12ToV13(db);
         if (oldVersion < 14) await _migrateV13ToV14(db);
         if (oldVersion < 15) await _migrateV14ToV15(db);
-        if (oldVersion < 16) await _migrateV15ToV16(db); // NEW: NEET + gpa_courses
+        if (oldVersion < 16) await _migrateV15ToV16(db);
         if (oldVersion < 17) await _migrateV16ToV17(db);
       },
     );
   }
 
-    Future<void> _addColumnIfNotExists(
+  Future<void> _addColumnIfNotExists(
     Database db,
     String table,
     String column,
@@ -85,12 +81,11 @@ class DatabaseHelper {
     if (!columns.contains(column)) {
       await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
     }
-   
-    }
+  }
 
   Future<void> _createTables(Database db) async {
-    // ---- EVENTS (with NEET fields v16) ----
-        await db.execute("""
+    // ---- EVENTS ----
+    await db.execute("""
       CREATE TABLE events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
@@ -121,7 +116,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- CUSTOM REMINDERS ----
     await db.execute("""
       CREATE TABLE custom_reminders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,7 +127,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- NOTIFICATION HISTORY ----
     await db.execute("""
       CREATE TABLE notification_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,7 +137,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- STUDY SESSIONS (with NEET fields v16) ----
     await db.execute("""
       CREATE TABLE study_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -166,9 +158,7 @@ class DatabaseHelper {
         mockTestRank INTEGER
       )
     """);
-    
 
-    // ---- SUBTASKS ----
     await db.execute("""
       CREATE TABLE subtasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -179,7 +169,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- FLASHCARDS ----
     await db.execute("""
       CREATE TABLE flashcards (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -202,7 +191,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- STUDY SCHEDULES ----
     await db.execute("""
       CREATE TABLE study_schedules (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -215,39 +203,6 @@ class DatabaseHelper {
       )
     """);
 
-     // ---- EVENTS TABLE (with NEET fields) ----
-    await db.execute("""
-      CREATE TABLE IF NOT EXISTS events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        dateMillis INTEGER NOT NULL,
-        startTimeMillis INTEGER,
-        deadlineMillis INTEGER,
-        notes TEXT,
-        recurrence INTEGER DEFAULT 0,
-        recurrenceInterval INTEGER DEFAULT 1,
-        yearlyUseSpecificDates INTEGER DEFAULT 0,
-        yearlySpecificDatesJson TEXT,
-        excludedDatesJson TEXT,
-        iconName TEXT,
-        priority INTEGER DEFAULT 2,
-        subjectTag TEXT,
-        isCompleted INTEGER DEFAULT 0,
-        isNeetExam INTEGER DEFAULT 0,
-        neetTotalMarks INTEGER,
-        neetTargetScore INTEGER,
-        neetSubjectFocus TEXT,
-        targetScore INTEGER,
-        neetExamType TEXT,
-        revisionRound TEXT,
-        isPyqSession INTEGER DEFAULT 0,
-        difficulty TEXT,
-        studyDuration TEXT,
-        studyModeTagsJson TEXT
-      )
-    """);
-    
-    // ---- DAILY GOALS ----
     await db.execute("""
       CREATE TABLE daily_goals (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -260,7 +215,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- STUDY SUBJECTS (v6) ----
     await db.execute("""
       CREATE TABLE study_subjects (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -271,7 +225,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- FLASHCARD REVIEW HISTORY (v8) ----
     await db.execute("""
       CREATE TABLE flashcard_review_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -285,7 +238,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- DAILY CARD GOALS (v8) ----
     await db.execute("""
       CREATE TABLE daily_card_goals (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -298,7 +250,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- GRADE COMPONENTS (v8) — LEGACY, preserved for backward compat ----
     await db.execute("""
       CREATE TABLE grade_components (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -310,7 +261,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- GPA COURSES (v16) — NEW proper GPA schema ----
     await db.execute("""
       CREATE TABLE gpa_courses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -324,7 +274,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- QUICK NOTES (v8) ----
     await db.execute("""
       CREATE TABLE quick_notes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -336,7 +285,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- ATTENDANCE LOGS (v10, ENHANCED v11) ----
     await db.execute("""
       CREATE TABLE attendance_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -352,7 +300,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- ATTENDANCE SUBJECTS (v11) ----
     await db.execute("""
       CREATE TABLE attendance_subjects (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -366,7 +313,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- ATTENDANCE SCHEDULES (v11) ----
     await db.execute("""
       CREATE TABLE attendance_schedules (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -381,7 +327,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- TIMETABLE CLASSES (v11) ----
     await db.execute("""
       CREATE TABLE timetable_classes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -401,7 +346,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- TIMETABLE TASKS (v11) ----
     await db.execute("""
       CREATE TABLE timetable_tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -420,7 +364,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- ACADEMIC CALENDAR (v11) ----
     await db.execute("""
       CREATE TABLE academic_calendar (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -431,7 +374,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- CLASS SCHEDULE (v12) ----
     await db.execute("""
       CREATE TABLE class_schedule (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -445,7 +387,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- HABITS (v12, ENHANCED v13) ----
     await db.execute("""
       CREATE TABLE habits (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -462,7 +403,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- HABIT LOGS (v12, ENHANCED v13) ----
     await db.execute("""
       CREATE TABLE habit_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -474,7 +414,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- READING BOOKS (v12) ----
     await db.execute("""
       CREATE TABLE reading_books (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -494,7 +433,6 @@ class DatabaseHelper {
       )
     """);
 
-    // ---- READING SESSIONS (v14) ----
     await db.execute("""
       CREATE TABLE reading_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -509,7 +447,6 @@ class DatabaseHelper {
         createdAtMillis INTEGER NOT NULL
       )
     """);
-    // Inside _createTables(), after reading_sessions:
 
     // ---- SYLLABUS TABLES (v17) ----
     await db.execute("""
@@ -584,7 +521,6 @@ class DatabaseHelper {
         createdAtMillis INTEGER NOT NULL
       )
     """);
-    // ---- STUDY PLANS (v17) ----
     await db.execute("""
       CREATE TABLE study_plans (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -612,9 +548,7 @@ class DatabaseHelper {
     """);
   }
 
-  // ============================================
-  // MIGRATIONS v1-v15 (PRESERVED EXACTLY)
-  // ============================================
+  // === Migrations (preserved) ===
   Future<void> _migrateV1ToV2(Database db) async {
     await db.execute('ALTER TABLE events ADD COLUMN recurrence INTEGER DEFAULT 0');
     await db.execute('ALTER TABLE events ADD COLUMN recurrenceInterval INTEGER DEFAULT 1');
@@ -943,11 +877,7 @@ class DatabaseHelper {
     await db.execute('ALTER TABLE study_sessions ADD COLUMN topicTag TEXT');
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // NEW MIGRATION: v15 → v16 — NEET fields + gpa_courses table
-  // ═══════════════════════════════════════════════════════════════
   Future<void> _migrateV15ToV16(Database db) async {
-    // 1. Add NEET columns to 'events' table
     await _addColumnIfNotExists(db, 'events', 'targetScore', 'INTEGER');
     await _addColumnIfNotExists(db, 'events', 'neetExamType', 'TEXT');
     await _addColumnIfNotExists(db, 'events', 'revisionRound', 'TEXT');
@@ -955,10 +885,6 @@ class DatabaseHelper {
     await _addColumnIfNotExists(db, 'events', 'difficulty', 'TEXT');
     await _addColumnIfNotExists(db, 'events', 'studyDuration', 'TEXT');
     await _addColumnIfNotExists(db, 'events', 'studyModeTagsJson', 'TEXT');
-    
-    
-
-    // 3. Add NEET columns to 'study_sessions' table
     await db.execute('ALTER TABLE study_sessions ADD COLUMN neetSubject INTEGER');
     await db.execute('ALTER TABLE study_sessions ADD COLUMN mcqsAttempted INTEGER DEFAULT 0');
     await db.execute('ALTER TABLE study_sessions ADD COLUMN mcqsCorrect INTEGER DEFAULT 0');
@@ -966,8 +892,6 @@ class DatabaseHelper {
     await db.execute('ALTER TABLE study_sessions ADD COLUMN revisionRound INTEGER DEFAULT 0');
     await db.execute('ALTER TABLE study_sessions ADD COLUMN mockTestScore INTEGER');
     await db.execute('ALTER TABLE study_sessions ADD COLUMN mockTestRank INTEGER');
-
-    // 4. Create NEW 'gpa_courses' table (proper GPA schema)
     await db.execute("""
       CREATE TABLE gpa_courses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -981,13 +905,14 @@ class DatabaseHelper {
       )
     """);
   }
-    Future<void> _migrateV16ToV17(Database db) async {
-      await _addColumnIfNotExists(db, 'events', 'assignmentType', 'TEXT');
-    }
 
-  // ============================================
-  // EVENT CRUD (PRESERVED)
-  // ============================================
+  Future<void> _migrateV16ToV17(Database db) async {
+    await _addColumnIfNotExists(db, 'events', 'assignmentType', 'TEXT');
+  }
+
+  // ============================================================
+  // EVENT CRUD
+  // ============================================================
   Future<int> insertEvent(Event event) async {
     final db = await database;
     return db.insert('events', event.toMap()..remove('id'));
@@ -1032,9 +957,9 @@ class DatabaseHelper {
     });
   }
 
-  // ============================================
-  // CUSTOM REMINDER CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // CUSTOM REMINDER CRUD
+  // ============================================================
   Future<int> insertCustomReminder(CustomReminder reminder) async {
     final db = await database;
     return db.insert('custom_reminders', reminder.toMap()..remove('id'));
@@ -1056,9 +981,9 @@ class DatabaseHelper {
     return rows.map((r) => CustomReminder.fromMap(r)).toList();
   }
 
-  // ============================================
-  // NOTIFICATION HISTORY CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // NOTIFICATION HISTORY CRUD
+  // ============================================================
   Future<int> insertNotificationHistory(NotificationHistory history) async {
     final db = await database;
     return db.insert('notification_history', history.toMap()..remove('id'));
@@ -1075,9 +1000,9 @@ class DatabaseHelper {
     await db.delete('notification_history');
   }
 
-  // ============================================
-  // STUDY SESSION CRUD (PRESERVED + NEET ENHANCED)
-  // ============================================
+  // ============================================================
+  // STUDY SESSION CRUD
+  // ============================================================
   Future<int> insertStudySession(StudySession session) async {
     final db = await database;
     return db.insert('study_sessions', session.toMap()..remove('id'));
@@ -1110,11 +1035,12 @@ class DatabaseHelper {
     );
     return rows.map((r) => StudySession.fromMap(r)).toList();
   }
+
   Future<StudySession?> getStudySession(int id) async {
-  final db = await database;
-  final rows = await db.query('study_sessions', where: 'id = ?', whereArgs: [id]);
-  if (rows.isEmpty) return null;
-  return StudySession.fromMap(rows.first);
+    final db = await database;
+    final rows = await db.query('study_sessions', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return StudySession.fromMap(rows.first);
   }
 
   Future<int> getTodayStudyMinutes() async {
@@ -1129,85 +1055,6 @@ class DatabaseHelper {
     """, [startOfDay, endOfDay]);
     return (result.first['total'] as int?) ?? 0;
   }
-
-  // ============================================
-  // NEW: Home Screen Helper Methods (v16.1)
-  // ============================================
-
-  /// Check if any study sessions exist on a specific date
-  /// Returns true if student studied on that day
-  Future<bool> hasStudySessionsOnDate(int dateMillis) async {
-    final db = await database;
-    final endOfDay = dateMillis + const Duration(days: 1).inMilliseconds;
-    final result = await db.rawQuery("""
-      SELECT COUNT(*) as count FROM study_sessions
-      WHERE completedAtMillis >= ? AND completedAtMillis < ?
-    """, [dateMillis, endOfDay]);
-    return ((result.first['count'] as int?) ?? 0) > 0;
-  }
-
-  /// Get today's attendance summary for home screen dashboard
-  /// Returns: {'present': 3, 'absent': 1, 'total': 4, 'percentage': 75.0}
-  Future<Map<String, dynamic>> getTodayAttendanceSummary() async {
-    final db = await database;
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
-    final todayEnd = todayStart + const Duration(days: 1).inMilliseconds;
-
-    final result = await db.rawQuery("""
-      SELECT 
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present,
-        SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent,
-        SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late
-      FROM attendance_logs
-      WHERE dateMillis >= ? AND dateMillis < ?
-    """, [todayStart, todayEnd]);
-
-    final total = (result.first['total'] as int?) ?? 0;
-    final present = (result.first['present'] as int?) ?? 0;
-    final absent = (result.first['absent'] as int?) ?? 0;
-    final late = (result.first['late'] as int?) ?? 0;
-    final percentage = total > 0 ? ((present + late * 0.5) / total * 100) : 0.0;
-
-    return {
-      'total': total,
-      'present': present,
-      'absent': absent,
-      'late': late,
-      'percentage': percentage,
-    };
-  }
-
-  /// Get upcoming events for next N days (for home screen reminders)
-  Future<List<Event>> getUpcomingEvents(int daysAhead) async {
-    final db = await database;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final endMillis = now + Duration(days: daysAhead).inMilliseconds;
-    final rows = await db.query(
-      'events',
-      where: 'dateMillis >= ? AND dateMillis < ? AND isCompleted = 0',
-      whereArgs: [now, endMillis],
-      orderBy: 'dateMillis ASC',
-      limit: 10,
-    );
-    return rows.map((r) => Event.fromMap(r)).toList();
-  }
-
-  /// Get overdue events (for home screen alerts)
-  Future<List<Event>> getOverdueEvents() async {
-    final db = await database;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final rows = await db.query(
-      'events',
-      where: 'dateMillis < ? AND isCompleted = 0',
-      whereArgs: [now],
-      orderBy: 'dateMillis ASC',
-      limit: 10,
-    );
-    return rows.map((r) => Event.fromMap(r)).toList();
-  }
-
 
   Future<int> deleteStudySession(int id) async {
     final db = await database;
@@ -1224,121 +1071,9 @@ class DatabaseHelper {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // NEW: NEET ANALYTICS METHODS (v16)
-  // ═══════════════════════════════════════════════════════════════
-
-  /// Helper: Convert NEET subject index to name
-  String _neetSubjectName(int index) {
-    const names = ['Physics', 'Chemistry', 'Biology', 'General'];
-    return (index >= 0 && index < names.length) ? names[index] : 'Unknown';
-  }
-
-  /// Get study sessions filtered by NEET subject (0=Physics, 1=Chemistry, 2=Biology, 3=General)
-  Future<List<StudySession>> getStudySessionsForNeetSubject(int neetSubjectIndex) async {
-    final db = await database;
-    final rows = await db.query(
-      'study_sessions',
-      where: 'neetSubject = ?',
-      whereArgs: [neetSubjectIndex],
-      orderBy: 'completedAtMillis DESC',
-    );
-    return rows.map((r) => StudySession.fromMap(r)).toList();
-  }
-
-  /// Get today's study time broken down by NEET subject
-  /// Returns: {'Physics': 120, 'Chemistry': 90, 'Biology': 180}
-  Future<Map<String, int>> getTodayNeetSubjectMinutes() async {
-    final db = await database;
-    final now = DateTime.now();
-    final startOfDay = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
-    final endOfDay = startOfDay + const Duration(days: 1).inMilliseconds;
-
-    final result = await db.rawQuery("""
-      SELECT neetSubject, COALESCE(SUM(durationMinutes), 0) as total
-      FROM study_sessions
-      WHERE completedAtMillis >= ? AND completedAtMillis < ? AND neetSubject IS NOT NULL
-      GROUP BY neetSubject
-    """, [startOfDay, endOfDay]);
-
-    final Map<String, int> breakdown = {};
-    for (final row in result) {
-      final subjectIdx = row['neetSubject'] as int?;
-      if (subjectIdx != null) {
-        breakdown[_neetSubjectName(subjectIdx)] = (row['total'] as int?) ?? 0;
-      }
-    }
-    return breakdown;
-  }
-
-  /// Get MCQ accuracy percentage by NEET subject
-  /// Returns: {'Physics': 85.5, 'Chemistry': 72.3, 'Biology': 91.0}
-  Future<Map<String, double>> getNeetSubjectAccuracy() async {
-    final db = await database;
-    final result = await db.rawQuery("""
-      SELECT neetSubject,
-        SUM(mcqsAttempted) as attempted,
-        SUM(mcqsCorrect) as correct
-      FROM study_sessions
-      WHERE neetSubject IS NOT NULL AND mcqsAttempted > 0
-      GROUP BY neetSubject
-    """);
-
-    final Map<String, double> accuracy = {};
-    for (final row in result) {
-      final subjectIdx = row['neetSubject'] as int?;
-      final attempted = (row['attempted'] as int?) ?? 0;
-      final correct = (row['correct'] as int?) ?? 0;
-      if (subjectIdx != null && attempted > 0) {
-        accuracy[_neetSubjectName(subjectIdx)] = (correct / attempted * 100);
-      }
-    }
-    return accuracy;
-  }
-
-  /// Get total MCQs attempted and correct across all sessions
-  /// Returns: {'attempted': 1250, 'correct': 980}
-  Future<Map<String, int>> getTotalMcqStats() async {
-    final db = await database;
-    final result = await db.rawQuery("""
-      SELECT 
-        COALESCE(SUM(mcqsAttempted), 0) as attempted,
-        COALESCE(SUM(mcqsCorrect), 0) as correct
-      FROM study_sessions
-    """);
-
-    return {
-      'attempted': (result.first['attempted'] as int?) ?? 0,
-      'correct': (result.first['correct'] as int?) ?? 0,
-    };
-  }
-
-  /// Get mock test score history (sorted by date desc)
-  Future<List<Map<String, dynamic>>> getMockTestScores() async {
-    final db = await database;
-    final rows = await db.rawQuery("""
-      SELECT completedAtMillis, mockTestScore, mockTestRank, subjectTag, neetSubject
-      FROM study_sessions
-      WHERE mockTestScore IS NOT NULL
-      ORDER BY completedAtMillis DESC
-    """);
-    return rows;
-  }
-
-  /// Get best (highest) mock test score
-  Future<int> getBestMockTestScore() async {
-    final db = await database;
-    final result = await db.rawQuery("""
-      SELECT MAX(mockTestScore) as best
-      FROM study_sessions
-      WHERE mockTestScore IS NOT NULL
-    """);
-    return (result.first['best'] as int?) ?? 0;
-  }
-
-  // ============================================
-  // SUBTASK CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // SUBTASK CRUD
+  // ============================================================
   Future<int> insertSubtask(Subtask subtask) async {
     final db = await database;
     return db.insert('subtasks', subtask.toMap()..remove('id'));
@@ -1391,9 +1126,9 @@ class DatabaseHelper {
     };
   }
 
-  // ============================================
-  // FLASHCARD CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // FLASHCARD CRUD (preserved)
+  // ============================================================
   Future<int> insertFlashcard(Flashcard card) async {
     final db = await database;
     return db.insert('flashcards', card.toMap()..remove('id'));
@@ -1450,9 +1185,9 @@ class DatabaseHelper {
     );
   }
 
-  // ============================================
-  // FLASHCARD REVIEW HISTORY CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // FLASHCARD REVIEW HISTORY CRUD
+  // ============================================================
   Future<int> insertFlashcardReviewHistory(FlashcardReviewHistory history) async {
     final db = await database;
     return db.insert('flashcard_review_history', history.toMap()..remove('id'));
@@ -1502,9 +1237,9 @@ class DatabaseHelper {
     return result.first;
   }
 
-  // ============================================
-  // DAILY CARD GOAL CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // DAILY CARD GOAL CRUD
+  // ============================================================
   Future<int> insertOrUpdateDailyCardGoal(DailyCardGoal goal) async {
     final db = await database;
     final existing = await getDailyCardGoalForDate(goal.dateMillis);
@@ -1585,9 +1320,9 @@ class DatabaseHelper {
     return DailyCardGoal.fromMap(rows.first).streakCount;
   }
 
-  // ============================================
-  // STUDY SCHEDULE CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // STUDY SCHEDULE CRUD
+  // ============================================================
   Future<int> insertStudySchedule(StudySchedule schedule) async {
     final db = await database;
     return db.insert('study_schedules', schedule.toMap()..remove('id'));
@@ -1633,9 +1368,9 @@ class DatabaseHelper {
     return rows.map((r) => StudySchedule.fromMap(r)).toList();
   }
 
-  // ============================================
-  // DAILY GOAL CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // DAILY GOAL CRUD
+  // ============================================================
   Future<int> insertOrUpdateDailyGoal(DailyGoal goal) async {
     final db = await database;
     final existing = await getDailyGoalForDate(goal.dateMillis);
@@ -1716,9 +1451,9 @@ class DatabaseHelper {
     return DailyGoal.fromMap(rows.first).streakCount;
   }
 
-  // ============================================
-  // STUDY SUBJECT CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // STUDY SUBJECT CRUD
+  // ============================================================
   Future<int> insertStudySubject(StudySubject subject) async {
     final db = await database;
     return db.insert('study_subjects', subject.toMap()..remove('id'));
@@ -1763,9 +1498,9 @@ class DatabaseHelper {
     """, [minutes, id]);
   }
 
-  // ============================================
-  // GRADE COMPONENT CRUD (PRESERVED — LEGACY)
-  // ============================================
+  // ============================================================
+  // GRADE COMPONENT CRUD (legacy)
+  // ============================================================
   Future<int> insertGradeComponent(Map<String, dynamic> component) async {
     final db = await database;
     final data = {
@@ -1805,9 +1540,9 @@ class DatabaseHelper {
     await db.delete('grade_components');
   }
 
-  // ============================================
-  // GPA COURSES CRUD (NEW v16 — Proper GPA Schema)
-  // ============================================
+  // ============================================================
+  // GPA COURSES CRUD
+  // ============================================================
   Future<int> insertGpaCourse(Map<String, dynamic> course) async {
     final db = await database;
     final grade = course['grade'] as String;
@@ -1882,9 +1617,9 @@ class DatabaseHelper {
     }
   }
 
-  // ============================================
-  // QUICK NOTES CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // QUICK NOTES CRUD
+  // ============================================================
   Future<int> insertQuickNote(Map<String, dynamic> note) async {
     final db = await database;
     final data = {
@@ -1935,9 +1670,9 @@ class DatabaseHelper {
     return rows.first;
   }
 
-  // ============================================
-  // ATTENDANCE LOGS CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // ATTENDANCE LOGS CRUD
+  // ============================================================
   Future<int> insertAttendanceLog(Map<String, dynamic> log) async {
     final db = await database;
     final data = {
@@ -2039,9 +1774,9 @@ class DatabaseHelper {
     return rows.map((r) => r['subjectName'] as String).toList();
   }
 
-  // ============================================
-  // ATTENDANCE SUBJECTS CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // ATTENDANCE SUBJECTS CRUD
+  // ============================================================
   Future<int> insertAttendanceSubject(Map<String, dynamic> subject) async {
     final db = await database;
     final data = {
@@ -2094,9 +1829,9 @@ class DatabaseHelper {
     return rows.first;
   }
 
-  // ============================================
-  // ATTENDANCE SCHEDULES CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // ATTENDANCE SCHEDULES CRUD
+  // ============================================================
   Future<int> insertAttendanceSchedule(Map<String, dynamic> schedule) async {
     final db = await database;
     final data = {
@@ -2177,9 +1912,9 @@ class DatabaseHelper {
     return rows;
   }
 
-    // ============================================
-  // TIMETABLE CLASSES CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // TIMETABLE CLASSES CRUD
+  // ============================================================
   Future<int> insertTimetableClass(Map<String, dynamic> timetableClass) async {
     final db = await database;
     final data = {
@@ -2270,9 +2005,9 @@ class DatabaseHelper {
     return rows;
   }
 
-  // ============================================
-  // TIMETABLE TASKS CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // TIMETABLE TASKS CRUD
+  // ============================================================
   Future<int> insertTimetableTask(Map<String, dynamic> task) async {
     final db = await database;
     final data = {
@@ -2351,12 +2086,6 @@ class DatabaseHelper {
     return rows;
   }
 
-  /// Convenience overload: accepts DateTime instead of millis
-  Future<List<Map<String, dynamic>>> getTimetableTasksForDateTime(DateTime date) async {
-    final startOfDay = DateTime(date.year, date.month, date.day).millisecondsSinceEpoch;
-    return getTimetableTasksForDate(startOfDay);
-  }
-
   Future<List<Map<String, dynamic>>> getTimetableTasksForDateRange(int startMillis, int endMillis) async {
     final db = await database;
     final rows = await db.query(
@@ -2388,9 +2117,9 @@ class DatabaseHelper {
     );
   }
 
-  // ============================================
-  // ACADEMIC CALENDAR CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // ACADEMIC CALENDAR CRUD
+  // ============================================================
   Future<int> insertAcademicCalendarEntry(Map<String, dynamic> entry) async {
     final db = await database;
     final data = {
@@ -2475,9 +2204,9 @@ class DatabaseHelper {
     return rows;
   }
 
-  // ============================================
-  // CLASS SCHEDULE CRUD (PRESERVED + FIX)
-  // ============================================
+  // ============================================================
+  // CLASS SCHEDULE CRUD
+  // ============================================================
   Future<int> insertClassSchedule(Map<String, dynamic> schedule) async {
     final db = await database;
     final data = {
@@ -2506,18 +2235,11 @@ class DatabaseHelper {
     return db.update('class_schedule', data, where: 'id = ?', whereArgs: [id]);
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // FIXED: deleteClassSchedule — was copy-pasted from getAllClassSchedules()
-  // Returns int (rows deleted) instead of List<Map>
-  // ═══════════════════════════════════════════════════════════════
   Future<int> deleteClassSchedule(int id) async {
     final db = await database;
     return db.delete('class_schedule', where: 'id = ?', whereArgs: [id]);
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // FIXED: Added missing getAllClassSchedules() method
-  // ═══════════════════════════════════════════════════════════════
   Future<List<Map<String, dynamic>>> getAllClassSchedules() async {
     final db = await database;
     final rows = await db.query('class_schedule', orderBy: 'dayOfWeek ASC, startTimeMinutes ASC');
@@ -2562,9 +2284,9 @@ class DatabaseHelper {
     );
   }
 
-  // ============================================
-  // HABITS CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // HABITS CRUD
+  // ============================================================
   Future<int> insertHabit(Map<String, dynamic> habit) async {
     final db = await database;
     final data = {
@@ -2646,9 +2368,9 @@ class DatabaseHelper {
     );
   }
 
-  // ============================================
-  // HABIT LOGS CRUD (PRESERVED)
-  // ============================================
+  // ============================================================
+  // HABIT LOGS CRUD
+  // ============================================================
   Future<int> insertHabitLog(Map<String, dynamic> log) async {
     final db = await database;
     final data = {
@@ -2713,13 +2435,6 @@ class DatabaseHelper {
     return rows;
   }
 
-  /// Convenience overload: accepts DateTime instead of millis
-  Future<List<Map<String, dynamic>>> getHabitLogsForDateTimeRange(int habitId, DateTime start, DateTime end) async {
-    final startMillis = DateTime(start.year, start.month, start.day).millisecondsSinceEpoch;
-    final endMillis = DateTime(end.year, end.month, end.day).millisecondsSinceEpoch + const Duration(days: 1).inMilliseconds;
-    return getHabitLogsForDateRange(habitId, startMillis, endMillis);
-  }
-
   Future<int> getHabitCompletionCountForWeek(int habitId, int weekStartMillis) async {
     final db = await database;
     final weekEndMillis = weekStartMillis + const Duration(days: 7).inMilliseconds;
@@ -2728,12 +2443,6 @@ class DatabaseHelper {
       WHERE habitId = ? AND dateMillis >= ? AND dateMillis < ? AND completed = 1
     """, [habitId, weekStartMillis, weekEndMillis]);
     return (result.first['count'] as int?) ?? 0;
-  }
-
-  /// Convenience overload: accepts DateTime instead of millis
-  Future<int> getHabitCompletionCountForWeekDateTime(int habitId, DateTime weekStart) async {
-    final weekStartMillis = DateTime(weekStart.year, weekStart.month, weekStart.day).millisecondsSinceEpoch;
-    return getHabitCompletionCountForWeek(habitId, weekStartMillis);
   }
 
   Future<int> getHabitStreak(int habitId) async {
@@ -2796,9 +2505,9 @@ class DatabaseHelper {
     };
   }
 
-  // ============================================
-  // READING BOOKS CRUD (PRESERVED + ENHANCED)
-  // ============================================
+  // ============================================================
+  // READING BOOKS CRUD
+  // ============================================================
   Future<int> insertReadingBook(Map<String, dynamic> book) async {
     final db = await database;
     final data = {
@@ -2996,9 +2705,9 @@ class DatabaseHelper {
     };
   }
 
-  // ============================================
-  // READING SESSIONS CRUD (v14)
-  // ============================================
+  // ============================================================
+  // READING SESSIONS CRUD
+  // ============================================================
   Future<int> insertReadingSession(Map<String, dynamic> session) async {
     final db = await database;
     final data = {
@@ -3054,9 +2763,6 @@ class DatabaseHelper {
     return rows.first;
   }
 
-  // ============================================
-  // READING STATS METHODS (v14)
-  // ============================================
   Future<int> getReadingStreak(int bookId) async {
     final db = await database;
     final now = DateTime.now();
@@ -3212,603 +2918,757 @@ class DatabaseHelper {
     final activeDays = (rows.first['activeDays'] as int?) ?? 0;
     return (activeDays / 30 * 100).round().clamp(0, 100);
   }
-    // ============================================
-   // SYLLABUS SUBJECTS CRUD (v17)
-  // ============================================
-Future<int> insertSyllabusSubject(SyllabusSubject subject) async {
-  final db = await database;
-  return db.insert('syllabus_subjects', subject.toMap()..remove('id'));
-}
 
-Future<int> updateSyllabusSubject(SyllabusSubject subject) async {
-  final db = await database;
-  return db.update('syllabus_subjects', subject.toMap(), where: 'id = ?', whereArgs: [subject.id]);
-}
+  // ============================================================
+  // SYLLABUS SUBJECTS CRUD
+  // ============================================================
+  Future<int> insertSyllabusSubject(SyllabusSubject subject) async {
+    final db = await database;
+    return db.insert('syllabus_subjects', subject.toMap()..remove('id'));
+  }
 
-Future<int> deleteSyllabusSubject(int id) async {
-  final db = await database;
-  await db.delete('syllabus_units', where: 'subjectId = ?', whereArgs: [id]);
-  await db.delete('syllabus_topics', where: 'unitId IN (SELECT id FROM syllabus_units WHERE subjectId = ?)', whereArgs: [id]);
-  return db.delete('syllabus_subjects', where: 'id = ?', whereArgs: [id]);
-}
+  Future<int> updateSyllabusSubject(SyllabusSubject subject) async {
+    final db = await database;
+    return db.update('syllabus_subjects', subject.toMap(), where: 'id = ?', whereArgs: [subject.id]);
+  }
 
-Future<List<SyllabusSubject>> getAllSyllabusSubjects() async {
-  final db = await database;
-  final rows = await db.query('syllabus_subjects', orderBy: 'name ASC');
-  return rows.map((r) => SyllabusSubject.fromMap(r)).toList();
-}
+  Future<int> deleteSyllabusSubject(int id) async {
+    final db = await database;
+    final units = await getSyllabusUnitsForSubject(id);
+    for (final unit in units) {
+      await deleteSyllabusUnit(unit.id!);
+    }
+    return db.delete('syllabus_subjects', where: 'id = ?', whereArgs: [id]);
+  }
 
-Future<SyllabusSubject?> getSyllabusSubject(int id) async {
-  final db = await database;
-  final rows = await db.query('syllabus_subjects', where: 'id = ?', whereArgs: [id]);
-  if (rows.isEmpty) return null;
-  return SyllabusSubject.fromMap(rows.first);
-}
+  Future<List<SyllabusSubject>> getAllSyllabusSubjects() async {
+    final db = await database;
+    final rows = await db.query('syllabus_subjects', orderBy: 'name ASC');
+    return rows.map((r) => SyllabusSubject.fromMap(r)).toList();
+  }
 
-// ============================================
-// SYLLABUS UNITS CRUD (v17)
-// ============================================
-Future<int> insertSyllabusUnit(SyllabusUnit unit) async {
-  final db = await database;
-  return db.insert('syllabus_units', unit.toMap()..remove('id'));
-}
+  Future<SyllabusSubject?> getSyllabusSubject(int id) async {
+    final db = await database;
+    final rows = await db.query('syllabus_subjects', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return SyllabusSubject.fromMap(rows.first);
+  }
 
-Future<int> updateSyllabusUnit(SyllabusUnit unit) async {
-  final db = await database;
-  return db.update('syllabus_units', unit.toMap(), where: 'id = ?', whereArgs: [unit.id]);
-}
+  // ============================================================
+  // SYLLABUS UNITS CRUD
+  // ============================================================
+  Future<int> insertSyllabusUnit(SyllabusUnit unit) async {
+    final db = await database;
+    return db.insert('syllabus_units', unit.toMap()..remove('id'));
+  }
 
-Future<int> deleteSyllabusUnit(int id) async {
-  final db = await database;
-  await db.delete('syllabus_topics', where: 'unitId = ?', whereArgs: [id]);
-  return db.delete('syllabus_units', where: 'id = ?', whereArgs: [id]);
-}
+  Future<int> updateSyllabusUnit(SyllabusUnit unit) async {
+    final db = await database;
+    return db.update('syllabus_units', unit.toMap(), where: 'id = ?', whereArgs: [unit.id]);
+  }
 
-Future<List<SyllabusUnit>> getSyllabusUnitsForSubject(int subjectId) async {
-  final db = await database;
-  final rows = await db.query(
-    'syllabus_units',
-    where: 'subjectId = ?',
-    whereArgs: [subjectId],
-    orderBy: 'orderIndex ASC',
-  );
-  return rows.map((r) => SyllabusUnit.fromMap(r)).toList();
-}
+  Future<int> deleteSyllabusUnit(int id) async {
+    final db = await database;
+    final topics = await getSyllabusTopicsForUnit(id);
+    for (final topic in topics) {
+      await deleteSyllabusTopic(topic.id!);
+    }
+    return db.delete('syllabus_units', where: 'id = ?', whereArgs: [id]);
+  }
 
-Future<SyllabusUnit?> getSyllabusUnit(int id) async {
-  final db = await database;
-  final rows = await db.query('syllabus_units', where: 'id = ?', whereArgs: [id]);
-  if (rows.isEmpty) return null;
-  return SyllabusUnit.fromMap(rows.first);
-}
+  Future<List<SyllabusUnit>> getSyllabusUnitsForSubject(int subjectId) async {
+    final db = await database;
+    final rows = await db.query(
+      'syllabus_units',
+      where: 'subjectId = ?',
+      whereArgs: [subjectId],
+      orderBy: 'orderIndex ASC',
+    );
+    return rows.map((r) => SyllabusUnit.fromMap(r)).toList();
+  }
 
-// ============================================
-// SYLLABUS TOPICS CRUD (v17)
-// ============================================
-Future<int> insertSyllabusTopic(SyllabusTopic topic) async {
-  final db = await database;
-  return db.insert('syllabus_topics', topic.toMap()..remove('id'));
-}
+  Future<SyllabusUnit?> getSyllabusUnit(int id) async {
+    final db = await database;
+    final rows = await db.query('syllabus_units', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return SyllabusUnit.fromMap(rows.first);
+  }
 
-Future<int> updateSyllabusTopic(SyllabusTopic topic) async {
-  final db = await database;
-  return db.update('syllabus_topics', topic.toMap(), where: 'id = ?', whereArgs: [topic.id]);
-}
+  // ============================================================
+  // SYLLABUS TOPICS CRUD
+  // ============================================================
+  Future<int> insertSyllabusTopic(SyllabusTopic topic) async {
+    final db = await database;
+    return db.insert('syllabus_topics', topic.toMap()..remove('id'));
+  }
 
-Future<int> deleteSyllabusTopic(int id) async {
-  final db = await database;
-  await db.delete('syllabus_subtopics', where: 'topicId = ?', whereArgs: [id]);
-  await db.delete('syllabus_resources', where: 'topicId = ?', whereArgs: [id]);
-  await db.delete('syllabus_study_links', where: 'topicId = ?', whereArgs: [id]);
-  await db.delete('syllabus_revision_schedules', where: 'topicId = ?', whereArgs: [id]);
-  // Study plan items referencing this topic – we can set topicId to NULL or delete? We'll set to NULL.
-  await db.rawUpdate('UPDATE study_plan_items SET topicId = NULL WHERE topicId = ?', [id]);
-  return db.delete('syllabus_topics', where: 'id = ?', whereArgs: [id]);
-}
+  Future<int> updateSyllabusTopic(SyllabusTopic topic) async {
+    final db = await database;
+    return db.update('syllabus_topics', topic.toMap(), where: 'id = ?', whereArgs: [topic.id]);
+  }
 
-Future<List<SyllabusTopic>> getSyllabusTopicsForUnit(int unitId) async {
-  final db = await database;
-  final rows = await db.query(
-    'syllabus_topics',
-    where: 'unitId = ?',
-    whereArgs: [unitId],
-    orderBy: 'orderIndex ASC',
-  );
-  return rows.map((r) => SyllabusTopic.fromMap(r)).toList();
-}
+  Future<int> deleteSyllabusTopic(int id) async {
+    final db = await database;
+    await db.delete('syllabus_subtopics', where: 'topicId = ?', whereArgs: [id]);
+    await db.delete('syllabus_resources', where: 'topicId = ?', whereArgs: [id]);
+    await db.delete('syllabus_study_links', where: 'topicId = ?', whereArgs: [id]);
+    await db.delete('syllabus_revision_schedules', where: 'topicId = ?', whereArgs: [id]);
+    await db.rawUpdate('UPDATE study_plan_items SET topicId = NULL WHERE topicId = ?', [id]);
+    return db.delete('syllabus_topics', where: 'id = ?', whereArgs: [id]);
+  }
 
-Future<SyllabusTopic?> getSyllabusTopic(int id) async {
-  final db = await database;
-  final rows = await db.query('syllabus_topics', where: 'id = ?', whereArgs: [id]);
-  if (rows.isEmpty) return null;
-  return SyllabusTopic.fromMap(rows.first);
-}
+  Future<List<SyllabusTopic>> getSyllabusTopicsForUnit(int unitId) async {
+    final db = await database;
+    final rows = await db.query(
+      'syllabus_topics',
+      where: 'unitId = ?',
+      whereArgs: [unitId],
+      orderBy: 'orderIndex ASC',
+    );
+    return rows.map((r) => SyllabusTopic.fromMap(r)).toList();
+  }
 
-// ============================================
-// SYLLABUS SUBTOPICS CRUD (v17)
-// ============================================
-Future<int> insertSyllabusSubtopic(SyllabusSubtopic subtopic) async {
-  final db = await database;
-  return db.insert('syllabus_subtopics', subtopic.toMap()..remove('id'));
-}
+  Future<SyllabusTopic?> getSyllabusTopic(int id) async {
+    final db = await database;
+    final rows = await db.query('syllabus_topics', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return SyllabusTopic.fromMap(rows.first);
+  }
 
-Future<int> updateSyllabusSubtopic(SyllabusSubtopic subtopic) async {
-  final db = await database;
-  return db.update('syllabus_subtopics', subtopic.toMap(), where: 'id = ?', whereArgs: [subtopic.id]);
-}
+  // ============================================================
+  // SYLLABUS SUBTOPICS CRUD
+  // ============================================================
+  Future<int> insertSyllabusSubtopic(SyllabusSubtopic subtopic) async {
+    final db = await database;
+    return db.insert('syllabus_subtopics', subtopic.toMap()..remove('id'));
+  }
 
-Future<int> deleteSyllabusSubtopic(int id) async {
-  final db = await database;
-  await db.delete('syllabus_resources', where: 'subtopicId = ?', whereArgs: [id]);
-  return db.delete('syllabus_subtopics', where: 'id = ?', whereArgs: [id]);
-}
+  Future<int> updateSyllabusSubtopic(SyllabusSubtopic subtopic) async {
+    final db = await database;
+    return db.update('syllabus_subtopics', subtopic.toMap(), where: 'id = ?', whereArgs: [subtopic.id]);
+  }
 
-Future<List<SyllabusSubtopic>> getSyllabusSubtopicsForTopic(int topicId) async {
-  final db = await database;
-  final rows = await db.query(
-    'syllabus_subtopics',
-    where: 'topicId = ?',
-    whereArgs: [topicId],
-    orderBy: 'orderIndex ASC',
-  );
-  return rows.map((r) => SyllabusSubtopic.fromMap(r)).toList();
-}
+  Future<int> deleteSyllabusSubtopic(int id) async {
+    final db = await database;
+    await db.delete('syllabus_resources', where: 'subtopicId = ?', whereArgs: [id]);
+    return db.delete('syllabus_subtopics', where: 'id = ?', whereArgs: [id]);
+  }
 
-Future<SyllabusSubtopic?> getSyllabusSubtopic(int id) async {
-  final db = await database;
-  final rows = await db.query('syllabus_subtopics', where: 'id = ?', whereArgs: [id]);
-  if (rows.isEmpty) return null;
-  return SyllabusSubtopic.fromMap(rows.first);
-}
+  Future<List<SyllabusSubtopic>> getSyllabusSubtopicsForTopic(int topicId) async {
+    final db = await database;
+    final rows = await db.query(
+      'syllabus_subtopics',
+      where: 'topicId = ?',
+      whereArgs: [topicId],
+      orderBy: 'orderIndex ASC',
+    );
+    return rows.map((r) => SyllabusSubtopic.fromMap(r)).toList();
+  }
 
-// ============================================
-// SYLLABUS RESOURCES CRUD (v17)
-// ============================================
-Future<int> insertSyllabusResource(SyllabusResource resource) async {
-  final db = await database;
-  return db.insert('syllabus_resources', resource.toMap()..remove('id'));
-}
+  Future<SyllabusSubtopic?> getSyllabusSubtopic(int id) async {
+    final db = await database;
+    final rows = await db.query('syllabus_subtopics', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return SyllabusSubtopic.fromMap(rows.first);
+  }
 
-Future<int> updateSyllabusResource(SyllabusResource resource) async {
-  final db = await database;
-  return db.update('syllabus_resources', resource.toMap(), where: 'id = ?', whereArgs: [resource.id]);
-}
+  // ============================================================
+  // SYLLABUS RESOURCES CRUD
+  // ============================================================
+  Future<int> insertSyllabusResource(SyllabusResource resource) async {
+    final db = await database;
+    return db.insert('syllabus_resources', resource.toMap()..remove('id'));
+  }
 
-Future<int> deleteSyllabusResource(int id) async {
-  final db = await database;
-  return db.delete('syllabus_resources', where: 'id = ?', whereArgs: [id]);
-}
+  Future<int> updateSyllabusResource(SyllabusResource resource) async {
+    final db = await database;
+    return db.update('syllabus_resources', resource.toMap(), where: 'id = ?', whereArgs: [resource.id]);
+  }
 
-Future<List<SyllabusResource>> getSyllabusResourcesForTopic(int topicId) async {
-  final db = await database;
-  final rows = await db.query(
-    'syllabus_resources',
-    where: 'topicId = ?',
-    whereArgs: [topicId],
-    orderBy: 'createdAtMillis ASC',
-  );
-  return rows.map((r) => SyllabusResource.fromMap(r)).toList();
-}
+  Future<int> deleteSyllabusResource(int id) async {
+    final db = await database;
+    return db.delete('syllabus_resources', where: 'id = ?', whereArgs: [id]);
+  }
 
-Future<List<SyllabusResource>> getSyllabusResourcesForSubtopic(int subtopicId) async {
-  final db = await database;
-  final rows = await db.query(
-    'syllabus_resources',
-    where: 'subtopicId = ?',
-    whereArgs: [subtopicId],
-    orderBy: 'createdAtMillis ASC',
-  );
-  return rows.map((r) => SyllabusResource.fromMap(r)).toList();
-}
+  Future<List<SyllabusResource>> getSyllabusResourcesForTopic(int topicId) async {
+    final db = await database;
+    final rows = await db.query(
+      'syllabus_resources',
+      where: 'topicId = ?',
+      whereArgs: [topicId],
+      orderBy: 'createdAtMillis ASC',
+    );
+    return rows.map((r) => SyllabusResource.fromMap(r)).toList();
+  }
 
-// ============================================
-// SYLLABUS STUDY LINKS CRUD (v17)
-// ============================================
-Future<int> insertSyllabusStudyLink(SyllabusStudyLink link) async {
-  final db = await database;
-  return db.insert('syllabus_study_links', link.toMap()..remove('id'));
-}
+  Future<List<SyllabusResource>> getSyllabusResourcesForSubtopic(int subtopicId) async {
+    final db = await database;
+    final rows = await db.query(
+      'syllabus_resources',
+      where: 'subtopicId = ?',
+      whereArgs: [subtopicId],
+      orderBy: 'createdAtMillis ASC',
+    );
+    return rows.map((r) => SyllabusResource.fromMap(r)).toList();
+  }
 
-Future<int> deleteSyllabusStudyLink(int id) async {
-  final db = await database;
-  return db.delete('syllabus_study_links', where: 'id = ?', whereArgs: [id]);
-}
+  // ============================================================
+  // SYLLABUS STUDY LINKS CRUD
+  // ============================================================
+  Future<int> insertSyllabusStudyLink(SyllabusStudyLink link) async {
+    final db = await database;
+    return db.insert('syllabus_study_links', link.toMap()..remove('id'));
+  }
 
-Future<List<SyllabusStudyLink>> getSyllabusStudyLinksForTopic(int topicId) async {
-  final db = await database;
-  final rows = await db.query(
-    'syllabus_study_links',
-    where: 'topicId = ?',
-    whereArgs: [topicId],
-    orderBy: 'createdAtMillis DESC',
-  );
-  return rows.map((r) => SyllabusStudyLink.fromMap(r)).toList();
-}
+  Future<int> deleteSyllabusStudyLink(int id) async {
+    final db = await database;
+    return db.delete('syllabus_study_links', where: 'id = ?', whereArgs: [id]);
+  }
 
-Future<int> getStudyTimeForTopic(int topicId) async {
-  final db = await database;
-  final links = await getSyllabusStudyLinksForTopic(topicId);
-  int totalMinutes = 0;
-  for (final link in links) {
-    final session = await getStudySession(link.studySessionId);
-    if (session != null) {
-      totalMinutes += session.durationMinutes;
+  Future<List<SyllabusStudyLink>> getSyllabusStudyLinksForTopic(int topicId) async {
+    final db = await database;
+    final rows = await db.query(
+      'syllabus_study_links',
+      where: 'topicId = ?',
+      whereArgs: [topicId],
+      orderBy: 'createdAtMillis DESC',
+    );
+    return rows.map((r) => SyllabusStudyLink.fromMap(r)).toList();
+  }
+
+  Future<int> getStudyTimeForTopic(int topicId) async {
+    final links = await getSyllabusStudyLinksForTopic(topicId);
+    int totalMinutes = 0;
+    for (final link in links) {
+      final session = await getStudySession(link.studySessionId);
+      if (session != null) {
+        totalMinutes += session.durationMinutes;
+      }
+    }
+    return totalMinutes;
+  }
+
+  // ============================================================
+  // SYLLABUS REVISION SCHEDULES CRUD
+  // ============================================================
+  Future<int> insertSyllabusRevisionSchedule(SyllabusRevisionSchedule revision) async {
+    final db = await database;
+    return db.insert('syllabus_revision_schedules', revision.toMap()..remove('id'));
+  }
+
+  Future<int> updateSyllabusRevisionSchedule(SyllabusRevisionSchedule revision) async {
+    final db = await database;
+    return db.update('syllabus_revision_schedules', revision.toMap(), where: 'id = ?', whereArgs: [revision.id]);
+  }
+
+  Future<int> deleteSyllabusRevisionSchedule(int id) async {
+    final db = await database;
+    return db.delete('syllabus_revision_schedules', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<SyllabusRevisionSchedule>> getSyllabusRevisionsForTopic(int topicId) async {
+    final db = await database;
+    final rows = await db.query(
+      'syllabus_revision_schedules',
+      where: 'topicId = ?',
+      whereArgs: [topicId],
+      orderBy: 'revisionNumber ASC',
+    );
+    return rows.map((r) => SyllabusRevisionSchedule.fromMap(r)).toList();
+  }
+
+  Future<void> generateRevisionSchedules(int topicId) async {
+    final now = DateTime.now();
+    final base = now.millisecondsSinceEpoch;
+    final intervals = [1, 3, 7, 14, 30];
+    for (int i = 0; i < intervals.length; i++) {
+      final date = now.add(Duration(days: intervals[i]));
+      final schedule = SyllabusRevisionSchedule(
+        topicId: topicId,
+        revisionNumber: i + 1,
+        scheduledDateMillis: date.millisecondsSinceEpoch,
+        isCompleted: 0,
+        createdAtMillis: base,
+      );
+      await insertSyllabusRevisionSchedule(schedule);
     }
   }
-  return totalMinutes;
-}
 
-// ============================================
-// SYLLABUS REVISION SCHEDULES CRUD (v17)
-// ============================================
-Future<int> insertSyllabusRevisionSchedule(SyllabusRevisionSchedule revision) async {
-  final db = await database;
-  return db.insert('syllabus_revision_schedules', revision.toMap()..remove('id'));
-}
+  // ============================================================
+  // STUDY PLANS CRUD
+  // ============================================================
+  Future<int> insertStudyPlan(StudyPlan plan) async {
+    final db = await database;
+    return db.insert('study_plans', plan.toMap()..remove('id'));
+  }
 
-Future<int> updateSyllabusRevisionSchedule(SyllabusRevisionSchedule revision) async {
-  final db = await database;
-  return db.update('syllabus_revision_schedules', revision.toMap(), where: 'id = ?', whereArgs: [revision.id]);
-}
+  Future<int> updateStudyPlan(StudyPlan plan) async {
+    final db = await database;
+    return db.update('study_plans', plan.toMap(), where: 'id = ?', whereArgs: [plan.id]);
+  }
 
-Future<int> deleteSyllabusRevisionSchedule(int id) async {
-  final db = await database;
-  return db.delete('syllabus_revision_schedules', where: 'id = ?', whereArgs: [id]);
-}
+  Future<int> deleteStudyPlan(int id) async {
+    final db = await database;
+    await db.delete('study_plan_items', where: 'planId = ?', whereArgs: [id]);
+    return db.delete('study_plans', where: 'id = ?', whereArgs: [id]);
+  }
 
-Future<List<SyllabusRevisionSchedule>> getSyllabusRevisionsForTopic(int topicId) async {
-  final db = await database;
-  final rows = await db.query(
-    'syllabus_revision_schedules',
-    where: 'topicId = ?',
-    whereArgs: [topicId],
-    orderBy: 'revisionNumber ASC',
-  );
-  return rows.map((r) => SyllabusRevisionSchedule.fromMap(r)).toList();
-}
+  Future<List<StudyPlan>> getAllStudyPlans() async {
+    final db = await database;
+    final rows = await db.query('study_plans', orderBy: 'startDateMillis DESC');
+    return rows.map((r) => StudyPlan.fromMap(r)).toList();
+  }
 
-Future<void> generateRevisionSchedules(int topicId) async {
-  final now = DateTime.now();
-  final base = now.millisecondsSinceEpoch;
-  final intervals = [1, 3, 7, 14, 30]; // days
-  for (int i = 0; i < intervals.length; i++) {
-    final date = now.add(Duration(days: intervals[i]));
-    final schedule = SyllabusRevisionSchedule(
-      topicId: topicId,
-      revisionNumber: i + 1,
-      scheduledDateMillis: date.millisecondsSinceEpoch,
-      isCompleted: 0,
-      createdAtMillis: base,
+  Future<StudyPlan?> getStudyPlan(int id) async {
+    final db = await database;
+    final rows = await db.query('study_plans', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return StudyPlan.fromMap(rows.first);
+  }
+
+  Future<List<StudyPlan>> getActiveStudyPlans() async {
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rows = await db.query(
+      'study_plans',
+      where: 'isActive = 1 AND startDateMillis <= ? AND endDateMillis >= ?',
+      whereArgs: [now, now],
+      orderBy: 'startDateMillis ASC',
     );
-    await insertSyllabusRevisionSchedule(schedule);
-  }
-}
-
-// ============================================
-// STUDY PLANS CRUD (v17)
-// ============================================
-Future<int> insertStudyPlan(StudyPlan plan) async {
-  final db = await database;
-  return db.insert('study_plans', plan.toMap()..remove('id'));
-}
-
-Future<int> updateStudyPlan(StudyPlan plan) async {
-  final db = await database;
-  return db.update('study_plans', plan.toMap(), where: 'id = ?', whereArgs: [plan.id]);
-}
-
-Future<int> deleteStudyPlan(int id) async {
-  final db = await database;
-  await db.delete('study_plan_items', where: 'planId = ?', whereArgs: [id]);
-  return db.delete('study_plans', where: 'id = ?', whereArgs: [id]);
-}
-
-Future<List<StudyPlan>> getAllStudyPlans() async {
-  final db = await database;
-  final rows = await db.query('study_plans', orderBy: 'startDateMillis DESC');
-  return rows.map((r) => StudyPlan.fromMap(r)).toList();
-}
-
-Future<StudyPlan?> getStudyPlan(int id) async {
-  final db = await database;
-  final rows = await db.query('study_plans', where: 'id = ?', whereArgs: [id]);
-  if (rows.isEmpty) return null;
-  return StudyPlan.fromMap(rows.first);
-}
-
-Future<List<StudyPlan>> getActiveStudyPlans() async {
-  final db = await database;
-  final now = DateTime.now().millisecondsSinceEpoch;
-  final rows = await db.query(
-    'study_plans',
-    where: 'isActive = 1 AND startDateMillis <= ? AND endDateMillis >= ?',
-    whereArgs: [now, now],
-    orderBy: 'startDateMillis ASC',
-  );
-  return rows.map((r) => StudyPlan.fromMap(r)).toList();
-}
-
-// ============================================
-// STUDY PLAN ITEMS CRUD (v17)
-// ============================================
-Future<int> insertStudyPlanItem(StudyPlanItem item) async {
-  final db = await database;
-  return db.insert('study_plan_items', item.toMap()..remove('id'));
-}
-
-Future<int> updateStudyPlanItem(StudyPlanItem item) async {
-  final db = await database;
-  return db.update('study_plan_items', item.toMap(), where: 'id = ?', whereArgs: [item.id]);
-}
-
-Future<int> deleteStudyPlanItem(int id) async {
-  final db = await database;
-  return db.delete('study_plan_items', where: 'id = ?', whereArgs: [id]);
-}
-
-Future<List<StudyPlanItem>> getStudyPlanItemsForPlan(int planId) async {
-  final db = await database;
-  final rows = await db.query(
-    'study_plan_items',
-    where: 'planId = ?',
-    whereArgs: [planId],
-    orderBy: 'scheduledDateMillis ASC',
-  );
-  return rows.map((r) => StudyPlanItem.fromMap(r)).toList();
-}
-
-Future<List<StudyPlanItem>> getStudyPlanItemsForPlanInDateRange(int planId, int startMillis, int endMillis) async {
-  final db = await database;
-  final rows = await db.query(
-    'study_plan_items',
-    where: 'planId = ? AND scheduledDateMillis >= ? AND scheduledDateMillis < ?',
-    whereArgs: [planId, startMillis, endMillis],
-    orderBy: 'scheduledDateMillis ASC',
-  );
-  return rows.map((r) => StudyPlanItem.fromMap(r)).toList();
-}
-
-Future<void> completeStudyPlanItem(int id) async {
-  final db = await database;
-  await db.update(
-    'study_plan_items',
-    {'isCompleted': 1},
-    where: 'id = ?',
-    whereArgs: [id],
-  );
-}
-
-// ============================================
-// SYLLABUS ANALYTICS METHODS (v17)
-// ============================================
-
-/// Returns total and completed topics for a subject
-Future<Map<String, dynamic>> getSyllabusProgressForSubject(int subjectId) async {
-  final db = await database;
-  // Get all topics under this subject
-  final result = await db.rawQuery("""
-    SELECT 
-      COUNT(t.id) as total,
-      SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed
-    FROM syllabus_topics t
-    JOIN syllabus_units u ON t.unitId = u.id
-    WHERE u.subjectId = ?
-  """, [subjectId]);
-
-  return {
-    'total': (result.first['total'] as int?) ?? 0,
-    'completed': (result.first['completed'] as int?) ?? 0,
-  };
-}
-
-/// Overall syllabus progress across all subjects
-Future<Map<String, dynamic>> getOverallSyllabusProgress() async {
-  final db = await database;
-  final result = await db.rawQuery("""
-    SELECT 
-      COUNT(*) as total,
-      SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
-    FROM syllabus_topics
-  """);
-
-  return {
-    'total': (result.first['total'] as int?) ?? 0,
-    'completed': (result.first['completed'] as int?) ?? 0,
-  };
-}
-
-/// Topics that are 'needsRevision' or 'inProgress' for too long (e.g., > 7 days)
-Future<List<Map<String, dynamic>>> getWeakTopics() async {
-  final db = await database;
-  final now = DateTime.now().millisecondsSinceEpoch;
-  final sevenDaysAgo = now - const Duration(days: 7).inMilliseconds;
-
-  // For simplicity, we return topics with status 'needsRevision' or 'inProgress'
-  // and whose createdAt is older than 7 days (to indicate stuck).
-  final rows = await db.rawQuery("""
-    SELECT t.*, u.subjectId, s.name as subjectName
-    FROM syllabus_topics t
-    JOIN syllabus_units u ON t.unitId = u.id
-    JOIN syllabus_subjects s ON u.subjectId = s.id
-    WHERE (t.status = 'needsRevision' OR (t.status = 'inProgress' AND t.createdAtMillis < ?))
-    ORDER BY t.createdAtMillis ASC
-  """, [sevenDaysAgo]);
-
-  return rows;
-}
-
-/// Get today's suggested topics based on:
-/// - Topics that have revision schedules due today
-/// - Topics that are 'inProgress' and have the least recent study activity
-Future<List<Map<String, dynamic>>> getTopicsForToday() async {
-  final db = await database;
-  final now = DateTime.now();
-  final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
-  final todayEnd = todayStart + const Duration(days: 1).inMilliseconds;
-
-  // 1. Revision due today
-  final revisionTopics = await db.rawQuery("""
-    SELECT DISTINCT t.*, s.name as subjectName
-    FROM syllabus_revision_schedules r
-    JOIN syllabus_topics t ON r.topicId = t.id
-    JOIN syllabus_units u ON t.unitId = u.id
-    JOIN syllabus_subjects s ON u.subjectId = s.id
-    WHERE r.scheduledDateMillis >= ? AND r.scheduledDateMillis < ? AND r.isCompleted = 0
-    ORDER BY r.revisionNumber ASC
-  """, [todayStart, todayEnd]);
-
-  // 2. In-progress topics with oldest last study link (using study_links)
-  final inProgressTopics = await db.rawQuery("""
-    SELECT t.*, s.name as subjectName
-    FROM syllabus_topics t
-    JOIN syllabus_units u ON t.unitId = u.id
-    JOIN syllabus_subjects s ON u.subjectId = s.id
-    WHERE t.status = 'inProgress'
-    ORDER BY (SELECT MAX(createdAtMillis) FROM syllabus_study_links WHERE topicId = t.id) ASC
-    LIMIT 5
-  """);
-
-  return [
-    ...revisionTopics,
-    ...inProgressTopics,
-  ];
-}
-
-/// Pace analysis for a subject: compare completed topics vs expected based on target date
-Future<Map<String, dynamic>> getSyllabusPaceAnalysis(int subjectId) async {
-  final db = await database;
-  final subject = await getSyllabusSubject(subjectId);
-  if (subject == null || subject.targetCompletionDateMillis == null) {
-    return {'status': 'No target date set'};
+    return rows.map((r) => StudyPlan.fromMap(r)).toList();
   }
 
-  final progress = await getSyllabusProgressForSubject(subjectId);
-  final total = progress['total'] as int;
-  final completed = progress['completed'] as int;
-
-  if (total == 0) return {'status': 'No topics'};
-
-  final targetDate = DateTime.fromMillisecondsSinceEpoch(subject.targetCompletionDateMillis!);
-  final now = DateTime.now();
-  final totalDays = targetDate.difference(now).inDays + 1; // including today
-  final daysPassed = now.difference(DateTime.fromMillisecondsSinceEpoch(subject.createdAtMillis)).inDays;
-
-  final expectedProgress = totalDays > 0 ? (daysPassed / totalDays) : 0;
-  final actualProgress = completed / total;
-
-  String status;
-  if (actualProgress >= expectedProgress) {
-    status = 'On Track';
-  } else if (actualProgress >= expectedProgress * 0.8) {
-    status = 'Slightly Behind';
-  } else {
-    status = 'Behind';
+  // ============================================================
+  // STUDY PLAN ITEMS CRUD
+  // ============================================================
+  Future<int> insertStudyPlanItem(StudyPlanItem item) async {
+    final db = await database;
+    return db.insert('study_plan_items', item.toMap()..remove('id'));
   }
 
-  return {
-    'status': status,
-    'percentage': actualProgress * 100,
-    'targetDate': targetDate.toIso8601String(),
-    'remainingTopics': total - completed,
-    'daysLeft': totalDays,
-  };
-}
-
-/// Auto-generate a StudyPlan for a given subject
-Future<StudyPlan> generateStudyPlan({
-  required String name,
-  required int subjectId,
-  required int dailyStudyMinutes,
-  int? eventId,
-}) async {
-  // Get all incomplete topics (not completed) ordered by difficulty (hard first) then random
-  final db = await database;
-  final rows = await db.rawQuery("""
-    SELECT t.*
-    FROM syllabus_topics t
-    JOIN syllabus_units u ON t.unitId = u.id
-    WHERE u.subjectId = ? AND t.status != 'completed'
-    ORDER BY 
-      CASE t.difficulty
-        WHEN 'hard' THEN 1
-        WHEN 'medium' THEN 2
-        WHEN 'easy' THEN 3
-        ELSE 4
-      END,
-      random()
-  """, [subjectId]);
-
-  final topics = rows.map((r) => SyllabusTopic.fromMap(r)).toList();
-  if (topics.isEmpty) {
-    throw Exception('No incomplete topics for this subject');
+  Future<int> updateStudyPlanItem(StudyPlanItem item) async {
+    final db = await database;
+    return db.update('study_plan_items', item.toMap(), where: 'id = ?', whereArgs: [item.id]);
   }
 
-  // Determine start and end dates (span over total estimated time)
-  int totalMinutes = 0;
-  for (final t in topics) {
-    totalMinutes += (t.estimatedMinutes ?? 60);
+  Future<int> deleteStudyPlanItem(int id) async {
+    final db = await database;
+    return db.delete('study_plan_items', where: 'id = ?', whereArgs: [id]);
   }
-  // Add 20% buffer for revision
-  totalMinutes = (totalMinutes * 1.2).toInt();
 
-  final now = DateTime.now();
-  final startDate = DateTime(now.year, now.month, now.day);
-  final daysNeeded = (totalMinutes / dailyStudyMinutes).ceil();
-  final endDate = startDate.add(Duration(days: daysNeeded));
+  Future<List<StudyPlanItem>> getStudyPlanItemsForPlan(int planId) async {
+    final db = await database;
+    final rows = await db.query(
+      'study_plan_items',
+      where: 'planId = ?',
+      whereArgs: [planId],
+      orderBy: 'scheduledDateMillis ASC',
+    );
+    return rows.map((r) => StudyPlanItem.fromMap(r)).toList();
+  }
 
-  // Insert StudyPlan
-  final plan = StudyPlan(
-    name: name,
-    eventId: eventId,
-    subjectId: subjectId,
-    startDateMillis: startDate.millisecondsSinceEpoch,
-    endDateMillis: endDate.millisecondsSinceEpoch,
-    dailyStudyMinutes: dailyStudyMinutes,
-    isActive: 1,
-    createdAtMillis: now.millisecondsSinceEpoch,
-  );
-  final planId = await insertStudyPlan(plan);
+  Future<List<StudyPlanItem>> getStudyPlanItemsForPlanInDateRange(
+    int planId,
+    int startMillis,
+    int endMillis,
+  ) async {
+    final db = await database;
+    final rows = await db.query(
+      'study_plan_items',
+      where: 'planId = ? AND scheduledDateMillis >= ? AND scheduledDateMillis < ?',
+      whereArgs: [planId, startMillis, endMillis],
+      orderBy: 'scheduledDateMillis ASC',
+    );
+    return rows.map((r) => StudyPlanItem.fromMap(r)).toList();
+  }
 
-  // Distribute topics across days (simple round-robin)
-  final days = daysNeeded;
-  final items = <StudyPlanItem>[];
-  for (int i = 0; i < topics.length; i++) {
-    final topic = topics[i];
-    final dayOffset = i % days; // simple distribution
-    final scheduledDate = startDate.add(Duration(days: dayOffset));
-    items.add(StudyPlanItem(
-      planId: planId,
-      topicId: topic.id,
-      scheduledDateMillis: scheduledDate.millisecondsSinceEpoch,
-      allocatedMinutes: (topic.estimatedMinutes ?? 60).clamp(10, dailyStudyMinutes),
-      isCompleted: 0,
-      notes: null,
+  Future<void> completeStudyPlanItem(int id) async {
+    final db = await database;
+    await db.update(
+      'study_plan_items',
+      {'isCompleted': 1},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // ============================================================
+  // SYLLABUS ANALYTICS
+  // ============================================================
+  Future<Map<String, dynamic>> getSyllabusProgressForSubject(int subjectId) async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT 
+        COUNT(t.id) as total,
+        SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed
+      FROM syllabus_topics t
+      JOIN syllabus_units u ON t.unitId = u.id
+      WHERE u.subjectId = ?
+    """, [subjectId]);
+    return {
+      'total': (result.first['total'] as int?) ?? 0,
+      'completed': (result.first['completed'] as int?) ?? 0,
+    };
+  }
+
+  Future<Map<String, dynamic>> getOverallSyllabusProgress() async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
+      FROM syllabus_topics
+    """);
+    return {
+      'total': (result.first['total'] as int?) ?? 0,
+      'completed': (result.first['completed'] as int?) ?? 0,
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> getWeakTopics() async {
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final sevenDaysAgo = now - const Duration(days: 7).inMilliseconds;
+    final rows = await db.rawQuery("""
+      SELECT t.*, u.subjectId, s.name as subjectName
+      FROM syllabus_topics t
+      JOIN syllabus_units u ON t.unitId = u.id
+      JOIN syllabus_subjects s ON u.subjectId = s.id
+      WHERE (t.status = 'needsRevision' OR (t.status = 'inProgress' AND t.createdAtMillis < ?))
+      ORDER BY t.createdAtMillis ASC
+    """, [sevenDaysAgo]);
+    return rows;
+  }
+
+  Future<List<Map<String, dynamic>>> getTopicsForToday() async {
+    final db = await database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final todayEnd = todayStart + const Duration(days: 1).inMilliseconds;
+
+    final revisionTopics = await db.rawQuery("""
+      SELECT DISTINCT t.*, s.name as subjectName
+      FROM syllabus_revision_schedules r
+      JOIN syllabus_topics t ON r.topicId = t.id
+      JOIN syllabus_units u ON t.unitId = u.id
+      JOIN syllabus_subjects s ON u.subjectId = s.id
+      WHERE r.scheduledDateMillis >= ? AND r.scheduledDateMillis < ? AND r.isCompleted = 0
+      ORDER BY r.revisionNumber ASC
+    """, [todayStart, todayEnd]);
+
+    final inProgressTopics = await db.rawQuery("""
+      SELECT t.*, s.name as subjectName
+      FROM syllabus_topics t
+      JOIN syllabus_units u ON t.unitId = u.id
+      JOIN syllabus_subjects s ON u.subjectId = s.id
+      WHERE t.status = 'inProgress'
+      ORDER BY (SELECT MAX(createdAtMillis) FROM syllabus_study_links WHERE topicId = t.id) ASC
+      LIMIT 5
+    """);
+
+    return [...revisionTopics, ...inProgressTopics];
+  }
+
+  Future<Map<String, dynamic>> getSyllabusPaceAnalysis(int subjectId) async {
+    final subject = await getSyllabusSubject(subjectId);
+    if (subject == null || subject.targetCompletionDateMillis == null) {
+      return {'status': 'No target date set'};
+    }
+    final progress = await getSyllabusProgressForSubject(subjectId);
+    final total = progress['total'] as int;
+    final completed = progress['completed'] as int;
+    if (total == 0) return {'status': 'No topics'};
+
+    final targetDate = DateTime.fromMillisecondsSinceEpoch(subject.targetCompletionDateMillis!);
+    final now = DateTime.now();
+    final totalDays = targetDate.difference(now).inDays + 1;
+    final daysPassed = now.difference(DateTime.fromMillisecondsSinceEpoch(subject.createdAtMillis)).inDays;
+    final expectedProgress = totalDays > 0 ? (daysPassed / totalDays) : 0;
+    final actualProgress = completed / total;
+
+    String status;
+    if (actualProgress >= expectedProgress) {
+      status = 'On Track';
+    } else if (actualProgress >= expectedProgress * 0.8) {
+      status = 'Slightly Behind';
+    } else {
+      status = 'Behind';
+    }
+    return {
+      'status': status,
+      'percentage': actualProgress * 100,
+      'targetDate': targetDate.toIso8601String(),
+      'remainingTopics': total - completed,
+      'daysLeft': totalDays,
+    };
+  }
+
+  // ============================================================
+  // STUDY PLAN GENERATION
+  // ============================================================
+  Future<StudyPlan> generateStudyPlan({
+    required String name,
+    required int subjectId,
+    required int dailyStudyMinutes,
+    int? eventId,
+  }) async {
+    final db = await database;
+    final rows = await db.rawQuery("""
+      SELECT t.*
+      FROM syllabus_topics t
+      JOIN syllabus_units u ON t.unitId = u.id
+      WHERE u.subjectId = ? AND t.status != 'completed'
+      ORDER BY 
+        CASE t.difficulty
+          WHEN 'hard' THEN 1
+          WHEN 'medium' THEN 2
+          WHEN 'easy' THEN 3
+          ELSE 4
+        END,
+        random()
+    """, [subjectId]);
+
+    final topics = rows.map((r) => SyllabusTopic.fromMap(r)).toList();
+    if (topics.isEmpty) {
+      throw Exception('No incomplete topics for this subject');
+    }
+
+    int totalMinutes = 0;
+    for (final t in topics) {
+      totalMinutes += (t.estimatedMinutes ?? 60);
+    }
+    totalMinutes = (totalMinutes * 1.2).toInt(); // 20% buffer
+
+    final now = DateTime.now();
+    final startDate = DateTime(now.year, now.month, now.day);
+    final daysNeeded = (totalMinutes / dailyStudyMinutes).ceil();
+    final endDate = startDate.add(Duration(days: daysNeeded));
+
+    final plan = StudyPlan(
+      name: name,
+      eventId: eventId,
+      subjectId: subjectId,
+      startDateMillis: startDate.millisecondsSinceEpoch,
+      endDateMillis: endDate.millisecondsSinceEpoch,
+      dailyStudyMinutes: dailyStudyMinutes,
+      isActive: 1,
       createdAtMillis: now.millisecondsSinceEpoch,
-    ));
+    );
+    final planId = await insertStudyPlan(plan);
+
+    final days = daysNeeded;
+    final items = <StudyPlanItem>[];
+    for (int i = 0; i < topics.length; i++) {
+      final topic = topics[i];
+      final dayOffset = i % days;
+      final scheduledDate = startDate.add(Duration(days: dayOffset));
+      items.add(StudyPlanItem(
+        planId: planId,
+        topicId: topic.id,
+        scheduledDateMillis: scheduledDate.millisecondsSinceEpoch,
+        allocatedMinutes: (topic.estimatedMinutes ?? 60).clamp(10, dailyStudyMinutes),
+        isCompleted: 0,
+        notes: null,
+        createdAtMillis: now.millisecondsSinceEpoch,
+      ));
+    }
+
+    for (final item in items) {
+      await insertStudyPlanItem(item);
+    }
+
+    final createdPlan = await getStudyPlan(planId);
+    return createdPlan!;
   }
 
-  for (final item in items) {
-    await insertStudyPlanItem(item);
+  // ============================================================
+  // EXPORT/IMPORT
+  // ============================================================
+  Future<Map<String, List<Map<String, dynamic>>>> exportAllTables() async {
+    final db = await database;
+    final result = <String, List<Map<String, dynamic>>>{};
+
+    const tables = [
+      'events',
+      'custom_reminders',
+      'notification_history',
+      'study_sessions',
+      'subtasks',
+      'flashcards',
+      'study_schedules',
+      'daily_goals',
+      'study_subjects',
+      'flashcard_review_history',
+      'daily_card_goals',
+      'grade_components',
+      'gpa_courses',
+      'quick_notes',
+      'attendance_logs',
+      'attendance_subjects',
+      'attendance_schedules',
+      'timetable_classes',
+      'timetable_tasks',
+      'academic_calendar',
+      'class_schedule',
+      'habits',
+      'habit_logs',
+      'reading_books',
+      'reading_sessions',
+      // syllabus tables
+      'syllabus_subjects',
+      'syllabus_units',
+      'syllabus_topics',
+      'syllabus_subtopics',
+      'syllabus_resources',
+      'syllabus_study_links',
+      'syllabus_revision_schedules',
+      'study_plans',
+      'study_plan_items',
+    ];
+
+    for (final table in tables) {
+      try {
+        final rows = await db.query(table);
+        result[table] = rows;
+      } catch (e) {
+        result[table] = [];
+      }
+    }
+
+    return result;
   }
 
-  // Return the newly created plan
-  final createdPlan = await getStudyPlan(planId);
-  return createdPlan!;
-}
+  Future<void> importAllTables(Map<String, List<Map<String, dynamic>>> data) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final entry in data.entries) {
+        final table = entry.key;
+        final rows = entry.value;
+        final tableCheck = await txn.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+          [table],
+        );
+        if (tableCheck.isEmpty) continue;
+        await txn.delete(table);
+        for (final row in rows) {
+          await txn.insert(table, row);
+        }
+      }
+    });
+  }
 
-// ============================================
-// UPDATE EXPORT/IMPORT TABLES LIST
-// ============================================
-// ⚠️ You must also add these new tables to the `tables` list inside `exportAllTables()`
-// and in `importAllTables()` accordingly.
-// Add the following table names to the const list:
-// 'syllabus_subjects', 'syllabus_units', 'syllabus_topics', 'syllabus_subtopics',
-// 'syllabus_resources', 'syllabus_study_links', 'syllabus_revision_schedules',
-// 'study_plans', 'study_plan_items'
+  // ============================================================
+  // UTILITY
+  // ============================================================
+  Future<void> vacuum() async {
+    final db = await database;
+    await db.execute('VACUUM');
+  }
 
-  // ============================================
-  // STATS METHODS (8 methods for stats_screen.dart)
-  // ============================================
+  // ============================================================
+  // NEET ANALYTICS (preserved from v16)
+  // ============================================================
+  String _neetSubjectName(int index) {
+    const names = ['Physics', 'Chemistry', 'Biology', 'General'];
+    return (index >= 0 && index < names.length) ? names[index] : 'Unknown';
+  }
+
+  Future<List<StudySession>> getStudySessionsForNeetSubject(int neetSubjectIndex) async {
+    final db = await database;
+    final rows = await db.query(
+      'study_sessions',
+      where: 'neetSubject = ?',
+      whereArgs: [neetSubjectIndex],
+      orderBy: 'completedAtMillis DESC',
+    );
+    return rows.map((r) => StudySession.fromMap(r)).toList();
+  }
+
+  Future<Map<String, int>> getTodayNeetSubjectMinutes() async {
+    final db = await database;
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final endOfDay = startOfDay + const Duration(days: 1).inMilliseconds;
+
+    final result = await db.rawQuery("""
+      SELECT neetSubject, COALESCE(SUM(durationMinutes), 0) as total
+      FROM study_sessions
+      WHERE completedAtMillis >= ? AND completedAtMillis < ? AND neetSubject IS NOT NULL
+      GROUP BY neetSubject
+    """, [startOfDay, endOfDay]);
+
+    final Map<String, int> breakdown = {};
+    for (final row in result) {
+      final subjectIdx = row['neetSubject'] as int?;
+      if (subjectIdx != null) {
+        breakdown[_neetSubjectName(subjectIdx)] = (row['total'] as int?) ?? 0;
+      }
+    }
+    return breakdown;
+  }
+
+  Future<Map<String, double>> getNeetSubjectAccuracy() async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT neetSubject,
+        SUM(mcqsAttempted) as attempted,
+        SUM(mcqsCorrect) as correct
+      FROM study_sessions
+      WHERE neetSubject IS NOT NULL AND mcqsAttempted > 0
+      GROUP BY neetSubject
+    """);
+
+    final Map<String, double> accuracy = {};
+    for (final row in result) {
+      final subjectIdx = row['neetSubject'] as int?;
+      final attempted = (row['attempted'] as int?) ?? 0;
+      final correct = (row['correct'] as int?) ?? 0;
+      if (subjectIdx != null && attempted > 0) {
+        accuracy[_neetSubjectName(subjectIdx)] = (correct / attempted * 100);
+      }
+    }
+    return accuracy;
+  }
+
+  Future<Map<String, int>> getTotalMcqStats() async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT 
+        COALESCE(SUM(mcqsAttempted), 0) as attempted,
+        COALESCE(SUM(mcqsCorrect), 0) as correct
+      FROM study_sessions
+    """);
+
+    return {
+      'attempted': (result.first['attempted'] as int?) ?? 0,
+      'correct': (result.first['correct'] as int?) ?? 0,
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> getMockTestScores() async {
+    final db = await database;
+    final rows = await db.rawQuery("""
+      SELECT completedAtMillis, mockTestScore, mockTestRank, subjectTag, neetSubject
+      FROM study_sessions
+      WHERE mockTestScore IS NOT NULL
+      ORDER BY completedAtMillis DESC
+    """);
+    return rows;
+  }
+
+  Future<int> getBestMockTestScore() async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT MAX(mockTestScore) as best
+      FROM study_sessions
+      WHERE mockTestScore IS NOT NULL
+    """);
+    return (result.first['best'] as int?) ?? 0;
+  }
+
+  // ============================================================
+  // STATS METHODS (for stats_screen)
+  // ============================================================
   Future<Map<int, int>> getSessionsByHour() async {
     final db = await database;
     final result = await db.rawQuery("""
@@ -3830,7 +3690,6 @@ Future<StudyPlan> generateStudyPlan({
       final minutes = (row['minutes'] as int?) ?? 0;
       hourlyMinutes[hour] = minutes;
     }
-
     return hourlyMinutes;
   }
 
@@ -3840,7 +3699,6 @@ Future<StudyPlan> generateStudyPlan({
       SELECT AVG(durationMinutes) as avgDuration
       FROM study_sessions
     """);
-
     final avg = result.first['avgDuration'];
     if (avg == null) return 0.0;
     return (avg as num).toDouble();
@@ -3852,7 +3710,6 @@ Future<StudyPlan> generateStudyPlan({
       SELECT MAX(durationMinutes) as maxDuration
       FROM study_sessions
     """);
-
     return (result.first['maxDuration'] as int?) ?? 0;
   }
 
@@ -3861,13 +3718,11 @@ Future<StudyPlan> generateStudyPlan({
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
     final endOfDay = startOfDay + const Duration(days: 1).inMilliseconds;
-
     final result = await db.rawQuery("""
       SELECT COUNT(*) as count
       FROM study_sessions
       WHERE completedAtMillis >= ? AND completedAtMillis < ?
     """, [startOfDay, endOfDay]);
-
     return (result.first['count'] as int?) ?? 0;
   }
 
@@ -3878,27 +3733,23 @@ Future<StudyPlan> generateStudyPlan({
       FROM study_sessions
       GROUP BY sessionType
     """);
-
     final Map<String, int> breakdown = {};
     for (final row in result) {
       final type = (row['sessionType'] as String?) ?? 'unknown';
       final count = (row['count'] as int?) ?? 0;
       breakdown[type] = count;
     }
-
     return breakdown;
   }
 
   Future<int> getWeeklyMinutes(int weekStartMillis) async {
     final db = await database;
     final weekEndMillis = weekStartMillis + const Duration(days: 7).inMilliseconds;
-
     final result = await db.rawQuery("""
       SELECT COALESCE(SUM(durationMinutes), 0) as total
       FROM study_sessions
       WHERE completedAtMillis >= ? AND completedAtMillis < ?
     """, [weekStartMillis, weekEndMillis]);
-
     return (result.first['total'] as int?) ?? 0;
   }
 
@@ -3908,35 +3759,29 @@ Future<StudyPlan> generateStudyPlan({
     final endOfMonth = month == 12
         ? DateTime(year + 1, 1, 1).millisecondsSinceEpoch
         : DateTime(year, month + 1, 1).millisecondsSinceEpoch;
-
     final result = await db.rawQuery("""
       SELECT COALESCE(SUM(durationMinutes), 0) as total
       FROM study_sessions
       WHERE completedAtMillis >= ? AND completedAtMillis < ?
     """, [startOfMonth, endOfMonth]);
-
     return (result.first['total'] as int?) ?? 0;
   }
 
   Future<int> getStudyEfficiencyScore() async {
     final db = await database;
-
     final goalResult = await db.rawQuery("""
       SELECT 
         COALESCE(SUM(targetMinutes), 0) as totalTarget,
         COALESCE(SUM(achievedMinutes), 0) as totalAchieved
       FROM daily_goals
     """);
-
     final totalTarget = (goalResult.first['totalTarget'] as int?) ?? 0;
     final totalAchieved = (goalResult.first['totalAchieved'] as int?) ?? 0;
-
     final sessionResult = await db.rawQuery("""
       SELECT COUNT(*) as sessionCount
       FROM study_sessions
     """);
     final sessionCount = (sessionResult.first['sessionCount'] as int?) ?? 0;
-
     final streak = await getLatestStreak();
 
     double baseScore = 0;
@@ -3962,80 +3807,74 @@ Future<StudyPlan> generateStudyPlan({
     return totalScore;
   }
 
-  // ============================================
-  // EXPORT/IMPORT (PRESERVED + v16)
-  // ============================================
-  Future<Map<String, List<Map<String, dynamic>>>> exportAllTables() async {
+  // ============================================================
+  // HOME SCREEN HELPERS
+  // ============================================================
+  Future<bool> hasStudySessionsOnDate(int dateMillis) async {
     final db = await database;
-    final result = <String, List<Map<String, dynamic>>>{};
+    final endOfDay = dateMillis + const Duration(days: 1).inMilliseconds;
+    final result = await db.rawQuery("""
+      SELECT COUNT(*) as count FROM study_sessions
+      WHERE completedAtMillis >= ? AND completedAtMillis < ?
+    """, [dateMillis, endOfDay]);
+    return ((result.first['count'] as int?) ?? 0) > 0;
+  }
 
-    const tables = [
+  Future<Map<String, dynamic>> getTodayAttendanceSummary() async {
+    final db = await database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final todayEnd = todayStart + const Duration(days: 1).inMilliseconds;
+
+    final result = await db.rawQuery("""
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present,
+        SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent,
+        SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late
+      FROM attendance_logs
+      WHERE dateMillis >= ? AND dateMillis < ?
+    """, [todayStart, todayEnd]);
+
+    final total = (result.first['total'] as int?) ?? 0;
+    final present = (result.first['present'] as int?) ?? 0;
+    final absent = (result.first['absent'] as int?) ?? 0;
+    final late = (result.first['late'] as int?) ?? 0;
+    final percentage = total > 0 ? ((present + late * 0.5) / total * 100) : 0.0;
+
+    return {
+      'total': total,
+      'present': present,
+      'absent': absent,
+      'late': late,
+      'percentage': percentage,
+    };
+  }
+
+  Future<List<Event>> getUpcomingEvents(int daysAhead) async {
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final endMillis = now + Duration(days: daysAhead).inMilliseconds;
+    final rows = await db.query(
       'events',
-      'custom_reminders',
-      'notification_history',
-      'study_sessions',
-      'subtasks',
-      'flashcards',
-      'study_schedules',
-      'daily_goals',
-      'study_subjects',
-      'flashcard_review_history',
-      'daily_card_goals',
-      'grade_components',
-      'gpa_courses', // NEW v16
-      'quick_notes',
-      'attendance_logs',
-      'attendance_subjects',
-      'attendance_schedules',
-      'timetable_classes',
-      'timetable_tasks',
-      'academic_calendar',
-      'class_schedule',
-      'habits',
-      'habit_logs',
-      'reading_books',
-      'reading_sessions',
-    ];
-
-    for (final table in tables) {
-      try {
-        final rows = await db.query(table);
-        result[table] = rows;
-      } catch (e) {
-        result[table] = [];
-      }
-    }
-
-    return result;
+      where: 'dateMillis >= ? AND dateMillis < ? AND isCompleted = 0',
+      whereArgs: [now, endMillis],
+      orderBy: 'dateMillis ASC',
+      limit: 10,
+    );
+    return rows.map((r) => Event.fromMap(r)).toList();
   }
 
-  Future<void> importAllTables(Map<String, List<Map<String, dynamic>>> data) async {
+  Future<List<Event>> getOverdueEvents() async {
     final db = await database;
-    await db.transaction((txn) async {
-      for (final entry in data.entries) {
-        final table = entry.key;
-        final rows = entry.value;
-
-        final tableCheck = await txn.rawQuery(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-          [table],
-        );
-        if (tableCheck.isEmpty) continue;
-
-        await txn.delete(table);
-        for (final row in rows) {
-          await txn.insert(table, row);
-        }
-      }
-    });
-  }
-
-  // ============================================
-  // UTILITY (PRESERVED)
-  // ============================================
-  Future<void> vacuum() async {
-    final db = await database;
-    await db.execute('VACUUM');
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rows = await db.query(
+      'events',
+      where: 'dateMillis < ? AND isCompleted = 0',
+      whereArgs: [now],
+      orderBy: 'dateMillis ASC',
+      limit: 10,
+    );
+    return rows.map((r) => Event.fromMap(r)).toList();
   }
 }
-// --- END OF FILE ---
