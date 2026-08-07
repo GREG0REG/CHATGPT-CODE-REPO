@@ -7,7 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../db/database_helper.dart';
+import '../database_helper.dart';
 import '../models/event.dart';
 import '../models/subtask.dart';
 import 'main_screen.dart';
