@@ -1,22 +1,9 @@
 // FILE: lib/screens/main_screen.dart
-// COMPLETE REPLACEMENT — "NEET Flow" Premium Shell
-// FEATURES:
-//  1. Live NEET Exam Countdown Banner (editable target date)
-//  2. Live Study Dashboard in drawer header (minutes, sessions, streak)
-//  3. Bottom Navigation Bar (5 primary tabs) + Drawer for tools
-//  4. Medical-themed animated drawer header (pulse icon, teal gradient)
-//  5. Contextual red badges on drawer items (events, flashcards, timetable)
-//  6. Today's Schedule Peek card (next 2 classes/tasks)
-//  7. Subject color coding & medical iconography
-//  8. Haptic feedback + smooth transitions
-//  9. Rotating medical quotes in drawer header
-//  10. Streak celebration overlay (emoji confetti at ≥3 days)
-//  11. Adaptive tablet layout (NavigationRail when width > 600dp)
-//  12. NEET Subject Quick-Action chips in drawer header
-//  13. Enhanced countdown with circular progress ring
-//  14. Study streak flame animation
-//  15. Today's NEET subject breakdown mini-card
-//  REMOVED: Spark FAB (was overlapping with add event button, non-functional)
+// COMPLETE REPLACEMENT — "NEET Flow" Premium Shell with Syllabus Tab
+// CHANGES:
+//  1. Added SyllabusListScreen as new bottom navigation tab
+//  2. Updated bottom nav items, indices, and screens list
+//  3. All other features preserved (countdown, drawer, stats, etc.)
 
 import 'dart:async';
 import 'dart:math';
@@ -37,6 +24,9 @@ import 'timetable_screen.dart';
 import 'settings_screen.dart';
 import 'habit_screen.dart';
 import 'reading_screen.dart';
+// NEW: Syllabus imports
+import 'syllabus_list_screen.dart';
+import 'study_planner_screen.dart';
 
 final GlobalKey<ScaffoldState> mainScaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -98,13 +88,14 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   final List<_ConfettiParticle> _particles = [];
 
   // Bottom nav → screen index mapping
-  final List<int> _bottomNavIndices = const [0, 1, 9, 2, 6];
+  final List<int> _bottomNavIndices = const [0, 1, 9, 2, 6, 10];
   final List<_NavItem> _bottomItems = const [
     _NavItem(index: 0, label: 'Home', icon: Icons.calendar_today),
     _NavItem(index: 1, label: 'Focus', icon: Icons.timer),
     _NavItem(index: 9, label: 'Table', icon: Icons.schedule),
     _NavItem(index: 2, label: 'Cards', icon: Icons.style),
     _NavItem(index: 6, label: 'Read', icon: Icons.menu_book),
+    _NavItem(index: 10, label: 'Syllabus', icon: Icons.subject), // NEW
   ];
 
   // Habit REMOVED from main drawer — now only in Tracking section
@@ -121,17 +112,19 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     _DrawerItem(index: 7, label: 'Habits', icon: Icons.check_circle_outline, isTracking: true),
   ];
 
+  // Screens list – added SyllabusListScreen at index 10
   final List<Widget> _screens = const [
-    HomeScreen(),
-    PomodoroScreen(),
-    FlashcardScreen(),
-    AssignmentTrackerScreen(),
-    StatsScreen(),
-    QuickNotesScreen(),
-    ReadingScreen(),
-    HabitScreen(),
-    AttendanceScreen(),
-    TimetableScreen(),
+    HomeScreen(), // 0
+    PomodoroScreen(), // 1
+    FlashcardScreen(), // 2
+    AssignmentTrackerScreen(), // 3
+    StatsScreen(), // 4
+    QuickNotesScreen(), // 5
+    ReadingScreen(), // 6
+    HabitScreen(), // 7
+    AttendanceScreen(), // 8
+    TimetableScreen(), // 9
+    SyllabusListScreen(), // 10  ← NEW
   ];
 
   @override
@@ -512,8 +505,6 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
           );
         }).toList(),
       ),
-      // SPARK FAB REMOVED — was overlapping with HomeScreen's add event button
-      // and was non-functional per user request
     );
   }
 
