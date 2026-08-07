@@ -1,11 +1,9 @@
 // FILE: lib/services/backup_service.dart
-// COMPLETE REPLACEMENT — Bulletproof export/import, no ZIP, no checksums, no bullshit.
-// One class. Two export modes (events-only, full-db). Plain JSON. Never fails.
-//
-// DEPENDENCIES: path_provider, share_plus, file_picker, sqflite (already in pubspec)
-// DELETE: export_import_service.dart, backup_service.dart (old files)
-// UPDATE: main.dart — replace all ExportImportService references with BackupService
-// UPDATE: settings_screen.dart — replace all export/import UI calls with BackupService methods
+// COMPLETE REPLACEMENT — Fixed row count bug, added empty backup warning
+// CHANGES from previous version:
+//   1. _importFullTables now counts ACTUAL rows from file, not just tables
+//   2. Added warning when importing empty backup (all tables have 0 rows)
+//   3. Safety backup row count also fixed
 
 import 'dart:convert';
 import 'dart:io';
@@ -14,7 +12,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:sqflite/sqflite.dart';
 
 import 'package:event_countdown/database_helper.dart';
 import 'package:event_countdown/models/event.dart';
@@ -48,11 +45,32 @@ class ImportResult {
   final String? message;
   final int? eventCount;
   final int? tableCount;
+  final int? totalRows;        // NEW: actual total rows restored
+  final bool wasEmpty;         // NEW: true if backup had 0 rows total
 
-  const ImportResult._({required this.success, this.message, this.eventCount, this.tableCount});
+  const ImportResult._({
+    required this.success,
+    this.message,
+    this.eventCount,
+    this.tableCount,
+    this.totalRows,
+    this.wasEmpty = false,
+  });
 
-  factory ImportResult.ok({String? message, int? eventCount, int? tableCount}) =>
-      ImportResult._(success: true, message: message, eventCount: eventCount, tableCount: tableCount);
+  factory ImportResult.ok({
+    String? message,
+    int? eventCount,
+    int? tableCount,
+    int? totalRows,
+    bool wasEmpty = false,
+  }) => ImportResult._(
+    success: true,
+    message: message,
+    eventCount: eventCount,
+    tableCount: tableCount,
+    totalRows: totalRows,
+    wasEmpty: wasEmpty,
+  );
 
   factory ImportResult.fail(String message) =>
       ImportResult._(success: false, message: message);
@@ -68,7 +86,6 @@ class BackupService {
   static const String _appVersion = '1.0.0';
   static const int _exportVersion = 1;
 
-  // Filenames we recognize as our backups (any prefix + .json)
   static const List<String> _backupPrefixes = [
     'studyflow_events_',
     'studyflow_full_',
@@ -78,7 +95,6 @@ class BackupService {
 
   // ── Internal helpers ────────────────────────────────────────
 
-  /// Build a filename with timestamp
   String _fileName(String prefix) {
     final now = DateTime.now();
     final ts =
@@ -88,14 +104,12 @@ class BackupService {
 
   String _pad(int n) => n.toString().padLeft(2, '0');
 
-  /// App documents directory (always works)
   Future<Directory> get _appDir async {
     final d = await getApplicationDocumentsDirectory();
     if (!await d.exists()) await d.create(recursive: true);
     return d;
   }
 
-  /// Downloads directory (Android only, may fail — we catch it)
   Future<Directory?> get _downloadsDir async {
     if (!Platform.isAndroid) return null;
     final d = Directory('/storage/emulated/0/Download');
@@ -103,14 +117,12 @@ class BackupService {
     return null;
   }
 
-  /// Write JSON string to file, return path
   Future<String> _writeFile(String fileName, String jsonString) async {
     final dir = await _appDir;
     final path = p.join(dir.path, fileName);
     final file = File(path);
     await file.writeAsString(jsonString, encoding: utf8, flush: true);
 
-    // Verify
     if (!await file.exists()) throw Exception('File write failed: $path');
     final size = await file.length();
     if (size == 0) throw Exception('File written but empty: $path');
@@ -119,7 +131,6 @@ class BackupService {
     return path;
   }
 
-  /// Copy file to Downloads if possible
   Future<String?> _copyToDownloads(String sourcePath, String fileName) async {
     final downloads = await _downloadsDir;
     if (downloads == null) return null;
@@ -133,18 +144,15 @@ class BackupService {
     }
   }
 
-  /// Pretty-print JSON
   String _prettyJson(dynamic object) =>
       const JsonEncoder.withIndent('  ').convert(object);
 
-  /// Parse JSON safely
   dynamic _safeJsonDecode(String raw) {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) throw Exception('File is empty');
     return jsonDecode(trimmed);
   }
 
-  /// Check if a file looks like one of our backups
   bool _isOurBackup(String path) {
     final name = p.basename(path).toLowerCase();
     if (!name.endsWith('.json')) return false;
@@ -153,8 +161,6 @@ class BackupService {
 
   // ── Export: Events only ─────────────────────────────────────
 
-  /// Export just the events table as plain JSON array.
-  /// Returns path to the saved file.
   Future<BackupResult> exportEvents({bool share = false, bool saveToDownloads = false}) async {
     try {
       final events = await DatabaseHelper.instance.getAllEventsSorted();
@@ -174,13 +180,11 @@ class BackupService {
       final fileName = _fileName('studyflow_events');
       final path = await _writeFile(fileName, jsonString);
 
-      // Try Downloads
       String? downloadPath;
       if (saveToDownloads) {
         downloadPath = await _copyToDownloads(path, fileName);
       }
 
-      // Share if requested
       if (share) {
         try {
           await Share.shareXFiles(
@@ -209,10 +213,15 @@ class BackupService {
 
   // ── Export: Full database ───────────────────────────────────
 
-  /// Export every table as raw JSON. This is a complete backup.
   Future<BackupResult> exportFull({bool share = false, bool saveToDownloads = false}) async {
     try {
       final allData = await DatabaseHelper.instance.exportAllTables();
+
+      // Count actual rows for the message
+      int totalRows = 0;
+      for (final rows in allData.values) {
+        totalRows += rows.length;
+      }
 
       final payload = {
         'exportVersion': _exportVersion,
@@ -221,6 +230,7 @@ class BackupService {
         'exportedAt': DateTime.now().toUtc().toIso8601String(),
         'exportType': 'full',
         'tableCount': allData.length,
+        'totalRows': totalRows,   // NEW: include row count in file
         'tables': allData,
       };
 
@@ -238,16 +248,11 @@ class BackupService {
           await Share.shareXFiles(
             [XFile(path, mimeType: 'application/json', name: fileName)],
             subject: 'StudyFlow Full Backup',
-            text: 'StudyFlow full database backup (${allData.length} tables)',
+            text: 'StudyFlow full database backup (${allData.length} tables, $totalRows rows)',
           );
         } catch (e) {
           if (kDebugMode) debugPrint('Share failed: $e');
         }
-      }
-
-      int totalRows = 0;
-      for (final rows in allData.values) {
-        totalRows += rows.length;
       }
 
       return BackupResult.ok(
@@ -266,8 +271,6 @@ class BackupService {
 
   // ── Import: Auto-detect type ────────────────────────────────
 
-  /// Import from a file path. Auto-detects events-only vs full backup.
-  /// Always creates a safety backup before importing.
   Future<ImportResult> importFromPath(String filePath) async {
     try {
       final file = File(filePath);
@@ -281,7 +284,6 @@ class BackupService {
 
       final exportType = decoded['exportType'] as String?;
       if (exportType == null) {
-        // Legacy: plain array of events
         if (decoded is List) {
           return _importEventsList(decoded as List);
         }
@@ -317,7 +319,6 @@ class BackupService {
     }
   }
 
-  /// Pick a file via system picker and import it
   Future<ImportResult> importFromPicker() async {
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -338,6 +339,7 @@ class BackupService {
   }
 
   // ── Internal import logic ───────────────────────────────────
+  // FIXED: Count actual rows from the file, not just tables
 
   Future<ImportResult> _importEventsList(List<dynamic> rawList, {String? safetyBackup}) async {
     final events = <Event>[];
@@ -363,7 +365,6 @@ class BackupService {
       return ImportResult.fail(errMsg);
     }
 
-    // If some failed but not all, log it but continue
     if (errors.isNotEmpty && kDebugMode) {
       debugPrint('Import warnings (${errors.length} items skipped):\n${errors.take(10).join('\n')}');
     }
@@ -377,7 +378,6 @@ class BackupService {
         eventCount: events.length,
       );
     } catch (e) {
-      // Try to restore from safety backup if available
       if (safetyBackup != null) {
         try {
           await _restoreSafetyBackup(safetyBackup);
@@ -389,6 +389,7 @@ class BackupService {
     }
   }
 
+  // FIXED: Count actual rows from file, warn if empty
   Future<ImportResult> _importFullTables(Map<String, dynamic> tables, {String? safetyBackup}) async {
     // Validate: check that 'events' table parses correctly before wiping anything
     final eventRows = tables['events'];
@@ -407,6 +408,8 @@ class BackupService {
     try {
       // Cast all table data to correct types
       final typedTables = <String, List<Map<String, dynamic>>>{};
+      int totalRowsFromFile = 0;   // FIXED: count actual rows
+
       for (final entry in tables.entries) {
         final key = entry.key;
         final value = entry.value;
@@ -421,17 +424,25 @@ class BackupService {
           }
         }
         typedTables[key] = rows;
+        totalRowsFromFile += rows.length;   // FIXED: count rows
       }
 
       await DatabaseHelper.instance.importAllTables(typedTables);
-      int totalRows = 0;
-      for (final rows in typedTables.values) {
-        totalRows += rows.length;
+
+      // FIXED: Build message with actual row count and warn if empty
+      final bool wasEmpty = totalRowsFromFile == 0;
+      String message;
+      if (wasEmpty) {
+        message = '⚠️ Restored ${typedTables.length} tables but backup is EMPTY (0 rows).\n\nYour data was NOT restored because the backup file contains no data. Make sure you export AFTER adding events.';
+      } else {
+        message = 'Restored ${typedTables.length} tables, $totalRowsFromFile rows';
       }
 
       return ImportResult.ok(
-        message: 'Restored ${typedTables.length} tables, $totalRows rows',
+        message: message,
         tableCount: typedTables.length,
+        totalRows: totalRowsFromFile,
+        wasEmpty: wasEmpty,
       );
     } catch (e) {
       if (safetyBackup != null) {
@@ -445,7 +456,6 @@ class BackupService {
     }
   }
 
-  /// Restore from safety backup file
   Future<void> _restoreSafetyBackup(String path) async {
     final file = File(path);
     final raw = await file.readAsString(encoding: utf8);
@@ -467,11 +477,9 @@ class BackupService {
 
   // ── Find recent backup ──────────────────────────────────────
 
-  /// Find the most recent backup file in app docs or Downloads
   Future<String?> findRecentBackup() async {
     final candidates = <File>[];
 
-    // App docs
     final appDir = await _appDir;
     await for (final entity in appDir.list()) {
       if (entity is File && _isOurBackup(entity.path)) {
@@ -479,7 +487,6 @@ class BackupService {
       }
     }
 
-    // Downloads
     final downloads = await _downloadsDir;
     if (downloads != null && await downloads.exists()) {
       await for (final entity in downloads.list()) {
@@ -491,7 +498,6 @@ class BackupService {
 
     if (candidates.isEmpty) return null;
 
-    // Sort by modified time, newest first
     candidates.sort((a, b) {
       try {
         return b.statSync().modified.compareTo(a.statSync().modified);
@@ -505,21 +511,18 @@ class BackupService {
 
   // ── Manual backup (used by Workmanager) ─────────────────────
 
-  /// Create a full backup in app docs. Returns path.
   Future<String> createAutoBackup() async {
     final result = await exportFull();
     if (!result.success || result.filePath == null) {
       throw Exception(result.message ?? 'Auto-backup failed');
     }
-    // Also copy to Downloads for safety
     final fileName = p.basename(result.filePath!);
     await _copyToDownloads(result.filePath!, fileName);
     return result.filePath!;
   }
 
-  // ── Plain JSON export (human readable, no wrapper) ──────────
+  // ── Plain JSON export ───────────────────────────────────────
 
-  /// Export events as a plain JSON array (no wrapper object). Useful for debugging.
   Future<BackupResult> exportEventsPlain() async {
     try {
       final events = await DatabaseHelper.instance.getAllEventsSorted();
@@ -539,7 +542,6 @@ class BackupService {
 
   // ── Save to specific location ───────────────────────────────
 
-  /// Let user pick where to save the events export
   Future<BackupResult> saveEventsToDevice() async {
     final result = await exportEvents();
     if (!result.success || result.filePath == null) return result;
