@@ -500,6 +500,107 @@ class DatabaseHelper {
         createdAtMillis INTEGER NOT NULL
       )
     """);
+    // Inside _createTables(), after reading_sessions:
+
+    // ---- SYLLABUS TABLES (v17) ----
+    await db.execute("""
+      CREATE TABLE syllabus_subjects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        colorHex TEXT DEFAULT '#2196F3',
+        targetCompletionDateMillis INTEGER,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE syllabus_units (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subjectId INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        orderIndex INTEGER DEFAULT 0,
+        weightage INTEGER,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE syllabus_topics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        unitId INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        orderIndex INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'notStarted',
+        difficulty TEXT,
+        estimatedMinutes INTEGER,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE syllabus_subtopics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topicId INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        orderIndex INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'notStarted',
+        notes TEXT,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE syllabus_resources (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topicId INTEGER,
+        subtopicId INTEGER,
+        resourceType TEXT NOT NULL,
+        title TEXT NOT NULL,
+        filePath TEXT,
+        url TEXT,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE syllabus_study_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topicId INTEGER NOT NULL,
+        studySessionId INTEGER NOT NULL,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE syllabus_revision_schedules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topicId INTEGER NOT NULL,
+        revisionNumber INTEGER NOT NULL,
+        scheduledDateMillis INTEGER NOT NULL,
+        isCompleted INTEGER DEFAULT 0,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+    // ---- STUDY PLANS (v17) ----
+    await db.execute("""
+      CREATE TABLE study_plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        eventId INTEGER,
+        subjectId INTEGER,
+        startDateMillis INTEGER NOT NULL,
+        endDateMillis INTEGER NOT NULL,
+        dailyStudyMinutes INTEGER DEFAULT 120,
+        isActive INTEGER DEFAULT 1,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+    await db.execute("""
+      CREATE TABLE study_plan_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        planId INTEGER NOT NULL,
+        topicId INTEGER,
+        scheduledDateMillis INTEGER NOT NULL,
+        allocatedMinutes INTEGER DEFAULT 60,
+        isCompleted INTEGER DEFAULT 0,
+        notes TEXT,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
   }
 
   // ============================================
