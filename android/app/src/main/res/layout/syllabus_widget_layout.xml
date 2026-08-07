@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/syllabus_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="10dp"
+    android:background="#E6254D40">
+
+    <!-- EMPTY STATE -->
+    <LinearLayout
+        android:id="@+id/syllabus_widget_empty_state"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📚"
+            android:textSize="28sp"
+            android:layout_marginBottom="6dp"/>
+
+        <TextView
+            android:id="@+id/syllabus_widget_empty_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Syllabus"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/syllabus_widget_empty_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="No subjects yet"
+            android:textColor="#B0FFFFFF"
+            android:textSize="12sp"
+            android:layout_marginTop="3dp" />
+    </LinearLayout>
+
+    <!-- CONTENT STATE -->
+    <LinearLayout
+        android:id="@+id/syllabus_widget_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:visibility="visible">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📊 Syllabus"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Subject 0 -->
+        <TextView
+            android:id="@+id/syllabus_name_0"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Subject"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <ProgressBar
+                android:id="@+id/syllabus_progress_0"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="3dp"
+                android:layout_marginTop="1dp"
+                android:max="100"
+                android:progress="0"
+                android:progressTint="#2196F3"
+                android:progressBackgroundTint="#20FFFFFF" />
+
+            <TextView
+                android:id="@+id/syllabus_pct_0"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0%"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:layout_marginStart="4dp" />
+        </LinearLayout>
+
+        <!-- Subject 1 -->
+        <TextView
+            android:id="@+id/syllabus_name_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Subject"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:layout_marginTop="4dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <ProgressBar
+                android:id="@+id/syllabus_progress_1"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="3dp"
+                android:layout_marginTop="1dp"
+                android:max="100"
+                android:progress="0"
+                android:progressTint="#2196F3"
+                android:progressBackgroundTint="#20FFFFFF" />
+
+            <TextView
+                android:id="@+id/syllabus_pct_1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0%"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:layout_marginStart="4dp" />
+        </LinearLayout>
+
+        <!-- Subject 2 -->
+        <TextView
+            android:id="@+id/syllabus_name_2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Subject"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:layout_marginTop="4dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <ProgressBar
+                android:id="@+id/syllabus_progress_2"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="3dp"
+                android:layout_marginTop="1dp"
+                android:max="100"
+                android:progress="0"
+                android:progressTint="#2196F3"
+                android:progressBackgroundTint="#20FFFFFF" />
+
+            <TextView
+                android:id="@+id/syllabus_pct_2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0%"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:layout_marginStart="4dp" />
+        </LinearLayout>
+
+        <!-- Subject 3 -->
+        <TextView
+            android:id="@+id/syllabus_name_3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Subject"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:layout_marginTop="4dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <ProgressBar
+                android:id="@+id/syllabus_progress_3"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="3dp"
+                android:layout_marginTop="1dp"
+                android:max="100"
+                android:progress="0"
+                android:progressTint="#2196F3"
+                android:progressBackgroundTint="#20FFFFFF" />
+
+            <TextView
+                android:id="@+id/syllabus_pct_3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0%"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:layout_marginStart="4dp" />
+        </LinearLayout>
+
+        <!-- Subject 4 -->
+        <TextView
+            android:id="@+id/syllabus_name_4"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Subject"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:layout_marginTop="4dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <ProgressBar
+                android:id="@+id/syllabus_progress_4"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="3dp"
+                android:layout_marginTop="1dp"
+                android:max="100"
+                android:progress="0"
+                android:progressTint="#2196F3"
+                android:progressBackgroundTint="#20FFFFFF" />
+
+            <TextView
+                android:id="@+id/syllabus_pct_4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0%"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:layout_marginStart="4dp" />
+        </LinearLayout>
+
+    </LinearLayout>
+</LinearLayout>
