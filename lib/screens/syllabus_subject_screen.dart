@@ -56,6 +56,15 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
     if (result == true) await _loadData();
   }
 
+  String _statusDisplay(String status) {
+    // Convert camelCase to words: "notStarted" -> "Not Started"
+    final words = status.replaceAllMapped(
+      RegExp(r'([A-Z])'),
+      (match) => ' ${match.group(1)}',
+    );
+    return words[0].toUpperCase() + words.substring(1).toLowerCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -119,11 +128,12 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
             'needsRevision': Colors.red,
           };
           final color = statusColors[topic.status] ?? Colors.grey;
+          final displayStatus = _statusDisplay(topic.status);
           return ListTile(
             leading: CircleAvatar(radius: 6, backgroundColor: color),
             title: Text(topic.name),
             trailing: Text(
-              topic.status.replaceFirst(RegExp(r'([A-Z])'), ' $1').trim(),
+              displayStatus,
               style: TextStyle(fontSize: 12, color: color),
             ),
             onTap: () {
