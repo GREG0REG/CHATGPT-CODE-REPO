@@ -1,3 +1,11 @@
+// FILE: lib/main.dart
+// COMPLETE REPLACEMENT — Fixed BackupService calls, uses new singleton API
+// CHANGES:
+//   1. Replaced old BackupService static calls with BackupService.instance
+//   2. Workmanager backup task now calls BackupService.instance.createAutoBackup()
+//   3. Removed old ExportImportService import
+//   4. First-launch restore uses BackupService.instance.importFromPath()
+
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
@@ -9,7 +17,6 @@ import 'package:event_countdown/screens/home_screen.dart';
 import 'package:event_countdown/screens/main_screen.dart';
 import 'package:event_countdown/screens/widget_settings_screen.dart';
 import 'package:event_countdown/screens/stats_screen.dart';
-import 'package:event_countdown/services/backup_service.dart';
 import 'package:event_countdown/services/notification_service.dart';
 import 'package:event_countdown/services/pomodoro_service.dart';
 import 'package:event_countdown/services/settings_service.dart';
@@ -22,11 +29,7 @@ const String kWidgetRefreshFrequentTaskName = 'event_countdown_widget_frequent';
 const String kBackupTaskName = 'event_countdown_weekly_backup';
 const String kAttendanceWidgetRefreshTaskName = 'event_countdown_attendance_widget_refresh';
 const String kTimetableWidgetRefreshTaskName = 'event_countdown_timetable_widget_refresh';
-
-// ── NEW: NEET Countdown Widget periodic refresh ──
 const String kNeetCountdownTaskName = 'event_countdown_neet_widget_refresh';
-
-// ── NEW: NEET Motivational Notification daily at 6 AM ──
 const String kNeetMotivationTaskName = 'event_countdown_neet_motivation';
 
 @pragma('vm:entry-point')
@@ -81,10 +84,15 @@ void callbackDispatcher() {
         return false;
       }
     } else if (task == kBackupTaskName) {
-      return Future.value(await BackupService.executeBackup());
-    }
-    // ── NEW: NEET Countdown Widget Refresh ──
-    else if (task == kNeetCountdownTaskName) {
+      // FIXED: Use new BackupService singleton API
+      try {
+        await BackupService.instance.createAutoBackup();
+        return true;
+      } catch (e) {
+        debugPrint('Auto-backup error: $e');
+        return false;
+      }
+    } else if (task == kNeetCountdownTaskName) {
       try {
         await WidgetService.refreshNeetCountdownWidget();
         await WidgetService.refreshSubjectStreakWidget();
@@ -95,9 +103,7 @@ void callbackDispatcher() {
         debugPrint('NEET widget refresh error: $e');
         return false;
       }
-    }
-    // ── NEW: NEET Motivational Notification ──
-    else if (task == kNeetMotivationTaskName) {
+    } else if (task == kNeetMotivationTaskName) {
       try {
         await NotificationService.instance.showNeetMotivationNotification();
         return true;
@@ -114,7 +120,6 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await BatteryService.instance.initialize();
-
   await NotificationService.instance.init();
   await PomodoroService.instance.init();
 
@@ -163,7 +168,6 @@ Future<void> main() async {
     existingWorkPolicy: ExistingWorkPolicy.keep,
   );
 
-  // ── NEW: Register NEET Countdown Widget periodic refresh (hourly) ──
   await Workmanager().registerPeriodicTask(
     kNeetCountdownTaskName,
     kNeetCountdownTaskName,
@@ -172,7 +176,6 @@ Future<void> main() async {
     existingWorkPolicy: ExistingWorkPolicy.keep,
   );
 
-  // ── NEW: Register NEET Motivational Notification daily at 6 AM ──
   final now = DateTime.now();
   var next6AM = DateTime(now.year, now.month, now.day, 6, 0, 0);
   if (next6AM.isBefore(now)) {
@@ -187,14 +190,20 @@ Future<void> main() async {
     existingWorkPolicy: ExistingWorkPolicy.replace,
   );
 
-  await BackupService.registerWeeklyBackup();
+  // FIXED: Register weekly backup using Workmanager directly (no old static method)
+  await Workmanager().registerPeriodicTask(
+    kBackupTaskName,
+    kBackupTaskName,
+    frequency: const Duration(days: 7),
+    constraints: Constraints(networkType: NetworkType.not_required),
+    existingWorkPolicy: ExistingWorkPolicy.keep,
+  );
 
   try {
     await WidgetService.refreshWidget();
     await WidgetService.refreshPomodoroWidget();
     await WidgetService.refreshAttendanceWidget();
     await WidgetService.refreshTimetableWidget();
-    // ── NEW: Initial refresh of NEET widgets ──
     await WidgetService.refreshNeetCountdownWidget();
     await WidgetService.refreshSubjectStreakWidget();
     await WidgetService.refreshMcqTargetWidget();
@@ -236,7 +245,6 @@ class EventCountdownAppState extends State<EventCountdownApp>
       WidgetService.refreshPomodoroWidget();
       WidgetService.refreshAttendanceWidget();
       WidgetService.refreshTimetableWidget();
-      // ── NEW: Refresh NEET widgets on app resume ──
       WidgetService.refreshNeetCountdownWidget();
       WidgetService.refreshSubjectStreakWidget();
       WidgetService.refreshMcqTargetWidget();
@@ -254,7 +262,8 @@ class EventCountdownAppState extends State<EventCountdownApp>
 
     if (!mounted) return;
 
-        final backupPath = await BackupService.instance.findRecentBackup();
+    // FIXED: Use new BackupService.instance.findRecentBackup()
+    final backupPath = await BackupService.instance.findRecentBackup();
     if (backupPath == null) return;
     if (!mounted) return;
 
@@ -280,16 +289,15 @@ class EventCountdownAppState extends State<EventCountdownApp>
 
     if (shouldRestore == true) {
       try {
+        // FIXED: Use new BackupService.instance.importFromPath()
         final result = await BackupService.instance.importFromPath(backupPath);
         final count = result.eventCount ?? 0;
-
         final events = await DatabaseHelper.instance.getAllEventsSorted();
         await NotificationService.instance.rescheduleAll(events);
         await WidgetService.refreshWidget();
         await WidgetService.refreshPomodoroWidget();
         await WidgetService.refreshAttendanceWidget();
         await WidgetService.refreshTimetableWidget();
-        // ── NEW: Refresh NEET widgets after restore ──
         await WidgetService.refreshNeetCountdownWidget();
         await WidgetService.refreshSubjectStreakWidget();
         await WidgetService.refreshMcqTargetWidget();
