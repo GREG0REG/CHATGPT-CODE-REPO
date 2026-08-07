@@ -1360,6 +1360,93 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }).toList(),
     );
   }
+  Widget _buildSyllabusContent(ColorScheme cs) {
+  return FutureBuilder<Map<String, dynamic>>(
+    future: DatabaseHelper.instance.getOverallSyllabusProgress(),
+    builder: (context, snapshot) {
+      final total = snapshot.data?['total'] ?? 0;
+      final completed = snapshot.data?['completed'] ?? 0;
+      final progress = total > 0 ? completed / total : 0.0;
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [cs.primary.withOpacity(0.2), cs.secondary.withOpacity(0.15)],
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.subject, color: cs.primary, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Syllabus Tracker',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      total > 0
+                          ? '$completed / $total topics completed (${(progress * 100).round()}%)'
+                          : 'No subjects yet',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SyllabusListScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.list, size: 16),
+                  label: const Text('View Syllabus'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const StudyPlannerScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.calendar_today, size: 16),
+                  label: const Text('Study Planner'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    },
+  );
+  }
 
   @override
   Widget build(BuildContext context) {
