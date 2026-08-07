@@ -1,13 +1,11 @@
 // FILE: lib/screens/assignment_tracker_screen.dart
-// COMPLETE REPLACEMENT — Redesigned Assignment Tracker v2
-// NO NEW DB TABLES — Uses existing events + subtasks tables
-// ONE MIGRATION: adds 'assignmentType' TEXT column to events table (v17)
-// Features: glassmorphism cards, course filters, subtasks, segment progress,
-//           search, sort, quick filters, empty state, assignment types
+// COMPLETE REPLACEMENT — Assignment Tracker v2.1
+// FIXED: Edit assignments, delete works, completed history, clearer progress
+// Uses existing events + subtasks tables (v17 with assignmentType column)
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../database_helper.dart';
+import '../db/database_helper.dart';
 import '../models/event.dart';
 import '../models/subtask.dart';
 import 'main_screen.dart';
@@ -48,7 +46,7 @@ extension AssignmentTypeExt on AssignmentType {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// COURSE COLOR MAP — Auto-generated, persists per session
+// COURSE COLORS
 // ═══════════════════════════════════════════════════════════════════
 
 final Map<String, Color> _courseColorMap = {};
@@ -81,10 +79,10 @@ class AssignmentTrackerScreen extends StatefulWidget {
   State<AssignmentTrackerScreen> createState() => _AssignmentTrackerScreenState();
 }
 
-class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
-    with SingleTickerProviderStateMixin {
+class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen> {
   // ── Data ──
-  List<Event> _assignments = [];
+  List<Event> _allAssignments = []; // All assignments (including completed)
+  List<Event> _filteredAssignments = []; // Currently visible
   List<Subtask> _subtasks = [];
   List<String> _courses = [];
   bool _loading = true;
@@ -93,7 +91,7 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
   String _searchQuery = '';
   String? _selectedCourse;
   AssignmentSort _sortBy = AssignmentSort.deadline;
-  String _quickFilter = 'all'; // all | overdue | urgent | thisweek | completed
+  String _quickFilter = 'active'; // active | overdue | urgent | thisweek | completed
 
   // ── Quick Add ──
   final _titleController = TextEditingController();
@@ -105,16 +103,17 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
   final List<String> _quickSubtasks = [];
   bool _isQuickAddExpanded = false;
 
-  // ── Animation ──
-  late AnimationController _animController;
+  // ── Edit ──
+  Event? _editingEvent;
+  final _editTitleController = TextEditingController();
+  final _editCourseController = TextEditingController();
+  DateTime _editDueDate = DateTime.now();
+  int _editPriority = 2;
+  AssignmentType _editType = AssignmentType.homework;
 
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
     _loadData();
   }
 
@@ -127,35 +126,54 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
     final events = await DatabaseHelper.instance.getAllEventsSorted();
     final now = DateTime.now();
 
-    // Extract assignments: has deadline AND (future OR not completed)
-    final assignments = events.where((e) {
+    // Get ALL assignments (has deadline)
+    final allAssignments = events.where((e) {
       final hasDeadline = e.deadlineMillis != null && e.deadlineMillis! > 0;
-      final isCompleted = e.isCompleted;
-      if (!hasDeadline) return false;
-      if (_quickFilter == 'completed') return isCompleted;
-      if (isCompleted) return false; // Hide completed by default
-      return true;
+      return hasDeadline;
     }).toList();
 
-    // Apply quick filters
-    if (_quickFilter == 'overdue') {
-      assignments.retainWhere((e) => _isOverdue(e.deadlineMillis ?? 0));
+    // Extract unique courses from ALL assignments
+    final courseSet = <String>{};
+    for (final e in allAssignments) {
+      courseSet.add(e.subjectTag ?? 'General');
+    }
+    final courses = courseSet.toList()..sort();
+
+    // Load subtasks for all assignments
+    final allSubtasks = <Subtask>[];
+    for (final a in allAssignments) {
+      if (a.id != null) {
+        final sts = await DatabaseHelper.instance.getSubtasksForEvent(a.id!);
+        allSubtasks.addAll(sts);
+      }
+    }
+
+    // Apply filters to create visible list
+    var visible = List<Event>.from(allAssignments);
+
+    // Quick filter
+    if (_quickFilter == 'active') {
+      visible.retainWhere((e) => !e.isCompleted);
+    } else if (_quickFilter == 'completed') {
+      visible.retainWhere((e) => e.isCompleted);
+    } else if (_quickFilter == 'overdue') {
+      visible.retainWhere((e) => _isOverdue(e.deadlineMillis ?? 0) && !e.isCompleted);
     } else if (_quickFilter == 'urgent') {
-      assignments.retainWhere((e) => e.priority == 4 && !e.isCompleted);
+      visible.retainWhere((e) => e.priority == 4 && !e.isCompleted);
     } else if (_quickFilter == 'thisweek') {
       final weekEnd = now.add(const Duration(days: 7)).millisecondsSinceEpoch;
-      assignments.retainWhere((e) => (e.deadlineMillis ?? 0) <= weekEnd);
+      visible.retainWhere((e) => (e.deadlineMillis ?? 0) <= weekEnd && !e.isCompleted);
     }
 
-    // Apply course filter
+    // Course filter
     if (_selectedCourse != null && _selectedCourse != 'All') {
-      assignments.retainWhere((e) => (e.subjectTag ?? 'General') == _selectedCourse);
+      visible.retainWhere((e) => (e.subjectTag ?? 'General') == _selectedCourse);
     }
 
-    // Apply search
+    // Search
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
-      assignments.retainWhere((e) =>
+      visible.retainWhere((e) =>
           e.title.toLowerCase().contains(q) ||
           (e.subjectTag ?? '').toLowerCase().contains(q) ||
           (e.notes ?? '').toLowerCase().contains(q));
@@ -164,33 +182,18 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
     // Sort
     switch (_sortBy) {
       case AssignmentSort.deadline:
-        assignments.sort((a, b) => (a.deadlineMillis ?? 0).compareTo(b.deadlineMillis ?? 0));
+        visible.sort((a, b) => (a.deadlineMillis ?? 0).compareTo(b.deadlineMillis ?? 0));
       case AssignmentSort.priority:
-        assignments.sort((a, b) => b.priority.compareTo(a.priority));
+        visible.sort((a, b) => b.priority.compareTo(a.priority));
       case AssignmentSort.progress:
-        assignments.sort((a, b) => _getProgressFromEvent(b).compareTo(_getProgressFromEvent(a)));
+        visible.sort((a, b) => _getEffectiveProgress(b).compareTo(_getEffectiveProgress(a)));
       case AssignmentSort.title:
-        assignments.sort((a, b) => a.title.compareTo(b.title));
-    }
-
-    // Extract unique courses
-    final courseSet = <String>{};
-    for (final e in events.where((e) => e.deadlineMillis != null && e.deadlineMillis! > 0)) {
-      courseSet.add(e.subjectTag ?? 'General');
-    }
-    final courses = courseSet.toList()..sort();
-
-    // Load subtasks for all assignments
-    final allSubtasks = <Subtask>[];
-    for (final a in assignments) {
-      if (a.id != null) {
-        final sts = await DatabaseHelper.instance.getSubtasksForEvent(a.id!);
-        allSubtasks.addAll(sts);
-      }
+        visible.sort((a, b) => a.title.compareTo(b.title));
     }
 
     setState(() {
-      _assignments = assignments;
+      _allAssignments = allAssignments;
+      _filteredAssignments = visible;
       _courses = courses;
       _subtasks = allSubtasks;
       _loading = false;
@@ -247,16 +250,84 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
     }
   }
 
+  Future<void> _updateAssignment() async {
+    if (_editingEvent == null || _editTitleController.text.trim().isEmpty) return;
+
+    final title = _editTitleController.text.trim();
+    final course = _editCourseController.text.trim().isEmpty ? 'General' : _editCourseController.text.trim();
+
+    final dueDateStart = DateTime(_editDueDate.year, _editDueDate.month, _editDueDate.day).millisecondsSinceEpoch;
+    final deadlineEnd = DateTime(_editDueDate.year, _editDueDate.month, _editDueDate.day, 23, 59).millisecondsSinceEpoch;
+
+    // Preserve existing progress and type from notes
+    final existingNotes = _editingEvent!.notes ?? '';
+    final progressMatch = RegExp(r'PROGRESS:\d+%').firstMatch(existingNotes);
+    final typeMatch = RegExp(r'TYPE:(\w+)').firstMatch(existingNotes);
+    final progressStr = progressMatch?.group(0) ?? 'PROGRESS:0%';
+    final typeStr = typeMatch != null ? 'TYPE:${_editType.name}' : 'TYPE:${_editType.name}';
+
+    final updated = _editingEvent!.copyWith(
+      title: title,
+      dateMillis: dueDateStart,
+      deadlineMillis: deadlineEnd,
+      priority: _editPriority,
+      subjectTag: course,
+      notes: '$progressStr\n$typeStr',
+    );
+
+    await DatabaseHelper.instance.updateEvent(updated);
+    _closeEditSheet();
+    await _loadData();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Assignment updated!'),
+          backgroundColor: const Color(0xFF388BFD),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
   void _resetQuickAdd() {
     _titleController.clear();
     _courseController.clear();
     _subtaskController.clear();
     _quickSubtasks.clear();
-    _progress = 0;
     _priority = 2;
     _assignmentType = AssignmentType.homework;
     _dueDate = DateTime.now().add(const Duration(days: 7));
     _isQuickAddExpanded = false;
+  }
+
+  void _openEditSheet(Event event) {
+    _editingEvent = event;
+    _editTitleController.text = event.title;
+    _editCourseController.text = event.subjectTag ?? '';
+    _editDueDate = event.deadlineMillis != null
+        ? DateTime.fromMillisecondsSinceEpoch(event.deadlineMillis!)
+        : DateTime.now();
+    _editPriority = event.priority;
+    _editType = _getAssignmentType(event);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF161B22),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => _buildEditSheet(),
+    );
+  }
+
+  void _closeEditSheet() {
+    _editingEvent = null;
+    _editTitleController.clear();
+    _editCourseController.clear();
+    Navigator.pop(context);
   }
 
   Future<void> _updateProgress(Event event, double value) async {
@@ -268,13 +339,20 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
     );
     await DatabaseHelper.instance.updateEvent(updated);
     if (mounted) setState(() {
-      final idx = _assignments.indexWhere((e) => e.id == event.id);
-      if (idx >= 0) _assignments[idx] = updated;
+      final idx = _allAssignments.indexWhere((e) => e.id == event.id);
+      if (idx >= 0) _allAssignments[idx] = updated;
     });
+    await _loadData();
   }
 
   Future<void> _toggleSubtask(Subtask subtask) async {
     await DatabaseHelper.instance.toggleSubtaskComplete(subtask.id!, !subtask.isCompleted);
+    // Update event progress based on subtasks
+    final event = _allAssignments.firstWhere((e) => e.id == subtask.eventId);
+    final sts = _getSubtasksForEvent(event.id!);
+    final completed = sts.where((s) => s.isCompleted).length;
+    final progress = sts.isEmpty ? 0 : completed / sts.length;
+    await _updateProgress(event, progress);
     await _loadData();
   }
 
@@ -291,14 +369,21 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete Assignment?'),
-        content: Text('Delete "${event.title}"?'),
+        title: const Text('Delete Assignment?', style: TextStyle(color: Color(0xFFE6EDF3))),
+        content: Text(
+          'Delete "${event.title}"?\n\nThis cannot be undone.',
+          style: const TextStyle(color: Color(0xFF8B949E)),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF8B949E))),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete', style: TextStyle(color: Color(0xFFDA3633), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -313,8 +398,6 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
   // HELPERS
   // ═══════════════════════════════════════════════════════════════
 
-  double _progress = 0;
-
   String _setProgressInNotes(String? existingNotes, double progress) {
     final progressText = 'PROGRESS:${(progress * 100).toInt()}%';
     if (existingNotes == null || existingNotes.isEmpty) return progressText;
@@ -323,11 +406,20 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
     return '$cleaned\n$progressText';
   }
 
-  double _getProgressFromEvent(Event event) {
+  double _getProgressFromNotes(Event event) {
     if (event.notes == null || event.notes!.isEmpty) return 0;
     final match = RegExp(r'PROGRESS:(\d+)%').firstMatch(event.notes!);
     if (match != null) return int.parse(match.group(1)!) / 100;
     return 0;
+  }
+
+  double _getEffectiveProgress(Event event) {
+    final sts = _getSubtasksForEvent(event.id ?? 0);
+    if (sts.isNotEmpty) {
+      final completed = sts.where((s) => s.isCompleted).length;
+      return completed / sts.length;
+    }
+    return _getProgressFromNotes(event);
   }
 
   AssignmentType _getAssignmentType(Event event) {
@@ -378,26 +470,21 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
       ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
   }
 
-  double _getSubtaskProgress(int eventId) {
-    final sts = _getSubtasksForEvent(eventId);
-    if (sts.isEmpty) return 0;
-    final completed = sts.where((s) => s.isCompleted).length;
-    return completed / sts.length;
-  }
-
   // ═══════════════════════════════════════════════════════════════
   // BUILD
   // ═══════════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final doneCount = _assignments.where((a) => a.isCompleted).length;
-    final urgentCount = _assignments.where((a) => a.priority == 4 && !a.isCompleted).length;
-    final overdueCount = _assignments.where((a) => _isOverdue(a.deadlineMillis ?? 0) && !a.isCompleted).length;
-    final totalProgress = _assignments.isEmpty
+    final activeCount = _allAssignments.where((a) => !a.isCompleted).length;
+    final doneCount = _allAssignments.where((a) => a.isCompleted).length;
+    final urgentCount = _allAssignments.where((a) => a.priority == 4 && !a.isCompleted).length;
+    final overdueCount = _allAssignments.where((a) => _isOverdue(a.deadlineMillis ?? 0) && !a.isCompleted).length;
+
+    // Dashboard progress = % of ALL assignments done
+    final totalProgress = _allAssignments.isEmpty
         ? 0.0
-        : _assignments.map((a) => _getProgressFromEvent(a)).reduce((a, b) => a + b) / _assignments.length;
+        : doneCount / _allAssignments.length;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D1117),
@@ -440,7 +527,7 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
           ? const Center(child: CircularProgressIndicator(color: Color(0xFF388BFD)))
           : CustomScrollView(
               slivers: [
-                // ── Search Bar ──
+                // Search
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -466,36 +553,30 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
                   ),
                 ),
 
-                // ── Progress Ring Dashboard ──
+                // Dashboard Ring
                 SliverToBoxAdapter(
-                  child: _buildDashboard(totalProgress, doneCount, urgentCount, overdueCount),
+                  child: _buildDashboard(totalProgress, activeCount, doneCount, urgentCount, overdueCount),
                 ),
 
-                // ── Course Filter Chips ──
+                // Course Chips
                 if (_courses.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: _buildCourseChips(),
-                  ),
+                  SliverToBoxAdapter(child: _buildCourseChips()),
 
-                // ── Quick Filters ──
-                SliverToBoxAdapter(
-                  child: _buildQuickFilters(overdueCount, urgentCount),
-                ),
+                // Quick Filters
+                SliverToBoxAdapter(child: _buildQuickFilters(overdueCount, urgentCount, doneCount)),
 
-                // ── Quick Add ──
-                SliverToBoxAdapter(
-                  child: _buildQuickAdd(cs),
-                ),
+                // Quick Add
+                SliverToBoxAdapter(child: _buildQuickAdd()),
 
                 const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
-                // ── Assignment List ──
-                _assignments.isEmpty
+                // Assignment List
+                _filteredAssignments.isEmpty
                     ? SliverFillRemaining(child: _buildEmptyState())
                     : SliverList(
                         delegate: SliverChildBuilderDelegate(
-                          (context, index) => _buildAssignmentCard(_assignments[index]),
-                          childCount: _assignments.length,
+                          (context, index) => _buildAssignmentCard(_filteredAssignments[index]),
+                          childCount: _filteredAssignments.length,
                         ),
                       ),
 
@@ -505,7 +586,6 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           setState(() => _isQuickAddExpanded = !_isQuickAddExpanded);
-          if (_isQuickAddExpanded) _animController.forward();
         },
         backgroundColor: const Color(0xFF388BFD),
         elevation: 4,
@@ -522,7 +602,7 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
   // WIDGET BUILDERS
   // ═══════════════════════════════════════════════════════════════
 
-  Widget _buildDashboard(double progress, int done, int urgent, int overdue) {
+  Widget _buildDashboard(double progress, int active, int done, int urgent, int overdue) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Container(
@@ -539,60 +619,67 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
           borderRadius: BorderRadius.circular(20),
         ),
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
           children: [
-            // Circular progress
-            SizedBox(
-              width: 72,
-              height: 72,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  CircularProgressIndicator(
-                    value: progress,
-                    strokeWidth: 5,
-                    backgroundColor: const Color(0xFF8B949E).withOpacity(0.15),
-                    valueColor: const AlwaysStoppedAnimation(Color(0xFF388BFD)),
-                  ),
-                  Text(
-                    '${(progress * 100).toInt()}%',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF388BFD),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$done of ${_assignments.length + done} done',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFFE6EDF3),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '$urgent urgent • $overdue overdue',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF8B949E)),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
+            Row(
+              children: [
+                // Circular progress
+                SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: Stack(
+                    alignment: Alignment.center,
                     children: [
-                      _miniBar(const Color(0xFF388BFD), done),
-                      _miniBar(const Color(0xFFF0883E), urgent),
-                      _miniBar(const Color(0xFFDA3633), overdue),
+                      CircularProgressIndicator(
+                        value: progress,
+                        strokeWidth: 5,
+                        backgroundColor: const Color(0xFF8B949E).withOpacity(0.15),
+                        valueColor: const AlwaysStoppedAnimation(Color(0xFF388BFD)),
+                      ),
+                      Text(
+                        '${(progress * 100).toInt()}%',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF388BFD),
+                        ),
+                      ),
                     ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$done of ${_allAssignments.length} done',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFE6EDF3),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$active active • $urgent urgent • $overdue overdue',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF8B949E)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Legend
+            Row(
+              children: [
+                _legendDot(const Color(0xFF388BFD), 'Done: $done'),
+                const SizedBox(width: 12),
+                _legendDot(const Color(0xFFF0883E), 'Urgent: $urgent'),
+                const SizedBox(width: 12),
+                _legendDot(const Color(0xFFDA3633), 'Overdue: $overdue'),
+              ],
             ),
           ],
         ),
@@ -600,18 +687,21 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
     );
   }
 
-  Widget _miniBar(Color color, int value) {
-    if (value == 0) return const SizedBox.shrink();
-    return Expanded(
-      flex: value.clamp(1, 10),
-      child: Container(
-        height: 4,
-        margin: const EdgeInsets.only(right: 4),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(2),
+  Widget _legendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
         ),
-      ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: color.withOpacity(0.8), fontWeight: FontWeight.w500),
+        ),
+      ],
     );
   }
 
@@ -672,12 +762,13 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
     );
   }
 
-  Widget _buildQuickFilters(int overdueCount, int urgentCount) {
+  Widget _buildQuickFilters(int overdueCount, int urgentCount, int doneCount) {
     final filters = [
-      ('all', 'All', null as Color?),
-      ('overdue', 'Overdue', const Color(0xFFDA3633)),
-      ('urgent', 'Urgent', const Color(0xFFF0883E)),
+      ('active', 'Active', null as Color?),
+      ('overdue', 'Overdue ($overdueCount)', const Color(0xFFDA3633)),
+      ('urgent', 'Urgent ($urgentCount)', const Color(0xFFF0883E)),
       ('thisweek', 'This Week', const Color(0xFF388BFD)),
+      ('completed', 'Completed ($doneCount)', const Color(0xFF3FB950)),
     ];
 
     return Padding(
@@ -717,7 +808,7 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
     );
   }
 
-  Widget _buildQuickAdd(ColorScheme cs) {
+  Widget _buildQuickAdd() {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
@@ -755,7 +846,6 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
                     _field('Course/Subject', _courseController, hint: 'e.g., Environmental Science'),
                     const SizedBox(height: 10),
 
-                    // Assignment Type
                     const Text('Type', style: TextStyle(fontSize: 12, color: Color(0xFF8B949E))),
                     const SizedBox(height: 6),
                     Wrap(
@@ -785,7 +875,6 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
                     ),
                     const SizedBox(height: 10),
 
-                    // Due Date
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Due Date', style: TextStyle(color: Color(0xFF8B949E), fontSize: 13)),
@@ -814,7 +903,6 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
                       },
                     ),
 
-                    // Priority
                     const Text('Priority', style: TextStyle(fontSize: 12, color: Color(0xFF8B949E))),
                     const SizedBox(height: 6),
                     SegmentedButton<int>(
@@ -851,7 +939,6 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
                     ),
                     const SizedBox(height: 10),
 
-                    // Subtasks
                     const Text('Subtasks (optional)', style: TextStyle(fontSize: 12, color: Color(0xFF8B949E))),
                     const SizedBox(height: 6),
                     ..._quickSubtasks.asMap().entries.map((e) => Padding(
@@ -934,6 +1021,175 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
     );
   }
 
+  Widget _buildEditSheet() {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: const BoxDecoration(
+            color: Color(0xFF161B22),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: ListView(
+            controller: scrollController,
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B949E).withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              const Text(
+                'Edit Assignment',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFFE6EDF3),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              _field('Title', _editTitleController),
+              const SizedBox(height: 12),
+              _field('Course/Subject', _editCourseController),
+              const SizedBox(height: 16),
+
+              const Text('Type', style: TextStyle(fontSize: 13, color: Color(0xFF8B949E))),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: AssignmentType.values.map((t) {
+                  final selected = _editType == t;
+                  return ChoiceChip(
+                    label: Text(t.label),
+                    selected: selected,
+                    avatar: Icon(t.icon, size: 16),
+                    selectedColor: const Color(0xFF388BFD).withOpacity(0.2),
+                    backgroundColor: const Color(0xFF0D1117),
+                    labelStyle: TextStyle(
+                      color: selected ? const Color(0xFF388BFD) : const Color(0xFF8B949E),
+                      fontSize: 13,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      side: BorderSide(
+                        color: selected ? const Color(0xFF388BFD) : const Color(0xFF8B949E).withOpacity(0.2),
+                      ),
+                    ),
+                    onSelected: (_) => setState(() => _editType = t),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Due Date', style: TextStyle(color: Color(0xFF8B949E), fontSize: 13)),
+                subtitle: Text(
+                  '${_editDueDate.month}/${_editDueDate.day}/${_editDueDate.year}',
+                  style: const TextStyle(color: Color(0xFFE6EDF3), fontWeight: FontWeight.w600, fontSize: 15),
+                ),
+                trailing: const Icon(Icons.calendar_today, color: Color(0xFF8B949E)),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _editDueDate,
+                    firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                    builder: (context, child) => Theme(
+                      data: Theme.of(context).copyWith(
+                        colorScheme: const ColorScheme.dark(
+                          primary: Color(0xFF388BFD),
+                          surface: Color(0xFF161B22),
+                        ),
+                      ),
+                      child: child!,
+                    ),
+                  );
+                  if (picked != null) setState(() => _editDueDate = picked);
+                },
+              ),
+
+              const SizedBox(height: 12),
+              const Text('Priority', style: TextStyle(fontSize: 13, color: Color(0xFF8B949E))),
+              const SizedBox(height: 8),
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(value: 1, label: Text('Low')),
+                  ButtonSegment(value: 2, label: Text('Normal')),
+                  ButtonSegment(value: 3, label: Text('High')),
+                  ButtonSegment(value: 4, label: Text('URGENT')),
+                ],
+                selected: {_editPriority},
+                onSelectionChanged: (sel) {
+                  if (sel.isNotEmpty) setState(() => _editPriority = sel.first);
+                },
+                style: ButtonStyle(
+                  backgroundColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return const Color(0xFF388BFD).withOpacity(0.2);
+                    }
+                    return const Color(0xFF0D1117);
+                  }),
+                  foregroundColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) {
+                      return const Color(0xFF388BFD);
+                    }
+                    return const Color(0xFF8B949E);
+                  }),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _closeEditSheet,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF8B949E),
+                        side: BorderSide(color: const Color(0xFF8B949E).withOpacity(0.3)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _updateAssignment,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF388BFD),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Save Changes'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _field(String label, TextEditingController controller, {String? hint}) {
     return TextField(
       controller: controller,
@@ -955,9 +1211,7 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
   }
 
   Widget _buildAssignmentCard(Event event) {
-    final progress = _getProgressFromEvent(event);
-    final subtaskProgress = _getSubtaskProgress(event.id ?? 0);
-    final effectiveProgress = subtaskProgress > 0 ? subtaskProgress : progress;
+    final progress = _getEffectiveProgress(event);
     final isOverdue = _isOverdue(event.deadlineMillis ?? 0);
     final course = event.subjectTag ?? 'General';
     final courseColor = _getCourseColor(course);
@@ -965,7 +1219,6 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
     final sts = _getSubtasksForEvent(event.id ?? 0);
     final isCompleted = event.isCompleted;
 
-    // Card border color
     Color borderColor;
     if (isCompleted) {
       borderColor = const Color(0xFF3FB950).withOpacity(0.2);
@@ -1010,11 +1263,10 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header row
+                      // Header
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Type icon
                           Container(
                             width: 40,
                             height: 40,
@@ -1043,43 +1295,11 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
                                       ),
                                     ),
                                     if (isOverdue && !isCompleted)
-                                      Container(
-                                        margin: const EdgeInsets.only(left: 8),
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFDA3633).withOpacity(0.12),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: const Color(0xFFDA3633).withOpacity(0.3)),
-                                        ),
-                                        child: const Text(
-                                          'OVERDUE',
-                                          style: TextStyle(
-                                            color: Color(0xFFFF7B72),
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ),
-                                    if (!isCompleted && event.priority == 4)
-                                      Container(
-                                        margin: const EdgeInsets.only(left: 8),
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFF0883E).withOpacity(0.12),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: const Color(0xFFF0883E).withOpacity(0.3)),
-                                        ),
-                                        child: const Text(
-                                          'URGENT',
-                                          style: TextStyle(
-                                            color: Color(0xFFF0883E),
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ),
+                                      _badge('OVERDUE', const Color(0xFFFF7B72), const Color(0xFFDA3633)),
+                                    if (!isCompleted && event.priority == 4 && !isOverdue)
+                                      _badge('URGENT', const Color(0xFFF0883E), const Color(0xFFF0883E)),
+                                    if (isCompleted)
+                                      _badge('DONE', const Color(0xFF3FB950), const Color(0xFF3FB950)),
                                   ],
                                 ),
                                 const SizedBox(height: 2),
@@ -1108,7 +1328,7 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
                         ],
                       ),
 
-                      // Subtasks (if any)
+                      // Subtasks
                       if (sts.isNotEmpty && !isCompleted) ...[
                         const SizedBox(height: 10),
                         ...sts.map((s) => Padding(
@@ -1137,7 +1357,7 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
                             )),
                       ],
 
-                      // Progress segments
+                      // Progress segments (only if no subtasks, or show both)
                       if (!isCompleted) ...[
                         const SizedBox(height: 12),
                         Row(
@@ -1145,8 +1365,8 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
                             Expanded(
                               child: Row(
                                 children: [0.0, 0.25, 0.5, 0.75].map((segment) {
-                                  final isFilled = effectiveProgress >= segment + 0.25;
-                                  final isCurrent = effectiveProgress >= segment && effectiveProgress < segment + 0.25;
+                                  final isFilled = progress >= segment + 0.25;
+                                  final isCurrent = progress >= segment && progress < segment + 0.25;
                                   return Expanded(
                                     child: GestureDetector(
                                       onTap: () => _updateProgress(event, segment + 0.25),
@@ -1171,17 +1391,17 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: effectiveProgress >= 1.0
+                                color: progress >= 1.0
                                     ? const Color(0xFF3FB950).withOpacity(0.15)
                                     : const Color(0xFF388BFD).withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                '${(effectiveProgress * 100).toInt()}%',
+                                '${(progress * 100).toInt()}%',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: effectiveProgress >= 1.0 ? const Color(0xFF3FB950) : const Color(0xFF388BFD),
+                                  color: progress >= 1.0 ? const Color(0xFF3FB950) : const Color(0xFF388BFD),
                                 ),
                               ),
                             ),
@@ -1195,7 +1415,7 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            _actionButton('Edit', const Color(0xFF8B949E), () {}),
+                            _actionButton('Edit', const Color(0xFF388BFD), () => _openEditSheet(event)),
                             const SizedBox(width: 8),
                             _actionButton('Delete', const Color(0xFFDA3633), () => _deleteAssignment(event)),
                           ],
@@ -1212,24 +1432,47 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
     );
   }
 
+  Widget _badge(String text, Color textColor, Color borderColor) {
+    return Container(
+      margin: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: borderColor.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: borderColor.withOpacity(0.3)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
   Widget _actionButton(String label, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withOpacity(0.2)),
         ),
         child: Text(
           label,
-          style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600),
         ),
       ),
     );
   }
 
   Widget _buildEmptyState() {
+    final isCompletedFilter = _quickFilter == 'completed';
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1241,39 +1484,43 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
               color: const Color(0xFF388BFD).withOpacity(0.08),
               borderRadius: BorderRadius.circular(24),
             ),
-            child: const Icon(
-              Icons.assignment_outlined,
+            child: Icon(
+              isCompletedFilter ? Icons.check_circle_outline : Icons.assignment_outlined,
               size: 40,
-              color: Color(0xFF388BFD),
+              color: const Color(0xFF388BFD),
             ),
           ),
           const SizedBox(height: 20),
-          const Text(
-            'No assignments yet',
-            style: TextStyle(
+          Text(
+            isCompletedFilter ? 'No completed assignments' : 'No assignments yet',
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: Color(0xFFE6EDF3),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Tap the + button to add your first assignment\nor create Events with deadlines',
+          Text(
+            isCompletedFilter
+                ? 'Complete some assignments to see them here'
+                : 'Tap the + button to add your first assignment',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: Color(0xFF8B949E), height: 1.5),
+            style: const TextStyle(fontSize: 13, color: Color(0xFF8B949E), height: 1.5),
           ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: () => setState(() => _isQuickAddExpanded = true),
-            icon: const Icon(Icons.add),
-            label: const Text('Add Assignment'),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF388BFD),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          if (!isCompletedFilter) ...[
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () => setState(() => _isQuickAddExpanded = true),
+              icon: const Icon(Icons.add),
+              label: const Text('Add Assignment'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF388BFD),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1296,7 +1543,8 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen>
     _titleController.dispose();
     _courseController.dispose();
     _subtaskController.dispose();
-    _animController.dispose();
+    _editTitleController.dispose();
+    _editCourseController.dispose();
     super.dispose();
   }
 }
