@@ -281,6 +281,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _loadNeetPrefs();
     await _loadEventsOnly();
     await _loadStats();
+    await _loadSyllabusStats();
     await WidgetService.refreshWidget();
   }
 
