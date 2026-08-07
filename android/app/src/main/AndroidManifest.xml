@@ -50,6 +50,24 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"/>
         </provider>
+        
+        <!-- Syllabus Widget -->
+         <receiver
+             android:name=".SyllabusWidgetProvider"
+             android:exported="true"
+             android:enabled="true">
+         <intent-filter>
+             
+            <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            <action android:name="com.example.event_countdown.SYLLABUS_WIDGET_REFRESH"/>
+            <action android:name="android.intent.action.BOOT_COMPLETED"/>
+             <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+        </intent-filter>
+             
+        <meta-data
+            android:name="android.appwidget.provider"
+            android:resource="@xml/syllabus_widget_info"/>
+         </receiver>
 
         <!-- Event Countdown Widget -->
         <receiver
