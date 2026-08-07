@@ -17,6 +17,27 @@ class SyllabusSubtopic {
     required this.createdAtMillis,
   });
 
+  // ─── copyWith method ───
+  SyllabusSubtopic copyWith({
+    int? id,
+    int? topicId,
+    String? name,
+    int? orderIndex,
+    String? status,
+    String? notes,
+    int? createdAtMillis,
+  }) {
+    return SyllabusSubtopic(
+      id: id ?? this.id,
+      topicId: topicId ?? this.topicId,
+      name: name ?? this.name,
+      orderIndex: orderIndex ?? this.orderIndex,
+      status: status ?? this.status,
+      notes: notes ?? this.notes,
+      createdAtMillis: createdAtMillis ?? this.createdAtMillis,
+    );
+  }
+
   Map<String, dynamic> toMap() => {
         'id': id,
         'topicId': topicId,
