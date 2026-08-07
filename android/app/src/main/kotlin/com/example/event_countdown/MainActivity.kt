@@ -53,6 +53,9 @@ class MainActivity : FlutterActivity() {
                 "updateReadingWidget" -> safeWidgetUpdate(result) {
                     ReadingWidgetProvider.updateAllWidgets(this)
                 }
+                "updateSyllabusWidget" -> safeWidgetUpdate(result) {
+                    SyllabusWidgetProvider.updateAllWidgets(this)
+                }
                 "getWidgetIds" -> {
                     try {
                         val widgetType = call.argument<String>("widgetType") ?: ""
