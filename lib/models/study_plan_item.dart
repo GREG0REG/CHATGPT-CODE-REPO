@@ -8,6 +8,28 @@ class StudyPlanItem {
   final String? notes;
   final int createdAtMillis;
 
+  StudyPlanItem copyWith({
+  int? id,
+  int? planId,
+  int? topicId,
+  int? scheduledDateMillis,
+  int? allocatedMinutes,
+  int? isCompleted,
+  String? notes,
+  int? createdAtMillis,
+}) {
+  return StudyPlanItem(
+    id: id ?? this.id,
+    planId: planId ?? this.planId,
+    topicId: topicId ?? this.topicId,
+    scheduledDateMillis: scheduledDateMillis ?? this.scheduledDateMillis,
+    allocatedMinutes: allocatedMinutes ?? this.allocatedMinutes,
+    isCompleted: isCompleted ?? this.isCompleted,
+    notes: notes ?? this.notes,
+    createdAtMillis: createdAtMillis ?? this.createdAtMillis,
+  );
+  }
+
   StudyPlanItem({
     this.id,
     required this.planId,
