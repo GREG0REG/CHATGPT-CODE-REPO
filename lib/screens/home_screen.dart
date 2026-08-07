@@ -1,11 +1,12 @@
 // FILE: lib/screens/home_screen.dart
-// COMPLETE REPLACEMENT — NEET-Focused Home Screen v4
+// COMPLETE REPLACEMENT — NEET-Focused Home Screen v5
 // CHANGES:
 //  1. All dashboard sections are now COLLAPSIBLE via arrow toggle
 //  2. Default state: sections collapsed, only event cards visible
 //  3. Redesigned event card integration with NEET study features
 //  4. Added section expansion state management
-//  5. Preserved all existing CRUD, recurrence, edit/delete, completion
+//  5. NEW: Syllabus Tracker collapsible section with progress and navigation buttons
+//  6. Preserved all existing CRUD, recurrence, edit/delete, completion
 
 import 'dart:async';
 import 'dart:math';
@@ -26,6 +27,9 @@ import 'add_edit_event_screen.dart';
 import 'settings_screen.dart';
 import 'main_screen.dart';
 import 'grade_calculator_screen.dart';
+// NEW imports for Syllabus
+import 'syllabus_list_screen.dart';
+import 'study_planner_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -95,6 +99,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _expandAttendance = false;
   bool _expandOverdue = false;
   bool _expandUpcoming = false;
+  // NEW: Syllabus section
   bool _expandSyllabus = false;
 
   final _neetQuotes = const [
@@ -164,6 +169,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _expandAttendance = prefs.getBool('expand_attendance') ?? false;
         _expandOverdue = prefs.getBool('expand_overdue') ?? false;
         _expandUpcoming = prefs.getBool('expand_upcoming') ?? false;
+        // NEW: load syllabus expansion state
+        _expandSyllabus = prefs.getBool('expand_syllabus') ?? false;
       });
     }
   }
@@ -187,6 +194,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         case 'expand_attendance': _expandAttendance = !current; break;
         case 'expand_overdue': _expandOverdue = !current; break;
         case 'expand_upcoming': _expandUpcoming = !current; break;
+        case 'expand_syllabus': _expandSyllabus = !current; break;
       }
     });
     _saveExpansionState(key, !current);
@@ -281,7 +289,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _loadNeetPrefs();
     await _loadEventsOnly();
     await _loadStats();
-    await _loadSyllabusStats();
     await WidgetService.refreshWidget();
   }
 
@@ -351,11 +358,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _overdueEvents = overdue;
       });
     }
-  }
-  Future<void> _loadSyllabusStats() async {
-  // We'll store subject count and overall progress in state.
-  // For now we'll just call it when needed; we can store in vars.
-  // We'll compute on the fly in the content builder.
   }
 
   Future<List<_DayStreak>> _loadWeekStreakFromDb() async {
@@ -1360,92 +1362,96 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }).toList(),
     );
   }
-  Widget _buildSyllabusContent(ColorScheme cs) {
-  return FutureBuilder<Map<String, dynamic>>(
-    future: DatabaseHelper.instance.getOverallSyllabusProgress(),
-    builder: (context, snapshot) {
-      final total = snapshot.data?['total'] ?? 0;
-      final completed = snapshot.data?['completed'] ?? 0;
-      final progress = total > 0 ? completed / total : 0.0;
 
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [cs.primary.withOpacity(0.2), cs.secondary.withOpacity(0.15)],
+  // ═══════════════════════════════════════════════════════════════
+  // NEW: SYLLABUS TRACKER CONTENT BUILDER
+  // ═══════════════════════════════════════════════════════════════
+  Widget _buildSyllabusContent(ColorScheme cs) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: DatabaseHelper.instance.getOverallSyllabusProgress(),
+      builder: (context, snapshot) {
+        final total = snapshot.data?['total'] ?? 0;
+        final completed = snapshot.data?['completed'] ?? 0;
+        final progress = total > 0 ? completed / total : 0.0;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [cs.primary.withOpacity(0.2), cs.secondary.withOpacity(0.15)],
+                    ),
+                    shape: BoxShape.circle,
                   ),
-                  shape: BoxShape.circle,
+                  child: Icon(Icons.subject, color: cs.primary, size: 20),
                 ),
-                child: Icon(Icons.subject, color: cs.primary, size: 20),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Syllabus Tracker',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSurface,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Syllabus Tracker',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      total > 0
-                          ? '$completed / $total topics completed (${(progress * 100).round()}%)'
-                          : 'No subjects yet',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
+                      const SizedBox(height: 2),
+                      Text(
+                        total > 0
+                            ? '$completed / $total topics completed (${(progress * 100).round()}%)'
+                            : 'No subjects yet',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SyllabusListScreen()),
-                    );
-                  },
-                  icon: const Icon(Icons.list, size: 16),
-                  label: const Text('View Syllabus'),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const SyllabusListScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.list, size: 16),
+                    label: const Text('View Syllabus'),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const StudyPlannerScreen()),
-                    );
-                  },
-                  icon: const Icon(Icons.calendar_today, size: 16),
-                  label: const Text('Study Planner'),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const StudyPlannerScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: const Text('Study Planner'),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
-      );
-    },
-  );
+              ],
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -1647,6 +1653,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         isExpanded: _expandUpcoming,
                         prefsKey: 'expand_upcoming',
                         child: _buildUpcomingContent(cs),
+                      ),
+                    ),
+
+                  // ═══════════════════════════════════════════════════════
+                  // NEW: SYLLABUS TRACKER SECTION
+                  // ═══════════════════════════════════════════════════════
+                  if (_neetModeEnabled)
+                    SliverToBoxAdapter(
+                      child: _buildCollapsibleSection(
+                        title: 'Syllabus Tracker',
+                        icon: Icons.subject,
+                        isExpanded: _expandSyllabus,
+                        prefsKey: 'expand_syllabus',
+                        child: _buildSyllabusContent(cs),
                       ),
                     ),
 
