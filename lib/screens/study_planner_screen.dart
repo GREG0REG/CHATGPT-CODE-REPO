@@ -92,6 +92,8 @@ class _StudyPlannerScreenState extends State<StudyPlannerScreen> {
                   }).toList(),
                   onSaved: (v) => subjectId = v,
                   validator: (v) => v == null ? 'Select a subject' : null,
+                  // ─── FIX: added onChanged ───
+                  onChanged: (value) {},
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<int>(
@@ -106,6 +108,8 @@ class _StudyPlannerScreenState extends State<StudyPlannerScreen> {
                     }),
                   ],
                   onSaved: (v) => eventId = v,
+                  // ─── FIX: added onChanged ───
+                  onChanged: (value) {},
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -165,7 +169,8 @@ class _StudyPlannerScreenState extends State<StudyPlannerScreen> {
     }
   }
 
-  double _calculateProgress(StudyPlan plan) async {
+  // ─── FIX: return type changed to Future<double> ───
+  Future<double> _calculateProgress(StudyPlan plan) async {
     final items = await DatabaseHelper.instance.getStudyPlanItemsForPlan(plan.id!);
     if (items.isEmpty) return 0.0;
     final completed = items.where((i) => i.completed).length;
