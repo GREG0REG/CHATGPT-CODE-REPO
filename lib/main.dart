@@ -254,7 +254,7 @@ class EventCountdownAppState extends State<EventCountdownApp>
 
     if (!mounted) return;
 
-    final backupPath = await BackupService.findRecentBackup();
+        final backupPath = await BackupService.instance.findRecentBackup();
     if (backupPath == null) return;
     if (!mounted) return;
 
@@ -280,7 +280,9 @@ class EventCountdownAppState extends State<EventCountdownApp>
 
     if (shouldRestore == true) {
       try {
-        final count = await ExportImportService.importFromJson(backupPath);
+        final result = await BackupService.instance.importFromPath(backupPath);
+        final count = result.eventCount ?? 0;
+
         final events = await DatabaseHelper.instance.getAllEventsSorted();
         await NotificationService.instance.rescheduleAll(events);
         await WidgetService.refreshWidget();
