@@ -5,7 +5,6 @@ import '../models/syllabus_topic.dart';
 import '../models/syllabus_subject.dart';
 import 'syllabus_add_edit_screen.dart';
 import 'syllabus_topic_screen.dart';
-import 'study_planner_screen.dart';
 
 class SyllabusSubjectScreen extends StatefulWidget {
   final int subjectId;
@@ -49,8 +48,8 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => SyllabusAddEditScreen(
-          parentSubjectId: widget.subjectId,
           level: 'unit',
+          parentSubjectId: widget.subjectId,
         ),
       ),
     );
@@ -66,12 +65,9 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
         title: Text(_subject?.name ?? 'Subject'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.calendar_today),
-            tooltip: 'Study Planner',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const StudyPlannerScreen()),
-            ),
+            icon: const Icon(Icons.lightbulb),
+            tooltip: 'Today\'s Suggestions',
+            onPressed: () => _showTodaySuggestions(),
           ),
         ],
       ),
@@ -91,7 +87,7 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
                   ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(16),
                   itemCount: _units.length,
                   itemBuilder: (ctx, index) {
                     final unit = _units[index];
@@ -110,19 +106,25 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
   Widget _buildUnitCard(SyllabusUnit unit, List<SyllabusTopic> topics, ColorScheme cs) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ExpansionTile(
         title: Text(unit.name, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text('${topics.length} topics'),
         children: topics.map((topic) {
+          final statusColors = {
+            'notStarted': Colors.grey,
+            'inProgress': Colors.orange,
+            'completed': Colors.green,
+            'needsRevision': Colors.red,
+          };
+          final color = statusColors[topic.status] ?? Colors.grey;
           return ListTile(
-            leading: CircleAvatar(
-              radius: 10,
-              backgroundColor: _statusColor(topic.statusEnum),
-            ),
+            leading: CircleAvatar(radius: 6, backgroundColor: color),
             title: Text(topic.name),
             trailing: Text(
-              topic.status,
-              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              topic.status.replaceFirst(RegExp(r'([A-Z])'), ' $1').trim(),
+              style: TextStyle(fontSize: 12, color: color),
             ),
             onTap: () {
               Navigator.push(
@@ -134,21 +136,37 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
             },
           );
         }).toList(),
-        onExpansionChanged: (expanded) {},
       ),
     );
   }
 
-  Color _statusColor(TopicStatus status) {
-    switch (status) {
-      case TopicStatus.completed:
-        return Colors.green;
-      case TopicStatus.inProgress:
-        return Colors.orange;
-      case TopicStatus.needsRevision:
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
+  void _showTodaySuggestions() async {
+    final suggestions = await DatabaseHelper.instance.getTopicsForToday();
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Today\'s Suggested Topics',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            if (suggestions.isEmpty)
+              const Text('No suggestions for today. Great job!')
+            else
+              ...suggestions.map((s) => ListTile(
+                    leading: const Icon(Icons.today),
+                    title: Text(s['name'] ?? ''),
+                    subtitle: Text(s['subjectName'] ?? ''),
+                  )),
+          ],
+        ),
+      ),
+    );
   }
 }
