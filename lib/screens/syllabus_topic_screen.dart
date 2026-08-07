@@ -44,6 +44,7 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen> {
 
   Future<void> _updateTopicStatus(TopicStatus newStatus) async {
     if (_topic == null) return;
+    // Use copyWith from the model (now defined)
     final updated = _topic!.copyWith(status: newStatus.name);
     await DatabaseHelper.instance.updateSyllabusTopic(updated);
     if (newStatus == TopicStatus.completed) {
@@ -67,6 +68,7 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen> {
 
   Future<void> _toggleSubtopic(SyllabusSubtopic subtopic) async {
     final newStatus = subtopic.status == 'completed' ? 'notStarted' : 'completed';
+    // Use copyWith from the model (now defined)
     final updated = subtopic.copyWith(status: newStatus);
     await DatabaseHelper.instance.updateSyllabusSubtopic(updated);
     await _loadData();
