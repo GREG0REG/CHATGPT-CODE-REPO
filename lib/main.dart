@@ -4,7 +4,7 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:event_countdown/database_helper.dart';
 import 'package:event_countdown/services/battery_service.dart';
-import 'package:event_countdown/services/export_import_service.dart';
+import 'package:event_countdown/services/backup_service.dart';
 import 'package:event_countdown/screens/home_screen.dart';
 import 'package:event_countdown/screens/main_screen.dart';
 import 'package:event_countdown/screens/widget_settings_screen.dart';
