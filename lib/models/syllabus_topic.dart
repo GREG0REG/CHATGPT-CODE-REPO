@@ -21,6 +21,29 @@ class SyllabusTopic {
     required this.createdAtMillis,
   });
 
+  // ─── copyWith method ───
+  SyllabusTopic copyWith({
+    int? id,
+    int? unitId,
+    String? name,
+    int? orderIndex,
+    String? status,
+    String? difficulty,
+    int? estimatedMinutes,
+    int? createdAtMillis,
+  }) {
+    return SyllabusTopic(
+      id: id ?? this.id,
+      unitId: unitId ?? this.unitId,
+      name: name ?? this.name,
+      orderIndex: orderIndex ?? this.orderIndex,
+      status: status ?? this.status,
+      difficulty: difficulty ?? this.difficulty,
+      estimatedMinutes: estimatedMinutes ?? this.estimatedMinutes,
+      createdAtMillis: createdAtMillis ?? this.createdAtMillis,
+    );
+  }
+
   Map<String, dynamic> toMap() => {
         'id': id,
         'unitId': unitId,
