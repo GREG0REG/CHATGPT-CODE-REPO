@@ -351,6 +351,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       });
     }
   }
+  Future<void> _loadSyllabusStats() async {
+  // We'll store subject count and overall progress in state.
+  // For now we'll just call it when needed; we can store in vars.
+  // We'll compute on the fly in the content builder.
+  }
 
   Future<List<_DayStreak>> _loadWeekStreakFromDb() async {
     final now = DateTime.now();
