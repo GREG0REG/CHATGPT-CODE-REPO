@@ -182,12 +182,23 @@ class PomodoroWidgetProvider : AppWidgetProvider() {
             } catch (e: Exception) {
                 android.util.Log.e("PomodoroWidget", "Update failed for widget $widgetId", e)
                 try {
-                    val fallbackViews = RemoteViews(context.packageName, R.layout.pomodoro_widget_layout)
-                    fallbackViews.setTextViewText(R.id.pomodoro_widget_timer, "--:--")
-                    fallbackViews.setTextViewText(R.id.pomodoro_widget_status, "Tap to open app")
-                    fallbackViews.setTextViewText(R.id.pomodoro_widget_subject, "Pomodoro Timer")
-                    fallbackViews.setInt(R.id.pomodoro_widget_root, "setBackgroundColor", Color.parseColor("#0F0F23"))
+                    // ──────────────────────────────────────────────────────────
+                    // FIX: Use a SIMPLE fallback layout that always works
+                    // ──────────────────────────────────────────────────────────
+                    val fallbackViews = RemoteViews(context.packageName, R.layout.pomodoro_widget_fallback)
+                    
+                    // Set click listener to open app
+                    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                    if (launchIntent != null) {
+                        val pendingIntent = PendingIntent.getActivity(
+                            context, widgetId, launchIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+                        fallbackViews.setOnClickPendingIntent(R.id.fallback_root, pendingIntent)
+                    }
+                    
                     appWidgetManager.updateAppWidget(widgetId, fallbackViews)
+                    android.util.Log.i("PomodoroWidget", "Fallback widget displayed for $widgetId")
                 } catch (e2: Exception) {
                     android.util.Log.e("PomodoroWidget", "Fallback also failed", e2)
                 }
