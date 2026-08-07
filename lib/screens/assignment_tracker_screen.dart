@@ -345,16 +345,17 @@ class _AssignmentTrackerScreenState extends State<AssignmentTrackerScreen> {
     await _loadData();
   }
 
-  Future<void> _toggleSubtask(Subtask subtask) async {
+    Future<void> _toggleSubtask(Subtask subtask) async {
     await DatabaseHelper.instance.toggleSubtaskComplete(subtask.id!, !subtask.isCompleted);
     // Update event progress based on subtasks
     final event = _allAssignments.firstWhere((e) => e.id == subtask.eventId);
     final sts = _getSubtasksForEvent(event.id!);
     final completed = sts.where((s) => s.isCompleted).length;
-    final progress = sts.isEmpty ? 0 : completed / sts.length;
+    final progress = sts.isEmpty ? 0.0 : (completed / sts.length).toDouble();
     await _updateProgress(event, progress);
     await _loadData();
   }
+
 
   Future<void> _toggleComplete(Event event) async {
     if (event.id == null) return;
