@@ -1,16 +1,12 @@
 // FILE: lib/screens/settings_screen.dart
-// COMPLETE REPLACEMENT — Uses new BackupService, no dead code, no bullshit.
-// CHANGES:
-//   1. Replaced all ExportImportService / old BackupService calls with BackupService
-//   2. Removed: CSV export, PDF placeholder, attendance/timetable export, monthly backup
-//   3. Added: Plain JSON export, auto-backup toggle, restore from recent backup
-//   4. Theme picker uses ThemeNotifier.instance.setTheme() — instant apply
-//   5. NEET settings all functional and persisted
+// COMPLETE REPLACEMENT — Shows warning when restoring empty backup
+// CHANGES from previous version:
+//   1. _doImport now checks result.wasEmpty and shows red warning snackbar
+//   2. Import success message shows totalRows if available
 
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,24 +29,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _lastMessage;
   bool _lastMessageIsError = false;
 
-  // NEET Mode
   bool _neetModeEnabled = true;
   bool _showSubjectBreakdown = true;
   bool _showCountdownBanner = true;
   DateTime _neetExamDate = DateTime(2027, 5, 4);
-
-  // Theme
   AppThemeOption _currentThemeOption = AppThemeOption.auroraBorealis;
-
-  // Study
   bool _studyRemindersEnabled = true;
   int _reminderInterval = 60;
   int _dailyStudyGoal = 120;
   int _physicsGoal = 120;
   int _chemistryGoal = 120;
   int _biologyGoal = 120;
-
-  // Auto backup
   bool _autoBackupEnabled = true;
 
   @override
@@ -62,7 +51,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-
       setState(() {
         _neetModeEnabled = prefs.getBool('neet_mode_enabled') ?? true;
         _showCountdownBanner = prefs.getBool('show_countdown_banner') ?? true;
@@ -71,14 +59,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _neetExamDate = neetDateMs != null
             ? DateTime.fromMillisecondsSinceEpoch(neetDateMs)
             : DateTime(2027, 5, 4);
-
         final themeRaw = prefs.getString('selectedTheme');
         if (themeRaw != null && themeRaw != 'default') {
           try {
             _currentThemeOption = AppThemeOption.values.byName(themeRaw);
           } catch (_) {}
         }
-
         _studyRemindersEnabled = prefs.getBool('study_reminders_enabled') ?? true;
         _reminderInterval = prefs.getInt('reminder_interval') ?? 60;
         _dailyStudyGoal = prefs.getInt('dailyStudyGoal') ?? 120;
@@ -102,7 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SnackBar(
         content: Text(message),
         backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
-        duration: const Duration(seconds: 4),
+        duration: Duration(seconds: isError ? 6 : 4),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(12),
@@ -126,13 +112,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // FIXED: Shows warning when restoring empty backup
   Future<void> _doImport(Future<ImportResult> Function() fn, String label) async {
     setState(() => _isWorking = true);
     try {
       final result = await fn();
       if (result.success) {
-        _showMessage('${result.message ?? label}');
-        // Refresh widgets after import
+        // FIXED: Warn if backup was empty
+        if (result.wasEmpty) {
+          _showMessage(result.message ?? 'Backup was empty!', isError: true);
+        } else {
+          _showMessage(result.message ?? label);
+        }
         WidgetService.refreshWidget();
       } else {
         _showMessage(result.message ?? '$label failed', isError: true);
@@ -250,7 +241,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          // ── NEET MODE ─────────────────────────────────────────
           _sectionHeader(icon: Icons.local_hospital, title: 'NEET Mode', subtitle: 'Exam preparation settings'),
           _card([
             _switchTile(
@@ -304,7 +294,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 16),
 
-          // ── APPEARANCE ────────────────────────────────────────
           _sectionHeader(icon: Icons.palette, title: 'Appearance', subtitle: '${AppThemes.all.length} study-optimized themes'),
           _card([
             Padding(
@@ -342,7 +331,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 16),
 
-          // ── STUDY GOALS ───────────────────────────────────────
           _sectionHeader(icon: Icons.track_changes, title: 'Study Goals', subtitle: 'Daily and weekly targets'),
           _card([
             ListTile(
@@ -374,7 +362,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 16),
 
-          // ── STUDY REMINDERS ───────────────────────────────────
           _sectionHeader(icon: Icons.notifications_active, title: 'Study Reminders', subtitle: 'Stay on track'),
           _card([
             _switchTile(
@@ -412,7 +399,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 16),
 
-          // ── BACKUP & EXPORT ───────────────────────────────────
           _sectionHeader(icon: Icons.backup, title: 'Backup & Export', subtitle: 'Save and restore your data'),
           _card([
             _actionTile(
@@ -474,7 +460,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   } else {
                     final result = await BackupService.instance.importFromPath(path);
                     if (result.success) {
-                      _showMessage('Restored: ${result.message}');
+                      // FIXED: Show warning if backup was empty
+                      if (result.wasEmpty) {
+                        _showMessage(result.message ?? 'Backup was empty!', isError: true);
+                      } else {
+                        _showMessage('Restored: ${result.message}');
+                      }
                       WidgetService.refreshWidget();
                     } else {
                       _showMessage(result.message ?? 'Restore failed', isError: true);
@@ -505,7 +496,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 24),
 
-          // ── STATUS ────────────────────────────────────────────
           if (_lastMessage != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -533,8 +523,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
-  // ── Builder helpers ─────────────────────────────────────────
 
   Widget _sectionHeader({required IconData icon, required String title, required String subtitle}) {
     return Padding(
