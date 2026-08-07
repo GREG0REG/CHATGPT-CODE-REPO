@@ -95,6 +95,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _expandAttendance = false;
   bool _expandOverdue = false;
   bool _expandUpcoming = false;
+  bool _expandSyllabus = false;
 
   final _neetQuotes = const [
     'Every MCQ you solve brings you closer to AIIMS.',
