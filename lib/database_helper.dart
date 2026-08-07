@@ -1110,6 +1110,12 @@ class DatabaseHelper {
     );
     return rows.map((r) => StudySession.fromMap(r)).toList();
   }
+  Future<StudySession?> getStudySession(int id) async {
+  final db = await database;
+  final rows = await db.query('study_sessions', where: 'id = ?', whereArgs: [id]);
+  if (rows.isEmpty) return null;
+  return StudySession.fromMap(rows.first);
+  }
 
   Future<int> getTodayStudyMinutes() async {
     final db = await database;
