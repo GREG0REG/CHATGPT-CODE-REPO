@@ -3197,6 +3197,599 @@ class DatabaseHelper {
     final activeDays = (rows.first['activeDays'] as int?) ?? 0;
     return (activeDays / 30 * 100).round().clamp(0, 100);
   }
+    // ============================================
+   // SYLLABUS SUBJECTS CRUD (v17)
+  // ============================================
+Future<int> insertSyllabusSubject(SyllabusSubject subject) async {
+  final db = await database;
+  return db.insert('syllabus_subjects', subject.toMap()..remove('id'));
+}
+
+Future<int> updateSyllabusSubject(SyllabusSubject subject) async {
+  final db = await database;
+  return db.update('syllabus_subjects', subject.toMap(), where: 'id = ?', whereArgs: [subject.id]);
+}
+
+Future<int> deleteSyllabusSubject(int id) async {
+  final db = await database;
+  await db.delete('syllabus_units', where: 'subjectId = ?', whereArgs: [id]);
+  await db.delete('syllabus_topics', where: 'unitId IN (SELECT id FROM syllabus_units WHERE subjectId = ?)', whereArgs: [id]);
+  return db.delete('syllabus_subjects', where: 'id = ?', whereArgs: [id]);
+}
+
+Future<List<SyllabusSubject>> getAllSyllabusSubjects() async {
+  final db = await database;
+  final rows = await db.query('syllabus_subjects', orderBy: 'name ASC');
+  return rows.map((r) => SyllabusSubject.fromMap(r)).toList();
+}
+
+Future<SyllabusSubject?> getSyllabusSubject(int id) async {
+  final db = await database;
+  final rows = await db.query('syllabus_subjects', where: 'id = ?', whereArgs: [id]);
+  if (rows.isEmpty) return null;
+  return SyllabusSubject.fromMap(rows.first);
+}
+
+// ============================================
+// SYLLABUS UNITS CRUD (v17)
+// ============================================
+Future<int> insertSyllabusUnit(SyllabusUnit unit) async {
+  final db = await database;
+  return db.insert('syllabus_units', unit.toMap()..remove('id'));
+}
+
+Future<int> updateSyllabusUnit(SyllabusUnit unit) async {
+  final db = await database;
+  return db.update('syllabus_units', unit.toMap(), where: 'id = ?', whereArgs: [unit.id]);
+}
+
+Future<int> deleteSyllabusUnit(int id) async {
+  final db = await database;
+  await db.delete('syllabus_topics', where: 'unitId = ?', whereArgs: [id]);
+  return db.delete('syllabus_units', where: 'id = ?', whereArgs: [id]);
+}
+
+Future<List<SyllabusUnit>> getSyllabusUnitsForSubject(int subjectId) async {
+  final db = await database;
+  final rows = await db.query(
+    'syllabus_units',
+    where: 'subjectId = ?',
+    whereArgs: [subjectId],
+    orderBy: 'orderIndex ASC',
+  );
+  return rows.map((r) => SyllabusUnit.fromMap(r)).toList();
+}
+
+Future<SyllabusUnit?> getSyllabusUnit(int id) async {
+  final db = await database;
+  final rows = await db.query('syllabus_units', where: 'id = ?', whereArgs: [id]);
+  if (rows.isEmpty) return null;
+  return SyllabusUnit.fromMap(rows.first);
+}
+
+// ============================================
+// SYLLABUS TOPICS CRUD (v17)
+// ============================================
+Future<int> insertSyllabusTopic(SyllabusTopic topic) async {
+  final db = await database;
+  return db.insert('syllabus_topics', topic.toMap()..remove('id'));
+}
+
+Future<int> updateSyllabusTopic(SyllabusTopic topic) async {
+  final db = await database;
+  return db.update('syllabus_topics', topic.toMap(), where: 'id = ?', whereArgs: [topic.id]);
+}
+
+Future<int> deleteSyllabusTopic(int id) async {
+  final db = await database;
+  await db.delete('syllabus_subtopics', where: 'topicId = ?', whereArgs: [id]);
+  await db.delete('syllabus_resources', where: 'topicId = ?', whereArgs: [id]);
+  await db.delete('syllabus_study_links', where: 'topicId = ?', whereArgs: [id]);
+  await db.delete('syllabus_revision_schedules', where: 'topicId = ?', whereArgs: [id]);
+  // Study plan items referencing this topic – we can set topicId to NULL or delete? We'll set to NULL.
+  await db.rawUpdate('UPDATE study_plan_items SET topicId = NULL WHERE topicId = ?', [id]);
+  return db.delete('syllabus_topics', where: 'id = ?', whereArgs: [id]);
+}
+
+Future<List<SyllabusTopic>> getSyllabusTopicsForUnit(int unitId) async {
+  final db = await database;
+  final rows = await db.query(
+    'syllabus_topics',
+    where: 'unitId = ?',
+    whereArgs: [unitId],
+    orderBy: 'orderIndex ASC',
+  );
+  return rows.map((r) => SyllabusTopic.fromMap(r)).toList();
+}
+
+Future<SyllabusTopic?> getSyllabusTopic(int id) async {
+  final db = await database;
+  final rows = await db.query('syllabus_topics', where: 'id = ?', whereArgs: [id]);
+  if (rows.isEmpty) return null;
+  return SyllabusTopic.fromMap(rows.first);
+}
+
+// ============================================
+// SYLLABUS SUBTOPICS CRUD (v17)
+// ============================================
+Future<int> insertSyllabusSubtopic(SyllabusSubtopic subtopic) async {
+  final db = await database;
+  return db.insert('syllabus_subtopics', subtopic.toMap()..remove('id'));
+}
+
+Future<int> updateSyllabusSubtopic(SyllabusSubtopic subtopic) async {
+  final db = await database;
+  return db.update('syllabus_subtopics', subtopic.toMap(), where: 'id = ?', whereArgs: [subtopic.id]);
+}
+
+Future<int> deleteSyllabusSubtopic(int id) async {
+  final db = await database;
+  await db.delete('syllabus_resources', where: 'subtopicId = ?', whereArgs: [id]);
+  return db.delete('syllabus_subtopics', where: 'id = ?', whereArgs: [id]);
+}
+
+Future<List<SyllabusSubtopic>> getSyllabusSubtopicsForTopic(int topicId) async {
+  final db = await database;
+  final rows = await db.query(
+    'syllabus_subtopics',
+    where: 'topicId = ?',
+    whereArgs: [topicId],
+    orderBy: 'orderIndex ASC',
+  );
+  return rows.map((r) => SyllabusSubtopic.fromMap(r)).toList();
+}
+
+Future<SyllabusSubtopic?> getSyllabusSubtopic(int id) async {
+  final db = await database;
+  final rows = await db.query('syllabus_subtopics', where: 'id = ?', whereArgs: [id]);
+  if (rows.isEmpty) return null;
+  return SyllabusSubtopic.fromMap(rows.first);
+}
+
+// ============================================
+// SYLLABUS RESOURCES CRUD (v17)
+// ============================================
+Future<int> insertSyllabusResource(SyllabusResource resource) async {
+  final db = await database;
+  return db.insert('syllabus_resources', resource.toMap()..remove('id'));
+}
+
+Future<int> updateSyllabusResource(SyllabusResource resource) async {
+  final db = await database;
+  return db.update('syllabus_resources', resource.toMap(), where: 'id = ?', whereArgs: [resource.id]);
+}
+
+Future<int> deleteSyllabusResource(int id) async {
+  final db = await database;
+  return db.delete('syllabus_resources', where: 'id = ?', whereArgs: [id]);
+}
+
+Future<List<SyllabusResource>> getSyllabusResourcesForTopic(int topicId) async {
+  final db = await database;
+  final rows = await db.query(
+    'syllabus_resources',
+    where: 'topicId = ?',
+    whereArgs: [topicId],
+    orderBy: 'createdAtMillis ASC',
+  );
+  return rows.map((r) => SyllabusResource.fromMap(r)).toList();
+}
+
+Future<List<SyllabusResource>> getSyllabusResourcesForSubtopic(int subtopicId) async {
+  final db = await database;
+  final rows = await db.query(
+    'syllabus_resources',
+    where: 'subtopicId = ?',
+    whereArgs: [subtopicId],
+    orderBy: 'createdAtMillis ASC',
+  );
+  return rows.map((r) => SyllabusResource.fromMap(r)).toList();
+}
+
+// ============================================
+// SYLLABUS STUDY LINKS CRUD (v17)
+// ============================================
+Future<int> insertSyllabusStudyLink(SyllabusStudyLink link) async {
+  final db = await database;
+  return db.insert('syllabus_study_links', link.toMap()..remove('id'));
+}
+
+Future<int> deleteSyllabusStudyLink(int id) async {
+  final db = await database;
+  return db.delete('syllabus_study_links', where: 'id = ?', whereArgs: [id]);
+}
+
+Future<List<SyllabusStudyLink>> getSyllabusStudyLinksForTopic(int topicId) async {
+  final db = await database;
+  final rows = await db.query(
+    'syllabus_study_links',
+    where: 'topicId = ?',
+    whereArgs: [topicId],
+    orderBy: 'createdAtMillis DESC',
+  );
+  return rows.map((r) => SyllabusStudyLink.fromMap(r)).toList();
+}
+
+Future<int> getStudyTimeForTopic(int topicId) async {
+  final db = await database;
+  final links = await getSyllabusStudyLinksForTopic(topicId);
+  int totalMinutes = 0;
+  for (final link in links) {
+    final session = await getStudySession(link.studySessionId);
+    if (session != null) {
+      totalMinutes += session.durationMinutes;
+    }
+  }
+  return totalMinutes;
+}
+
+// ============================================
+// SYLLABUS REVISION SCHEDULES CRUD (v17)
+// ============================================
+Future<int> insertSyllabusRevisionSchedule(SyllabusRevisionSchedule revision) async {
+  final db = await database;
+  return db.insert('syllabus_revision_schedules', revision.toMap()..remove('id'));
+}
+
+Future<int> updateSyllabusRevisionSchedule(SyllabusRevisionSchedule revision) async {
+  final db = await database;
+  return db.update('syllabus_revision_schedules', revision.toMap(), where: 'id = ?', whereArgs: [revision.id]);
+}
+
+Future<int> deleteSyllabusRevisionSchedule(int id) async {
+  final db = await database;
+  return db.delete('syllabus_revision_schedules', where: 'id = ?', whereArgs: [id]);
+}
+
+Future<List<SyllabusRevisionSchedule>> getSyllabusRevisionsForTopic(int topicId) async {
+  final db = await database;
+  final rows = await db.query(
+    'syllabus_revision_schedules',
+    where: 'topicId = ?',
+    whereArgs: [topicId],
+    orderBy: 'revisionNumber ASC',
+  );
+  return rows.map((r) => SyllabusRevisionSchedule.fromMap(r)).toList();
+}
+
+Future<void> generateRevisionSchedules(int topicId) async {
+  final now = DateTime.now();
+  final base = now.millisecondsSinceEpoch;
+  final intervals = [1, 3, 7, 14, 30]; // days
+  for (int i = 0; i < intervals.length; i++) {
+    final date = now.add(Duration(days: intervals[i]));
+    final schedule = SyllabusRevisionSchedule(
+      topicId: topicId,
+      revisionNumber: i + 1,
+      scheduledDateMillis: date.millisecondsSinceEpoch,
+      isCompleted: 0,
+      createdAtMillis: base,
+    );
+    await insertSyllabusRevisionSchedule(schedule);
+  }
+}
+
+// ============================================
+// STUDY PLANS CRUD (v17)
+// ============================================
+Future<int> insertStudyPlan(StudyPlan plan) async {
+  final db = await database;
+  return db.insert('study_plans', plan.toMap()..remove('id'));
+}
+
+Future<int> updateStudyPlan(StudyPlan plan) async {
+  final db = await database;
+  return db.update('study_plans', plan.toMap(), where: 'id = ?', whereArgs: [plan.id]);
+}
+
+Future<int> deleteStudyPlan(int id) async {
+  final db = await database;
+  await db.delete('study_plan_items', where: 'planId = ?', whereArgs: [id]);
+  return db.delete('study_plans', where: 'id = ?', whereArgs: [id]);
+}
+
+Future<List<StudyPlan>> getAllStudyPlans() async {
+  final db = await database;
+  final rows = await db.query('study_plans', orderBy: 'startDateMillis DESC');
+  return rows.map((r) => StudyPlan.fromMap(r)).toList();
+}
+
+Future<StudyPlan?> getStudyPlan(int id) async {
+  final db = await database;
+  final rows = await db.query('study_plans', where: 'id = ?', whereArgs: [id]);
+  if (rows.isEmpty) return null;
+  return StudyPlan.fromMap(rows.first);
+}
+
+Future<List<StudyPlan>> getActiveStudyPlans() async {
+  final db = await database;
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final rows = await db.query(
+    'study_plans',
+    where: 'isActive = 1 AND startDateMillis <= ? AND endDateMillis >= ?',
+    whereArgs: [now, now],
+    orderBy: 'startDateMillis ASC',
+  );
+  return rows.map((r) => StudyPlan.fromMap(r)).toList();
+}
+
+// ============================================
+// STUDY PLAN ITEMS CRUD (v17)
+// ============================================
+Future<int> insertStudyPlanItem(StudyPlanItem item) async {
+  final db = await database;
+  return db.insert('study_plan_items', item.toMap()..remove('id'));
+}
+
+Future<int> updateStudyPlanItem(StudyPlanItem item) async {
+  final db = await database;
+  return db.update('study_plan_items', item.toMap(), where: 'id = ?', whereArgs: [item.id]);
+}
+
+Future<int> deleteStudyPlanItem(int id) async {
+  final db = await database;
+  return db.delete('study_plan_items', where: 'id = ?', whereArgs: [id]);
+}
+
+Future<List<StudyPlanItem>> getStudyPlanItemsForPlan(int planId) async {
+  final db = await database;
+  final rows = await db.query(
+    'study_plan_items',
+    where: 'planId = ?',
+    whereArgs: [planId],
+    orderBy: 'scheduledDateMillis ASC',
+  );
+  return rows.map((r) => StudyPlanItem.fromMap(r)).toList();
+}
+
+Future<List<StudyPlanItem>> getStudyPlanItemsForPlanInDateRange(int planId, int startMillis, int endMillis) async {
+  final db = await database;
+  final rows = await db.query(
+    'study_plan_items',
+    where: 'planId = ? AND scheduledDateMillis >= ? AND scheduledDateMillis < ?',
+    whereArgs: [planId, startMillis, endMillis],
+    orderBy: 'scheduledDateMillis ASC',
+  );
+  return rows.map((r) => StudyPlanItem.fromMap(r)).toList();
+}
+
+Future<void> completeStudyPlanItem(int id) async {
+  final db = await database;
+  await db.update(
+    'study_plan_items',
+    {'isCompleted': 1},
+    where: 'id = ?',
+    whereArgs: [id],
+  );
+}
+
+// ============================================
+// SYLLABUS ANALYTICS METHODS (v17)
+// ============================================
+
+/// Returns total and completed topics for a subject
+Future<Map<String, dynamic>> getSyllabusProgressForSubject(int subjectId) async {
+  final db = await database;
+  // Get all topics under this subject
+  final result = await db.rawQuery("""
+    SELECT 
+      COUNT(t.id) as total,
+      SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed
+    FROM syllabus_topics t
+    JOIN syllabus_units u ON t.unitId = u.id
+    WHERE u.subjectId = ?
+  """, [subjectId]);
+
+  return {
+    'total': (result.first['total'] as int?) ?? 0,
+    'completed': (result.first['completed'] as int?) ?? 0,
+  };
+}
+
+/// Overall syllabus progress across all subjects
+Future<Map<String, dynamic>> getOverallSyllabusProgress() async {
+  final db = await database;
+  final result = await db.rawQuery("""
+    SELECT 
+      COUNT(*) as total,
+      SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
+    FROM syllabus_topics
+  """);
+
+  return {
+    'total': (result.first['total'] as int?) ?? 0,
+    'completed': (result.first['completed'] as int?) ?? 0,
+  };
+}
+
+/// Topics that are 'needsRevision' or 'inProgress' for too long (e.g., > 7 days)
+Future<List<Map<String, dynamic>>> getWeakTopics() async {
+  final db = await database;
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final sevenDaysAgo = now - const Duration(days: 7).inMilliseconds;
+
+  // For simplicity, we return topics with status 'needsRevision' or 'inProgress'
+  // and whose createdAt is older than 7 days (to indicate stuck).
+  final rows = await db.rawQuery("""
+    SELECT t.*, u.subjectId, s.name as subjectName
+    FROM syllabus_topics t
+    JOIN syllabus_units u ON t.unitId = u.id
+    JOIN syllabus_subjects s ON u.subjectId = s.id
+    WHERE (t.status = 'needsRevision' OR (t.status = 'inProgress' AND t.createdAtMillis < ?))
+    ORDER BY t.createdAtMillis ASC
+  """, [sevenDaysAgo]);
+
+  return rows;
+}
+
+/// Get today's suggested topics based on:
+/// - Topics that have revision schedules due today
+/// - Topics that are 'inProgress' and have the least recent study activity
+Future<List<Map<String, dynamic>>> getTopicsForToday() async {
+  final db = await database;
+  final now = DateTime.now();
+  final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+  final todayEnd = todayStart + const Duration(days: 1).inMilliseconds;
+
+  // 1. Revision due today
+  final revisionTopics = await db.rawQuery("""
+    SELECT DISTINCT t.*, s.name as subjectName
+    FROM syllabus_revision_schedules r
+    JOIN syllabus_topics t ON r.topicId = t.id
+    JOIN syllabus_units u ON t.unitId = u.id
+    JOIN syllabus_subjects s ON u.subjectId = s.id
+    WHERE r.scheduledDateMillis >= ? AND r.scheduledDateMillis < ? AND r.isCompleted = 0
+    ORDER BY r.revisionNumber ASC
+  """, [todayStart, todayEnd]);
+
+  // 2. In-progress topics with oldest last study link (using study_links)
+  final inProgressTopics = await db.rawQuery("""
+    SELECT t.*, s.name as subjectName
+    FROM syllabus_topics t
+    JOIN syllabus_units u ON t.unitId = u.id
+    JOIN syllabus_subjects s ON u.subjectId = s.id
+    WHERE t.status = 'inProgress'
+    ORDER BY (SELECT MAX(createdAtMillis) FROM syllabus_study_links WHERE topicId = t.id) ASC
+    LIMIT 5
+  """);
+
+  return [
+    ...revisionTopics,
+    ...inProgressTopics,
+  ];
+}
+
+/// Pace analysis for a subject: compare completed topics vs expected based on target date
+Future<Map<String, dynamic>> getSyllabusPaceAnalysis(int subjectId) async {
+  final db = await database;
+  final subject = await getSyllabusSubject(subjectId);
+  if (subject == null || subject.targetCompletionDateMillis == null) {
+    return {'status': 'No target date set'};
+  }
+
+  final progress = await getSyllabusProgressForSubject(subjectId);
+  final total = progress['total'] as int;
+  final completed = progress['completed'] as int;
+
+  if (total == 0) return {'status': 'No topics'};
+
+  final targetDate = DateTime.fromMillisecondsSinceEpoch(subject.targetCompletionDateMillis!);
+  final now = DateTime.now();
+  final totalDays = targetDate.difference(now).inDays + 1; // including today
+  final daysPassed = now.difference(DateTime.fromMillisecondsSinceEpoch(subject.createdAtMillis)).inDays;
+
+  final expectedProgress = totalDays > 0 ? (daysPassed / totalDays) : 0;
+  final actualProgress = completed / total;
+
+  String status;
+  if (actualProgress >= expectedProgress) {
+    status = 'On Track';
+  } else if (actualProgress >= expectedProgress * 0.8) {
+    status = 'Slightly Behind';
+  } else {
+    status = 'Behind';
+  }
+
+  return {
+    'status': status,
+    'percentage': actualProgress * 100,
+    'targetDate': targetDate.toIso8601String(),
+    'remainingTopics': total - completed,
+    'daysLeft': totalDays,
+  };
+}
+
+/// Auto-generate a StudyPlan for a given subject
+Future<StudyPlan> generateStudyPlan({
+  required String name,
+  required int subjectId,
+  required int dailyStudyMinutes,
+  int? eventId,
+}) async {
+  // Get all incomplete topics (not completed) ordered by difficulty (hard first) then random
+  final db = await database;
+  final rows = await db.rawQuery("""
+    SELECT t.*
+    FROM syllabus_topics t
+    JOIN syllabus_units u ON t.unitId = u.id
+    WHERE u.subjectId = ? AND t.status != 'completed'
+    ORDER BY 
+      CASE t.difficulty
+        WHEN 'hard' THEN 1
+        WHEN 'medium' THEN 2
+        WHEN 'easy' THEN 3
+        ELSE 4
+      END,
+      random()
+  """, [subjectId]);
+
+  final topics = rows.map((r) => SyllabusTopic.fromMap(r)).toList();
+  if (topics.isEmpty) {
+    throw Exception('No incomplete topics for this subject');
+  }
+
+  // Determine start and end dates (span over total estimated time)
+  int totalMinutes = 0;
+  for (final t in topics) {
+    totalMinutes += (t.estimatedMinutes ?? 60);
+  }
+  // Add 20% buffer for revision
+  totalMinutes = (totalMinutes * 1.2).toInt();
+
+  final now = DateTime.now();
+  final startDate = DateTime(now.year, now.month, now.day);
+  final daysNeeded = (totalMinutes / dailyStudyMinutes).ceil();
+  final endDate = startDate.add(Duration(days: daysNeeded));
+
+  // Insert StudyPlan
+  final plan = StudyPlan(
+    name: name,
+    eventId: eventId,
+    subjectId: subjectId,
+    startDateMillis: startDate.millisecondsSinceEpoch,
+    endDateMillis: endDate.millisecondsSinceEpoch,
+    dailyStudyMinutes: dailyStudyMinutes,
+    isActive: 1,
+    createdAtMillis: now.millisecondsSinceEpoch,
+  );
+  final planId = await insertStudyPlan(plan);
+
+  // Distribute topics across days (simple round-robin)
+  final days = daysNeeded;
+  final items = <StudyPlanItem>[];
+  for (int i = 0; i < topics.length; i++) {
+    final topic = topics[i];
+    final dayOffset = i % days; // simple distribution
+    final scheduledDate = startDate.add(Duration(days: dayOffset));
+    items.add(StudyPlanItem(
+      planId: planId,
+      topicId: topic.id,
+      scheduledDateMillis: scheduledDate.millisecondsSinceEpoch,
+      allocatedMinutes: (topic.estimatedMinutes ?? 60).clamp(10, dailyStudyMinutes),
+      isCompleted: 0,
+      notes: null,
+      createdAtMillis: now.millisecondsSinceEpoch,
+    ));
+  }
+
+  for (final item in items) {
+    await insertStudyPlanItem(item);
+  }
+
+  // Return the newly created plan
+  final createdPlan = await getStudyPlan(planId);
+  return createdPlan!;
+}
+
+// ============================================
+// UPDATE EXPORT/IMPORT TABLES LIST
+// ============================================
+// ⚠️ You must also add these new tables to the `tables` list inside `exportAllTables()`
+// and in `importAllTables()` accordingly.
+// Add the following table names to the const list:
+// 'syllabus_subjects', 'syllabus_units', 'syllabus_topics', 'syllabus_subtopics',
+// 'syllabus_resources', 'syllabus_study_links', 'syllabus_revision_schedules',
+// 'study_plans', 'study_plan_items'
 
   // ============================================
   // STATS METHODS (8 methods for stats_screen.dart)
