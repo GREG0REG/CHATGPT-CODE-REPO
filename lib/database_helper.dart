@@ -60,6 +60,7 @@ class DatabaseHelper {
         if (oldVersion < 14) await _migrateV13ToV14(db);
         if (oldVersion < 15) await _migrateV14ToV15(db);
         if (oldVersion < 16) await _migrateV15ToV16(db); // NEW: NEET + gpa_courses
+        if (oldVersion < 17) await _migrateV16ToV17(db);
       },
     );
   }
@@ -870,6 +871,9 @@ class DatabaseHelper {
       )
     """);
   }
+    Future<void> _migrateV16ToV17(Database db) async {
+      await _addColumnIfNotExists(db, 'events', 'assignmentType', 'TEXT');
+    }
 
   // ============================================
   // EVENT CRUD (PRESERVED)
