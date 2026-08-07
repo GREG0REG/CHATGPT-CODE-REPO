@@ -15,6 +15,7 @@ enum WidgetBackgroundType { themeColor, customImage }
 
 /// Pushes data into home_widget SharedPreferences and triggers native updates.
 /// COMPLETE REPLACEMENT — v5: Multi-habit widget with per-day completion fix
+/// NEW: Syllabus widget support added
 class WidgetService {
   WidgetService._();
 
@@ -25,6 +26,8 @@ class WidgetService {
   static const String timetableWidgetName = 'TimetableWidgetProvider';
   static const String habitWidgetName = 'HabitWidgetProvider';
   static const String readingWidgetName = 'ReadingWidgetProvider';
+  // NEW: Syllabus widget
+  static const String syllabusWidgetName = 'SyllabusWidgetProvider';
 
   // ── Event Widget Keys ──
   static const _kEventTitle = 'event_title';
@@ -78,7 +81,6 @@ class WidgetService {
   static const _kHabitPrefixStreak = 'habit_streak_';
   static const _kHabitPrefixProgress = 'habit_progress_';
   static const _kHabitPrefixColor = 'habit_color_';
-  // NEW v5: Per-day completion booleans for correct dot mapping
   static const _kHabitPrefixDay = 'habit_day_';
   static const _kHabitPrefixCompleted = 'habit_completed_';
   static const _kHabitPrefixTarget = 'habit_target_';
@@ -130,6 +132,12 @@ class WidgetService {
   static const _kRevChemistryRound = 'revision_chemistry_round';
   static const _kRevBiologyRound = 'revision_biology_round';
 
+  // ── Syllabus Widget Keys ──
+  static const _kSylSubjectCount = 'syllabus_subject_count';
+  static const _kSylPrefixName = 'syllabus_subject_name_';
+  static const _kSylPrefixProgress = 'syllabus_subject_progress_';
+  static const _kSylPrefixColor = 'syllabus_subject_color_';
+
   // ═════════════════════════════════════════════════════════════════
   // HELPER: Get SharedPreferences directly
   // ═════════════════════════════════════════════════════════════════
@@ -150,14 +158,7 @@ class WidgetService {
   }
 
   // ═════════════════════════════════════════════════════════════════
-  // ATTENDANCE WIDGET — NEET Edition v3
-  // Dark green card style matching Reading Tracker
-  // ═════════════════════════════════════════════════════════════════
-
-    // ═════════════════════════════════════════════════════════════════
   // ATTENDANCE WIDGET — NEET Edition v4
-  // Dark green card style matching Reading Tracker widget
-  // Shows up to 4 subjects with progress bars and streak
   // ═════════════════════════════════════════════════════════════════
 
   static Future<void> refreshAttendanceWidget() async {
@@ -1142,6 +1143,59 @@ class WidgetService {
   }
 
   // ═════════════════════════════════════════════════════════════════
+  // NEW: SYLLABUS WIDGET
+  // ═════════════════════════════════════════════════════════════════
+
+  static Future<void> refreshSyllabusWidget() async {
+    try {
+      final subjects = await DatabaseHelper.instance.getAllSyllabusSubjects();
+      final subjectData = <Map<String, dynamic>>[];
+
+      for (final subject in subjects) {
+        final progress = await DatabaseHelper.instance.getSyllabusProgressForSubject(subject.id!);
+        final total = progress['total'] as int;
+        final completed = progress['completed'] as int;
+        final pct = total > 0 ? completed / total : 0.0;
+
+        subjectData.add({
+          'name': subject.name,
+          'progress': pct,
+          'color': subject.colorHex,
+        });
+      }
+
+      // Sort by progress descending (most complete first) or alphabetically
+      subjectData.sort((a, b) => a['name'].compareTo(b['name']));
+
+      final count = subjectData.length.clamp(0, 5);
+      await HomeWidget.saveWidgetData(_kSylSubjectCount, count);
+
+      for (int i = 0; i < count; i++) {
+        final s = subjectData[i];
+        await HomeWidget.saveWidgetData(_kSylPrefixName + '$i', s['name'] as String);
+        await HomeWidget.saveWidgetData(_kSylPrefixProgress + '$i', (s['progress'] as double) * 100);
+        await HomeWidget.saveWidgetData(_kSylPrefixColor + '$i', s['color'] as String);
+      }
+
+      // Clear old data beyond current count
+      for (int i = count; i < 10; i++) {
+        await HomeWidget.saveWidgetData(_kSylPrefixName + '$i', null);
+        await HomeWidget.saveWidgetData(_kSylPrefixProgress + '$i', null);
+        await HomeWidget.saveWidgetData(_kSylPrefixColor + '$i', null);
+      }
+
+      await HomeWidget.updateWidget(
+        name: syllabusWidgetName,
+        androidName: syllabusWidgetName,
+      );
+
+      debugPrint('Syllabus widget refreshed: $count subjects');
+    } catch (e) {
+      debugPrint('refreshSyllabusWidget error: $e');
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════
   // COMPOSITE: REFRESH ALL WIDGETS
   // ═════════════════════════════════════════════════════════════════
 
@@ -1156,6 +1210,7 @@ class WidgetService {
     await refreshSubjectStreakWidget();
     await refreshMcqTargetWidget();
     await refreshRevisionRoundWidget();
+    await refreshSyllabusWidget(); // NEW
     debugPrint('WidgetService.refreshAllWidgets: all widgets refreshed');
   }
 
