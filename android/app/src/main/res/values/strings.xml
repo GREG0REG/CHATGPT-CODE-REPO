@@ -7,5 +7,6 @@
     <string name="mark_done">Mark Done</string>
     <string name="open_app">Open App</string>
     <string name="attendance_widget_description">Track your attendance percentage and streak</string>
+    <string name="syllabus_widget_description">Track your syllabus progress at a glance.</string>
     
 </resources>
