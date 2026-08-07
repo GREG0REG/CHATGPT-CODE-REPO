@@ -22,6 +22,15 @@ import 'package:event_countdown/models/flashcard.dart';
 import 'package:event_countdown/models/study_schedule.dart';
 import 'package:event_countdown/models/daily_goal.dart';
 import 'package:event_countdown/models/study_subject.dart';
+import '../models/syllabus_subject.dart';
+import '../models/syllabus_unit.dart';
+import '../models/syllabus_topic.dart';
+import '../models/syllabus_subtopic.dart';
+import '../models/syllabus_resource.dart';
+import '../models/syllabus_study_link.dart';
+import '../models/syllabus_revision_schedule.dart';
+import '../models/study_plan.dart';
+import '../models/study_plan_item.dart';
 
 class DatabaseHelper {
   DatabaseHelper._internal();
