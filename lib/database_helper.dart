@@ -40,7 +40,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 16, // BUMPED: v16 adds NEET fields + gpa_courses + fixes
+      version: 17, // BUMPED: v16 adds NEET fields + gpa_courses + fixes
       onCreate: (db, version) async {
         await _createTables(db);
       },
