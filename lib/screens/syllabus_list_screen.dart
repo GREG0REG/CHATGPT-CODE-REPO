@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../database_helper.dart';
 import '../models/syllabus_subject.dart';
 import 'syllabus_add_edit_screen.dart';
@@ -86,18 +85,20 @@ class _SyllabusListScreenState extends State<SyllabusListScreen> {
                   itemCount: _subjects.length,
                   itemBuilder: (ctx, index) {
                     final subject = _subjects[index];
-                    return _buildSubjectCard(subject, cs);
+                    return _buildSubjectCard(subject);
                   },
                 ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addSubject,
         icon: const Icon(Icons.add),
         label: const Text('Add Subject'),
+        backgroundColor: const Color(0xFF00E5FF), // Cyan/Teal matches design
+        foregroundColor: Colors.black,
       ),
     );
   }
 
-  Widget _buildSubjectCard(SyllabusSubject subject, ColorScheme cs) {
+  Widget _buildSubjectCard(SyllabusSubject subject) {
     return FutureBuilder<Map<String, dynamic>>(
       future: DatabaseHelper.instance.getSyllabusProgressForSubject(subject.id!),
       builder: (ctx, snapshot) {
@@ -106,10 +107,28 @@ class _SyllabusListScreenState extends State<SyllabusListScreen> {
         final completed = data['completed'] as int;
         final progress = total > 0 ? completed / total : 0.0;
 
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        // Determine status based on progress
+        String statusText;
+        Color statusColor;
+        if (progress >= 0.8) {
+          statusText = 'Ahead';
+          statusColor = Colors.green;
+        } else if (progress >= 0.5) {
+          statusText = 'On Track';
+          statusColor = Colors.green;
+        } else {
+          statusText = 'Behind';
+          statusColor = Colors.orange;
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E2429), // Dark theme card background
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF2C3238), width: 1),
+          ),
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
             onTap: () {
@@ -120,84 +139,91 @@ class _SyllabusListScreenState extends State<SyllabusListScreen> {
                 ),
               );
             },
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: subject.color,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        subject.name.isNotEmpty ? subject.name[0].toUpperCase() : 'S',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            child: Row(
+              children: [
+                // Circular Progress (Pie Chart Simulation)
+                SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        value: progress,
+                        strokeWidth: 8,
+                        backgroundColor: const Color(0xFF2F3540),
+                        valueColor: AlwaysStoppedAnimation<Color>(subject.color),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          subject.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
-                        Text(
-                          '$completed / $total topics completed',
-                          style: TextStyle(color: cs.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CircularProgressIndicator(
-                          value: progress,
-                          strokeWidth: 5,
-                          backgroundColor: cs.surfaceContainerHighest,
-                          valueColor: AlwaysStoppedAnimation<Color>(subject.color),
-                        ),
-                        Text(
-                          '${(progress * 100).round()}%',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      if (value == 'edit') {
-                        final result = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => SyllabusAddEditScreen(
-                              level: 'subject',
-                              existing: subject,
-                            ),
-                          ),
-                        );
-                        if (result == true) await _loadData();
-                      } else if (value == 'delete') {
-                        await _deleteSubject(subject.id!);
-                      }
-                    },
-                    itemBuilder: (ctx) => [
-                      const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                      Text(
+                        '${(progress * 100).round()}%',
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
                     ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 16),
+                // Details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        subject.name,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$total units · $completed topics completed',
+                        style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                // Status Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: statusColor.withOpacity(0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.circle, size: 6, color: statusColor),
+                      const SizedBox(width: 6),
+                      Text(
+                        statusText,
+                        style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Popup Menu
+                PopupMenuButton<String>(
+                  onSelected: (value) async {
+                    if (value == 'edit') {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SyllabusAddEditScreen(
+                            level: 'subject',
+                            existing: subject,
+                          ),
+                        ),
+                      );
+                      if (result == true) await _loadData();
+                    } else if (value == 'delete') {
+                      await _deleteSubject(subject.id!);
+                    }
+                  },
+                  itemBuilder: (ctx) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    PopupMenuItem(value: 'delete', child: Text('Delete')),
+                  ],
+                ),
+              ],
             ),
           ),
         );
