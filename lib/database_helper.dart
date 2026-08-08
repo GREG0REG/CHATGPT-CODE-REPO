@@ -69,6 +69,7 @@ class DatabaseHelper {
         if (oldVersion < 18) await _migrateV17ToV18(db);
         if (oldVersion < 19) await _migrateV18ToV19(db);
         if (oldVersion < 20) await _migrateV19ToV20(db);
+        if (oldVersion < 21) await _migrateV20ToV21(db);
       },
     );
   }
