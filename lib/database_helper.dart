@@ -45,7 +45,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 20,
+      version: 21,
       onCreate: (db, version) async {
         await _createTables(db);
       },
