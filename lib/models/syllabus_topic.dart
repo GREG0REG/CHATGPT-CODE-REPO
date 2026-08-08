@@ -153,6 +153,7 @@ class SyllabusTopic {
     lastMockScore: map['lastMockScore'] as int?,
     bestMockScore: map['bestMockScore'] as int?,
     totalStudyMinutes: map['totalStudyMinutes'] as int?,
+    notes: map['notes'] as String?,
     createdAtMillis: map['createdAtMillis'] as int,
   );
 }
