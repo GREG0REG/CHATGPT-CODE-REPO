@@ -3496,6 +3496,63 @@ class DatabaseHelper {
       await insertSyllabusRevisionSchedule(schedule);
     }
   }
+
+  // ============================================================
+  // REVISION DASHBOARD QUERIES (NEW)
+  // ============================================================
+  Future<List<Map<String, dynamic>>> getOverdueRevisions() async {
+    final db = await database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    return db.rawQuery("""
+      SELECT r.*, t.name as topicName, t.difficulty, u.name as unitName,
+             s.name as subjectName, s.colorHex
+      FROM syllabus_revision_schedules r
+      JOIN syllabus_topics t ON r.topicId = t.id
+      JOIN syllabus_units u ON t.unitId = u.id
+      JOIN syllabus_subjects s ON u.subjectId = s.id
+      WHERE r.scheduledDateMillis < ? AND r.isCompleted = 0
+      ORDER BY r.scheduledDateMillis ASC
+    """, [todayStart]);
+  }
+
+  Future<List<Map<String, dynamic>>> getUpcomingRevisions(int daysAhead) async {
+    final db = await database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final endMillis = todayStart + Duration(days: daysAhead).inMilliseconds;
+    return db.rawQuery("""
+      SELECT r.*, t.name as topicName, t.difficulty, u.name as unitName,
+             s.name as subjectName, s.colorHex
+      FROM syllabus_revision_schedules r
+      JOIN syllabus_topics t ON r.topicId = t.id
+      JOIN syllabus_units u ON t.unitId = u.id
+      JOIN syllabus_subjects s ON u.subjectId = s.id
+      WHERE r.scheduledDateMillis >= ? AND r.scheduledDateMillis <= ? AND r.isCompleted = 0
+      ORDER BY r.scheduledDateMillis ASC
+    """, [todayStart, endMillis]);
+  }
+
+  Future<Map<String, dynamic>> getRevisionStats() async {
+    final db = await database;
+    final totalResult = await db.rawQuery("""
+      SELECT COUNT(*) as total FROM syllabus_revision_schedules
+    """);
+    final completedResult = await db.rawQuery("""
+      SELECT COUNT(*) as completed FROM syllabus_revision_schedules WHERE isCompleted = 1
+    """);
+    final performanceResult = await db.rawQuery("""
+      SELECT AVG(performanceScore) as avgPerformance 
+      FROM syllabus_revision_schedules 
+      WHERE performanceScore IS NOT NULL
+    """);
+    return {
+      'totalRevisions': (totalResult.first['total'] as int?) ?? 0,
+      'completedRevisions': (completedResult.first['completed'] as int?) ?? 0,
+      'avgPerformance': (performanceResult.first['avgPerformance'] as num?)?.toDouble() ?? 0.0,
+    };
+  }
+
   // ============================================================
   // STUDY PLANS CRUD
   // ============================================================
