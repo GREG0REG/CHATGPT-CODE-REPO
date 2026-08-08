@@ -58,7 +58,7 @@ class _QuickNotesScreenState extends State<QuickNotesScreen>
   String? _subjectFilter;
 
   // Tags
-  final List<String> _currentTags = [];
+  List<String> _currentTags = [];
 
   late AnimationController _fabAnimationController;
 
