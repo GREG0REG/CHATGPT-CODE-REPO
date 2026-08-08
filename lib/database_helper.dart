@@ -1026,6 +1026,15 @@ class DatabaseHelper {
     await _addColumnIfNotExists(db, 'quick_notes', 'noteColor', 'TEXT DEFAULT \'#2D2D2D\'');
    
     }
+  
+    Future<void> _migrateV18ToV19(Database db) async {
+    await _addColumnIfNotExists(db, 'study_plans', 'priority', 'INTEGER DEFAULT 2');
+    await _addColumnIfNotExists(db, 'study_plans', 'strategy', 'TEXT DEFAULT \'balanced\'');
+    await _addColumnIfNotExists(db, 'study_plans', 'bufferDays', 'INTEGER DEFAULT 7');
+    await _addColumnIfNotExists(db, 'study_plan_items', 'orderIndex', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'syllabus_topics', 'neetMarksWeightage', 'INTEGER');
+  }
+
 
 
   // ============================================================
