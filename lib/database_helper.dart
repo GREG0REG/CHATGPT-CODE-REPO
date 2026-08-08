@@ -4122,6 +4122,32 @@ class DatabaseHelper {
     );
   }
 
+    Future<Map<String, dynamic>?> getChapterDeadlineForTopic(int topicId) async {
+    final db = await database;
+    final rows = await db.query(
+      'chapter_deadlines',
+      where: 'topicId = ?',
+      whereArgs: [topicId],
+    );
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> getOverdueDeadlines() async {
+    final db = await database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    return db.rawQuery("""
+      SELECT d.*, t.name as topicName, t.status, u.subjectId, s.name as subjectName, s.colorHex
+      FROM chapter_deadlines d
+      JOIN syllabus_topics t ON d.topicId = t.id
+      JOIN syllabus_units u ON t.unitId = u.id
+      JOIN syllabus_subjects s ON u.subjectId = s.id
+      WHERE d.targetDateMillis < ? AND d.isCompleted = 0 AND t.status != 'completed'
+      ORDER BY d.targetDateMillis ASC
+    """, [todayStart]);
+  }
+
   // ============================================================
   // ENHANCED SYLLABUS ANALYTICS
   // ============================================================
