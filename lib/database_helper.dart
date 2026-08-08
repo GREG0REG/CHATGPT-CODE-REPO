@@ -488,6 +488,12 @@ class DatabaseHelper {
         difficulty TEXT,
         estimatedMinutes INTEGER,
         neetMarksWeightage INTEGER,
+        targetCompletionDateMillis INTEGER,
+        mcqsAttempted INTEGER DEFAULT 0,
+        mcqsCorrect INTEGER DEFAULT 0,
+        lastMockScore INTEGER,
+        bestMockScore INTEGER,
+        totalStudyMinutes INTEGER DEFAULT 0,
         createdAtMillis INTEGER NOT NULL
       )
     """);
