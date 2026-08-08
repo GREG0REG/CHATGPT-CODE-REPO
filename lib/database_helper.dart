@@ -275,12 +275,17 @@ class DatabaseHelper {
       )
     """);
 
+        // ---- QUICK NOTES v18 (enhanced) ----
     await db.execute("""
       CREATE TABLE quick_notes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         content TEXT NOT NULL,
         subject TEXT NOT NULL DEFAULT 'General',
+        tagsJson TEXT DEFAULT '[]',
+        isPinned INTEGER DEFAULT 0,
+        isArchived INTEGER DEFAULT 0,
+        noteColor TEXT DEFAULT '#2D2D2D',
         createdAtMillis INTEGER NOT NULL,
         updatedAtMillis INTEGER
       )
