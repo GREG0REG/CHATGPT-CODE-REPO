@@ -78,6 +78,7 @@ class SyllabusTopic {
     lastMockScore: lastMockScore ?? this.lastMockScore,
     bestMockScore: bestMockScore ?? this.bestMockScore,
     totalStudyMinutes: totalStudyMinutes ?? this.totalStudyMinutes,
+    notes: notes ?? this.notes,
     createdAtMillis: createdAtMillis ?? this.createdAtMillis,
   );
 
