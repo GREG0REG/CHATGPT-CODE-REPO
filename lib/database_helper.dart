@@ -3818,6 +3818,279 @@ class DatabaseHelper {
 
     return plan.copyWith(id: planId);
   }
+    // ============================================================
+  // MOCK TEST HISTORY CRUD
+  // ============================================================
+  Future<int> insertMockTestHistory(Map<String, dynamic> test) async {
+    final db = await database;
+    final data = {
+      'subjectId': test['subjectId'],
+      'testName': test['testName'],
+      'score': test['score'],
+      'totalMarks': test['totalMarks'],
+      'rank': test['rank'],
+      'totalStudents': test['totalStudents'],
+      'topicsTested': test['topicsTested'],
+      'dateMillis': test['dateMillis'],
+      'notes': test['notes'],
+      'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
+    };
+    return db.insert('mock_test_history', data);
+  }
+
+  Future<int> updateMockTestHistory(int id, Map<String, dynamic> test) async {
+    final db = await database;
+    final data = {
+      'subjectId': test['subjectId'],
+      'testName': test['testName'],
+      'score': test['score'],
+      'totalMarks': test['totalMarks'],
+      'rank': test['rank'],
+      'totalStudents': test['totalStudents'],
+      'topicsTested': test['topicsTested'],
+      'dateMillis': test['dateMillis'],
+      'notes': test['notes'],
+    };
+    return db.update('mock_test_history', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteMockTestHistory(int id) async {
+    final db = await database;
+    return db.delete('mock_test_history', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllMockTestHistory() async {
+    final db = await database;
+    final rows = await db.query('mock_test_history', orderBy: 'dateMillis DESC');
+    return rows;
+  }
+
+  Future<List<Map<String, dynamic>>> getMockTestsForSubject(int subjectId) async {
+    final db = await database;
+    final rows = await db.query(
+      'mock_test_history',
+      where: 'subjectId = ?',
+      whereArgs: [subjectId],
+      orderBy: 'dateMillis DESC',
+    );
+    return rows;
+  }
+
+  Future<Map<String, dynamic>> getMockTestStats() async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT 
+        COUNT(*) as totalTests,
+        AVG(score * 100.0 / totalMarks) as avgPercentage,
+        MAX(score) as bestScore,
+        MIN(score * 100.0 / totalMarks) as worstPercentage
+      FROM mock_test_history
+    """);
+    return {
+      'totalTests': (result.first['totalTests'] as int?) ?? 0,
+      'avgPercentage': (result.first['avgPercentage'] as double?) ?? 0.0,
+      'bestScore': (result.first['bestScore'] as int?) ?? 0,
+      'worstPercentage': (result.first['worstPercentage'] as double?) ?? 0.0,
+    };
+  }
+
+  // ============================================================
+  // CHAPTER DEADLINE CRUD
+  // ============================================================
+  Future<int> insertChapterDeadline(Map<String, dynamic> deadline) async {
+    final db = await database;
+    final data = {
+      'topicId': deadline['topicId'],
+      'targetDateMillis': deadline['targetDateMillis'],
+      'priority': deadline['priority'] ?? 2,
+      'reminderDays': deadline['reminderDays'] ?? 3,
+      'isCompleted': deadline['isCompleted'] ?? 0,
+      'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
+    };
+    return db.insert('chapter_deadlines', data);
+  }
+
+  Future<int> updateChapterDeadline(int id, Map<String, dynamic> deadline) async {
+    final db = await database;
+    final data = {
+      'topicId': deadline['topicId'],
+      'targetDateMillis': deadline['targetDateMillis'],
+      'priority': deadline['priority'] ?? 2,
+      'reminderDays': deadline['reminderDays'] ?? 3,
+      'isCompleted': deadline['isCompleted'] ?? 0,
+    };
+    return db.update('chapter_deadlines', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteChapterDeadline(int id) async {
+    final db = await database;
+    return db.delete('chapter_deadlines', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<Map<String, dynamic>?> getChapterDeadlineForTopic(int topicId) async {
+    final db = await database;
+    final rows = await db.query(
+      'chapter_deadlines',
+      where: 'topicId = ?',
+      whereArgs: [topicId],
+    );
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> getUpcomingDeadlines(int daysAhead) async {
+    final db = await database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final endMillis = todayStart + Duration(days: daysAhead).inMilliseconds;
+    final rows = await db.rawQuery("""
+      SELECT d.*, t.name as topicName, t.status, u.subjectId, s.name as subjectName, s.colorHex
+      FROM chapter_deadlines d
+      JOIN syllabus_topics t ON d.topicId = t.id
+      JOIN syllabus_units u ON t.unitId = u.id
+      JOIN syllabus_subjects s ON u.subjectId = s.id
+      WHERE d.targetDateMillis >= ? AND d.targetDateMillis <= ? AND d.isCompleted = 0
+      ORDER BY d.targetDateMillis ASC
+    """, [todayStart, endMillis]);
+    return rows;
+  }
+
+  Future<List<Map<String, dynamic>>> getOverdueDeadlines() async {
+    final db = await database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
+    final rows = await db.rawQuery("""
+      SELECT d.*, t.name as topicName, t.status, u.subjectId, s.name as subjectName, s.colorHex
+      FROM chapter_deadlines d
+      JOIN syllabus_topics t ON d.topicId = t.id
+      JOIN syllabus_units u ON t.unitId = u.id
+      JOIN syllabus_subjects s ON u.subjectId = s.id
+      WHERE d.targetDateMillis < ? AND d.isCompleted = 0 AND t.status != 'completed'
+      ORDER BY d.targetDateMillis ASC
+    """, [todayStart]);
+    return rows;
+  }
+
+  Future<void> markDeadlineComplete(int topicId) async {
+    final db = await database;
+    await db.update(
+      'chapter_deadlines',
+      {'isCompleted': 1},
+      where: 'topicId = ?',
+      whereArgs: [topicId],
+    );
+  }
+
+  // ============================================================
+  // ENHANCED SYLLABUS ANALYTICS
+  // ============================================================
+  Future<Map<String, dynamic>> getTopicMcqStats(int topicId) async {
+    final db = await database;
+    final rows = await db.query(
+      'syllabus_topics',
+      where: 'id = ?',
+      whereArgs: [topicId],
+    );
+    if (rows.isEmpty) return {'attempted': 0, 'correct': 0, 'accuracy': 0.0};
+    final row = rows.first;
+    final attempted = (row['mcqsAttempted'] as int?) ?? 0;
+    final correct = (row['mcqsCorrect'] as int?) ?? 0;
+    return {
+      'attempted': attempted,
+      'correct': correct,
+      'accuracy': attempted > 0 ? (correct / attempted * 100).round() : 0.0,
+    };
+  }
+
+  Future<void> updateTopicMcqStats(int topicId, int attempted, int correct) async {
+    final db = await database;
+    final existing = await db.query('syllabus_topics', where: 'id = ?', whereArgs: [topicId]);
+    if (existing.isEmpty) return;
+    final oldAttempted = (existing.first['mcqsAttempted'] as int?) ?? 0;
+    final oldCorrect = (existing.first['mcqsCorrect'] as int?) ?? 0;
+    await db.update(
+      'syllabus_topics',
+      {
+        'mcqsAttempted': oldAttempted + attempted,
+        'mcqsCorrect': oldCorrect + correct,
+      },
+      where: 'id = ?',
+      whereArgs: [topicId],
+    );
+  }
+
+  Future<void> updateTopicMockScore(int topicId, int score) async {
+    final db = await database;
+    final existing = await db.query('syllabus_topics', where: 'id = ?', whereArgs: [topicId]);
+    if (existing.isEmpty) return;
+    final oldBest = (existing.first['bestMockScore'] as int?);
+    await db.update(
+      'syllabus_topics',
+      {
+        'lastMockScore': score,
+        'bestMockScore': oldBest == null || score > oldBest ? score : oldBest,
+      },
+      where: 'id = ?',
+      whereArgs: [topicId],
+    );
+  }
+
+  Future<void> addTopicStudyMinutes(int topicId, int minutes) async {
+    final db = await database;
+    await db.rawUpdate("""
+      UPDATE syllabus_topics
+      SET totalStudyMinutes = COALESCE(totalStudyMinutes, 0) + ?
+      WHERE id = ?
+    """, [minutes, topicId]);
+  }
+
+  Future<List<Map<String, dynamic>>> getTopicsWithDeadlines(int subjectId) async {
+    final db = await database;
+    final rows = await db.rawQuery("""
+      SELECT t.*, d.targetDateMillis as deadlineDate, d.priority, d.reminderDays
+      FROM syllabus_topics t
+      JOIN syllabus_units u ON t.unitId = u.id
+      LEFT JOIN chapter_deadlines d ON t.id = d.topicId
+      WHERE u.subjectId = ? AND d.targetDateMillis IS NOT NULL
+      ORDER BY d.targetDateMillis ASC
+    """, [subjectId]);
+    return rows;
+  }
+
+  Future<Map<String, dynamic>> getSubjectDeadlineProgress(int subjectId) async {
+    final db = await database;
+    final result = await db.rawQuery("""
+      SELECT 
+        COUNT(d.id) as totalDeadlines,
+        SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN d.targetDateMillis < ? AND t.status != 'completed' THEN 1 ELSE 0 END) as overdue
+      FROM chapter_deadlines d
+      JOIN syllabus_topics t ON d.topicId = t.id
+      JOIN syllabus_units u ON t.unitId = u.id
+      WHERE u.subjectId = ?
+    """, [DateTime.now().millisecondsSinceEpoch, subjectId]);
+    return {
+      'totalDeadlines': (result.first['totalDeadlines'] as int?) ?? 0,
+      'completed': (result.first['completed'] as int?) ?? 0,
+      'overdue': (result.first['overdue'] as int?) ?? 0,
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> getRevisionPerformanceStats() async {
+    final db = await database;
+    final rows = await db.rawQuery("""
+      SELECT 
+        r.revisionNumber,
+        COUNT(*) as total,
+        SUM(CASE WHEN r.isCompleted = 1 THEN 1 ELSE 0 END) as completed,
+        AVG(r.performanceScore) as avgPerformance
+      FROM syllabus_revision_schedules r
+      GROUP BY r.revisionNumber
+      ORDER BY r.revisionNumber
+    """);
+    return rows;
+  }
+
 
   // ============================================================
   // EXPORT/IMPORT
