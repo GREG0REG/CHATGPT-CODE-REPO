@@ -12,6 +12,12 @@ class SyllabusTopic {
   final int? neetMarksWeightage; // NEET-specific marks
   final int? timesRevised;
   final int? lastStudiedMillis;
+  final int? targetCompletionDateMillis; // NEW: chapter deadline
+  final int? mcqsAttempted; // NEW: MCQ tracking
+  final int? mcqsCorrect; // NEW: MCQ tracking
+  final int? lastMockScore; // NEW: mock test tracking
+  final int? bestMockScore; // NEW: mock test tracking
+  final int? totalStudyMinutes; // NEW: study time tracking
   final int createdAtMillis;
 
   SyllabusTopic({
@@ -25,6 +31,12 @@ class SyllabusTopic {
     this.neetMarksWeightage,
     this.timesRevised,
     this.lastStudiedMillis,
+    this.targetCompletionDateMillis,
+    this.mcqsAttempted,
+    this.mcqsCorrect,
+    this.lastMockScore,
+    this.bestMockScore,
+    this.totalStudyMinutes,
     required this.createdAtMillis,
   });
 
@@ -39,6 +51,12 @@ class SyllabusTopic {
     int? neetMarksWeightage,
     int? timesRevised,
     int? lastStudiedMillis,
+    int? targetCompletionDateMillis,
+    int? mcqsAttempted,
+    int? mcqsCorrect,
+    int? lastMockScore,
+    int? bestMockScore,
+    int? totalStudyMinutes,
     int? createdAtMillis,
   }) => SyllabusTopic(
     id: id ?? this.id,
@@ -51,6 +69,12 @@ class SyllabusTopic {
     neetMarksWeightage: neetMarksWeightage ?? this.neetMarksWeightage,
     timesRevised: timesRevised ?? this.timesRevised,
     lastStudiedMillis: lastStudiedMillis ?? this.lastStudiedMillis,
+    targetCompletionDateMillis: targetCompletionDateMillis ?? this.targetCompletionDateMillis,
+    mcqsAttempted: mcqsAttempted ?? this.mcqsAttempted,
+    mcqsCorrect: mcqsCorrect ?? this.mcqsCorrect,
+    lastMockScore: lastMockScore ?? this.lastMockScore,
+    bestMockScore: bestMockScore ?? this.bestMockScore,
+    totalStudyMinutes: totalStudyMinutes ?? this.totalStudyMinutes,
     createdAtMillis: createdAtMillis ?? this.createdAtMillis,
   );
 
@@ -63,6 +87,30 @@ class SyllabusTopic {
     ? StudyDifficulty.values.firstWhere((e) => e.name == difficulty, orElse: () => StudyDifficulty.medium)
     : null;
 
+  double? get mcqAccuracy => (mcqsAttempted != null && mcqsAttempted! > 0)
+      ? (mcqsCorrect ?? 0) / mcqsAttempted! * 100
+      : null;
+
+  bool get hasDeadline => targetCompletionDateMillis != null;
+
+  bool get isOverdue {
+    if (targetCompletionDateMillis == null || status == 'completed') return false;
+    final deadline = DateTime.fromMillisecondsSinceEpoch(targetCompletionDateMillis!);
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day).isAfter(
+      DateTime(deadline.year, deadline.month, deadline.day),
+    );
+  }
+
+  int? get daysUntilDeadline {
+    if (targetCompletionDateMillis == null) return null;
+    final deadline = DateTime.fromMillisecondsSinceEpoch(targetCompletionDateMillis!);
+    final now = DateTime.now();
+    return DateTime(deadline.year, deadline.month, deadline.day)
+        .difference(DateTime(now.year, now.month, now.day))
+        .inDays;
+  }
+
   Map<String, dynamic> toMap() => {
     'id': id,
     'unitId': unitId,
@@ -74,6 +122,12 @@ class SyllabusTopic {
     'neetMarksWeightage': neetMarksWeightage,
     'timesRevised': timesRevised,
     'lastStudiedMillis': lastStudiedMillis,
+    'targetCompletionDateMillis': targetCompletionDateMillis,
+    'mcqsAttempted': mcqsAttempted,
+    'mcqsCorrect': mcqsCorrect,
+    'lastMockScore': lastMockScore,
+    'bestMockScore': bestMockScore,
+    'totalStudyMinutes': totalStudyMinutes,
     'createdAtMillis': createdAtMillis,
   };
 
@@ -88,6 +142,12 @@ class SyllabusTopic {
     neetMarksWeightage: map['neetMarksWeightage'] as int?,
     timesRevised: map['timesRevised'] as int?,
     lastStudiedMillis: map['lastStudiedMillis'] as int?,
+    targetCompletionDateMillis: map['targetCompletionDateMillis'] as int?,
+    mcqsAttempted: map['mcqsAttempted'] as int?,
+    mcqsCorrect: map['mcqsCorrect'] as int?,
+    lastMockScore: map['lastMockScore'] as int?,
+    bestMockScore: map['bestMockScore'] as int?,
+    totalStudyMinutes: map['totalStudyMinutes'] as int?,
     createdAtMillis: map['createdAtMillis'] as int,
   );
 }
