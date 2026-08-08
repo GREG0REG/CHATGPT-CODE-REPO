@@ -1729,8 +1729,8 @@ class DatabaseHelper {
     }
   }
 
-  // ============================================================
-  // QUICK NOTES CRUD
+    // ============================================================
+  // QUICK NOTES CRUD (v18 — Enhanced)
   // ============================================================
   Future<int> insertQuickNote(Map<String, dynamic> note) async {
     final db = await database;
@@ -1738,6 +1738,10 @@ class DatabaseHelper {
       'title': note['title'],
       'content': note['content'],
       'subject': note['subject'] ?? 'General',
+      'tagsJson': note['tagsJson'] ?? '[]',
+      'isPinned': note['isPinned'] ?? 0,
+      'isArchived': note['isArchived'] ?? 0,
+      'noteColor': note['noteColor'] ?? '#2D2D2D',
       'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
       'updatedAtMillis': null,
     };
@@ -1750,6 +1754,10 @@ class DatabaseHelper {
       'title': note['title'],
       'content': note['content'],
       'subject': note['subject'] ?? 'General',
+      'tagsJson': note['tagsJson'] ?? '[]',
+      'isPinned': note['isPinned'] ?? 0,
+      'isArchived': note['isArchived'] ?? 0,
+      'noteColor': note['noteColor'] ?? '#2D2D2D',
       'updatedAtMillis': DateTime.now().millisecondsSinceEpoch,
     };
     return db.update('quick_notes', data, where: 'id = ?', whereArgs: [id]);
@@ -1760,19 +1768,96 @@ class DatabaseHelper {
     return db.delete('quick_notes', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<List<Map<String, dynamic>>> getAllQuickNotes({String? subjectFilter}) async {
+  Future<int> archiveQuickNote(int id, bool archive) async {
     final db = await database;
-    if (subjectFilter != null && subjectFilter != 'All') {
-      final rows = await db.query(
-        'quick_notes',
-        where: 'subject = ?',
-        whereArgs: [subjectFilter],
-        orderBy: 'createdAtMillis DESC',
-      );
-      return rows;
+    return db.update(
+      'quick_notes',
+      {'isArchived': archive ? 1 : 0, 'updatedAtMillis': DateTime.now().millisecondsSinceEpoch},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> pinQuickNote(int id, bool pin) async {
+    final db = await database;
+    return db.update(
+      'quick_notes',
+      {'isPinned': pin ? 1 : 0, 'updatedAtMillis': DateTime.now().millisecondsSinceEpoch},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getAllQuickNotes({
+    String? subjectFilter,
+    String? searchQuery,
+    bool includeArchived = false,
+    String sortBy = 'newest',
+  }) async {
+    final db = await database;
+    String whereClause = '';
+    List<dynamic> whereArgs = [];
+
+    if (!includeArchived) {
+      whereClause = 'isArchived = 0';
     }
-    final rows = await db.query('quick_notes', orderBy: 'createdAtMillis DESC');
+
+    if (subjectFilter != null && subjectFilter != 'All') {
+      whereClause = whereClause.isEmpty ? 'subject = ?' : '$whereClause AND subject = ?';
+      whereArgs.add(subjectFilter);
+    }
+
+    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+      final query = '%${searchQuery.trim()}%';
+      whereClause = whereClause.isEmpty
+          ? '(title LIKE ? OR content LIKE ? OR tagsJson LIKE ?)'
+          : '$whereClause AND (title LIKE ? OR content LIKE ? OR tagsJson LIKE ?)';
+      whereArgs.addAll([query, query, query]);
+    }
+
+    String orderBy;
+    switch (sortBy) {
+      case 'oldest':
+        orderBy = 'createdAtMillis ASC';
+        break;
+      case 'az':
+        orderBy = 'title ASC';
+        break;
+      case 'za':
+        orderBy = 'title DESC';
+        break;
+      case 'subject':
+        orderBy = 'subject ASC, createdAtMillis DESC';
+        break;
+      default: // newest
+        orderBy = 'createdAtMillis DESC';
+    }
+
+    final rows = await db.query(
+      'quick_notes',
+      where: whereClause.isEmpty ? null : whereClause,
+      whereArgs: whereArgs.isEmpty ? null : whereArgs,
+      orderBy: 'isPinned DESC, $orderBy',
+    );
     return rows;
+  }
+
+  Future<List<Map<String, dynamic>>> getArchivedQuickNotes() async {
+    final db = await database;
+    return db.query(
+      'quick_notes',
+      where: 'isArchived = 1',
+      orderBy: 'updatedAtMillis DESC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getPinnedQuickNotes() async {
+    final db = await database;
+    return db.query(
+      'quick_notes',
+      where: 'isPinned = 1 AND isArchived = 0',
+      orderBy: 'updatedAtMillis DESC',
+    );
   }
 
   Future<Map<String, dynamic>?> getQuickNote(int id) async {
@@ -1781,6 +1866,28 @@ class DatabaseHelper {
     if (rows.isEmpty) return null;
     return rows.first;
   }
+
+  Future<List<String>> getQuickNoteSubjects() async {
+    final db = await database;
+    final rows = await db.rawQuery("""
+      SELECT DISTINCT subject FROM quick_notes ORDER BY subject ASC
+    """);
+    return rows.map((r) => r['subject'] as String).toList();
+  }
+
+  Future<Map<String, dynamic>> getQuickNoteStats() async {
+    final db = await database;
+    final totalResult = await db.rawQuery('SELECT COUNT(*) as count FROM quick_notes WHERE isArchived = 0');
+    final pinnedResult = await db.rawQuery('SELECT COUNT(*) as count FROM quick_notes WHERE isPinned = 1 AND isArchived = 0');
+    final archivedResult = await db.rawQuery('SELECT COUNT(*) as count FROM quick_notes WHERE isArchived = 1');
+
+    return {
+      'total': (totalResult.first['count'] as int?) ?? 0,
+      'pinned': (pinnedResult.first['count'] as int?) ?? 0,
+      'archived': (archivedResult.first['count'] as int?) ?? 0,
+    };
+  }
+
 
   // ============================================================
   // ATTENDANCE LOGS CRUD
