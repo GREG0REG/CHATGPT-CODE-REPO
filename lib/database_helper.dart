@@ -1049,6 +1049,7 @@ class DatabaseHelper {
   }
   
   Future<void> _migrateV19ToV20(Database db) async {
+    await _addColumnIfNotExists(db, 'syllabus_topics', 'notes', 'TEXT');
     // Topic deadline dates
     await _addColumnIfNotExists(db, 'syllabus_topics', 'targetCompletionDateMillis', 'INTEGER');
     // Topic MCQ tracking
