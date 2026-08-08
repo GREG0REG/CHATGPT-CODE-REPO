@@ -22,7 +22,7 @@ class SyllabusSubject {
   Color get color {
     try {
       final hex = colorHex.replaceFirst('#', '');
-      return Color(int.parse('FF\$hex', radix: 16));
+      return Color(int.parse('FF$hex', radix: 16));
     } catch (_) {
       return const Color(0xFF2196F3);
     }
