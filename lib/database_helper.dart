@@ -1035,8 +1035,54 @@ class DatabaseHelper {
     await _addColumnIfNotExists(db, 'study_plan_items', 'orderIndex', 'INTEGER DEFAULT 0');
     await _addColumnIfNotExists(db, 'syllabus_topics', 'neetMarksWeightage', 'INTEGER');
   }
-
-
+  
+  Future<void> _migrateV19ToV20(Database db) async {
+    // Topic deadline dates
+    await _addColumnIfNotExists(db, 'syllabus_topics', 'targetCompletionDateMillis', 'INTEGER');
+    // Topic MCQ tracking
+    await _addColumnIfNotExists(db, 'syllabus_topics', 'mcqsAttempted', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'syllabus_topics', 'mcqsCorrect', 'INTEGER DEFAULT 0');
+    // Topic mock test scores
+    await _addColumnIfNotExists(db, 'syllabus_topics', 'lastMockScore', 'INTEGER');
+    await _addColumnIfNotExists(db, 'syllabus_topics', 'bestMockScore', 'INTEGER');
+    // Topic study time tracking
+    await _addColumnIfNotExists(db, 'syllabus_topics', 'totalStudyMinutes', 'INTEGER DEFAULT 0');
+    // Subject exam category
+    await _addColumnIfNotExists(db, 'syllabus_subjects', 'examCategory', 'TEXT');
+    await _addColumnIfNotExists(db, 'syllabus_subjects', 'totalMarksWeightage', 'INTEGER');
+    // Revision schedule enhancements
+    await _addColumnIfNotExists(db, 'syllabus_revision_schedules', 'performanceScore', 'INTEGER');
+    await _addColumnIfNotExists(db, 'syllabus_revision_schedules', 'actualRevisionDateMillis', 'INTEGER');
+    await _addColumnIfNotExists(db, 'syllabus_revision_schedules', 'notes', 'TEXT');
+    // Mock test history table
+    await db.execute("""
+      CREATE TABLE IF NOT EXISTS mock_test_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subjectId INTEGER,
+        testName TEXT NOT NULL,
+        score INTEGER NOT NULL,
+        totalMarks INTEGER NOT NULL,
+        rank INTEGER,
+        totalStudents INTEGER,
+        topicsTested TEXT,
+        dateMillis INTEGER NOT NULL,
+        notes TEXT,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+    // Chapter deadline tracking table
+    await db.execute("""
+      CREATE TABLE IF NOT EXISTS chapter_deadlines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topicId INTEGER NOT NULL UNIQUE,
+        targetDateMillis INTEGER NOT NULL,
+        priority INTEGER DEFAULT 2,
+        reminderDays INTEGER DEFAULT 3,
+        isCompleted INTEGER DEFAULT 0,
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+  }
 
   // ============================================================
   // EVENT CRUD
