@@ -3476,7 +3476,11 @@ class DatabaseHelper {
     return maps.map((m) => SyllabusRevisionSchedule.fromMap(m)).toList();
   }
 
-  Future<void> generateRevisionSchedules(int topicId) async {
+    Future<void> generateRevisionSchedules(int topicId) async {
+    // Check if schedules already exist for this topic
+    final existing = await getSyllabusRevisionsForTopic(topicId);
+    if (existing.isNotEmpty) return; // Already generated, don't duplicate
+
     final now = DateTime.now();
     final base = now.millisecondsSinceEpoch;
     final intervals = [1, 3, 7, 14, 30];
@@ -3492,7 +3496,6 @@ class DatabaseHelper {
       await insertSyllabusRevisionSchedule(schedule);
     }
   }
-
   // ============================================================
   // STUDY PLANS CRUD
   // ============================================================
