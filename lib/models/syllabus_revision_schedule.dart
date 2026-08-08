@@ -35,4 +35,22 @@ class SyllabusRevisionSchedule {
       );
 
   bool get completed => isCompleted == 1;
+
+  SyllabusRevisionSchedule copyWith({
+    int? id,
+    int? topicId,
+    int? revisionNumber,
+    int? scheduledDateMillis,
+    int? isCompleted,
+    int? createdAtMillis,
+  }) {
+    return SyllabusRevisionSchedule(
+      id: id ?? this.id,
+      topicId: topicId ?? this.topicId,
+      revisionNumber: revisionNumber ?? this.revisionNumber,
+      scheduledDateMillis: scheduledDateMillis ?? this.scheduledDateMillis,
+      isCompleted: isCompleted ?? this.isCompleted,
+      createdAtMillis: createdAtMillis ?? this.createdAtMillis,
+    );
+  }
 }
