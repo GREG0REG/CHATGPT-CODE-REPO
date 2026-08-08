@@ -463,6 +463,8 @@ class DatabaseHelper {
         name TEXT NOT NULL,
         colorHex TEXT DEFAULT '#2196F3',
         targetCompletionDateMillis INTEGER,
+        totalMarksWeightage INTEGER,
+        examCategory TEXT,
         createdAtMillis INTEGER NOT NULL
       )
     """);
