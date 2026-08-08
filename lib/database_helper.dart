@@ -484,6 +484,7 @@ class DatabaseHelper {
         status TEXT DEFAULT 'notStarted',
         difficulty TEXT,
         estimatedMinutes INTEGER,
+        neetMarksWeightage INTEGER,
         createdAtMillis INTEGER NOT NULL
       )
     """);
