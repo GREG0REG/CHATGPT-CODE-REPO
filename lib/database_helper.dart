@@ -3735,6 +3735,16 @@ class DatabaseHelper {
     );
   }
 
+    Future<int> updateStudyPlanItemNotes(int id, String notes) async {
+    final db = await database;
+    return db.update(
+      'study_plan_items',
+      {'notes': notes},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   // ============================================================
   // SYLLABUS ANALYTICS
   // ============================================================
