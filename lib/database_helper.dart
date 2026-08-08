@@ -3418,14 +3418,6 @@ class DatabaseHelper {
     return maps.map((m) => SyllabusRevisionSchedule.fromMap(m)).toList();
   }
 
-  
-  Future<List<SyllabusRevisionSchedule>> getAllRevisionSchedules() async {
-    final db = await database;
-    final maps = await db.query('syllabus_revision_schedules', orderBy: 'scheduledDateMillis ASC');
-    return maps.map((m) => SyllabusRevisionSchedule.fromMap(m)).toList();
-   
-    }
-
   Future<void> generateRevisionSchedules(int topicId) async {
     final now = DateTime.now();
     final base = now.millisecondsSinceEpoch;
