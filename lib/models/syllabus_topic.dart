@@ -59,6 +59,7 @@ class SyllabusTopic {
     int? lastMockScore,
     int? bestMockScore,
     int? totalStudyMinutes,
+    String? notes,
     int? createdAtMillis,
   }) => SyllabusTopic(
     id: id ?? this.id,
