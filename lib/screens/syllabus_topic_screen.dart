@@ -156,10 +156,10 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen>
           Wrap(
             spacing: 8,
             children: [
-              _buildStatusChip('Not Started', 'notStarted', Colors.grey),
-              _buildStatusChip('In Progress', 'inProgress', Colors.orange),
-              _buildStatusChip('Completed', 'completed', Colors.green),
-              _buildStatusChip('Needs Revision', 'needsRevision', Colors.red),
+              _buildStatusChip('Not Started', 'notStarted', Colors.grey, cs),
+              _buildStatusChip('In Progress', 'inProgress', Colors.orange, cs),
+              _buildStatusChip('Completed', 'completed', Colors.green, cs),
+              _buildStatusChip('Needs Revision', 'needsRevision', Colors.red, cs),
             ],
           ),
           const SizedBox(height: 20),
@@ -349,7 +349,7 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen>
     );
   }
 
-  Widget _buildStatusChip(String label, String status, Color color) {
+  Widget _buildStatusChip(String label, String status, Color color, ColorScheme cs) {
     final isSelected = _topic?.status == status;
     return ChoiceChip(
       label: Text(label),
