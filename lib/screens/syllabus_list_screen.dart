@@ -1483,7 +1483,7 @@ class _TopicDetailSheetState extends State<_TopicDetailSheet>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _buildStatColumn('attempted', attempted.toString(), cs),
+                    _buildStatColumn('attempted', attempted.toString(), Colors.teal),
                     _buildStatColumn('correct', correct.toString(), Colors.green),
                     _buildStatColumn('wrong', (attempted - correct).toString(), Colors.red),
                   ],
