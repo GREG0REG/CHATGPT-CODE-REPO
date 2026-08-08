@@ -4125,7 +4125,7 @@ class DatabaseHelper {
       'habit_logs',
       'reading_books',
       'reading_sessions',
-      // syllabus tables
+    // syllabus tables
       'syllabus_subjects',
       'syllabus_units',
       'syllabus_topics',
@@ -4135,6 +4135,8 @@ class DatabaseHelper {
       'syllabus_revision_schedules',
       'study_plans',
       'study_plan_items',
+      'mock_test_history',
+      'chapter_deadlines',
     ];
 
     for (final table in tables) {
