@@ -1013,6 +1013,13 @@ class DatabaseHelper {
       )
     """);
   }
+    Future<void> _migrateV17ToV18(Database db) async {
+    await _addColumnIfNotExists(db, 'quick_notes', 'tagsJson', 'TEXT DEFAULT \'[]\'');
+    await _addColumnIfNotExists(db, 'quick_notes', 'isPinned', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'quick_notes', 'isArchived', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'quick_notes', 'noteColor', 'TEXT DEFAULT \'#2D2D2D\'');
+   
+    }
 
 
   // ============================================================
