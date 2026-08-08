@@ -38,6 +38,7 @@ class SyllabusTopic {
     this.lastMockScore,
     this.bestMockScore,
     this.totalStudyMinutes,
+    this.notes,
     required this.createdAtMillis,
   });
 
