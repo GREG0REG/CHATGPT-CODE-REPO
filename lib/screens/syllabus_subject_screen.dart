@@ -19,6 +19,7 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
   Map<int, List<SyllabusTopic>> _topicsMap = {};
   SyllabusSubject? _subject;
   bool _loading = true;
+  Map<String, dynamic>? _paceAnalysis;
 
   @override
   void initState() {
@@ -35,10 +36,12 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
       final topics = await db.getSyllabusTopicsForUnit(unit.id!);
       topicsMap[unit.id!] = topics;
     }
+    final pace = await db.getSyllabusPaceAnalysis(widget.subjectId);
     setState(() {
       _subject = subject;
       _units = units;
       _topicsMap = topicsMap;
+      _paceAnalysis = pace;
       _loading = false;
     });
   }
@@ -64,6 +67,7 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
     await DatabaseHelper.instance.updateSyllabusTopic(updated);
     if (nextStatus == 'completed') {
       await DatabaseHelper.instance.generateRevisionSchedules(topic.id!);
+      await DatabaseHelper.instance.markDeadlineComplete(topic.id!);
     }
     await _loadData();
   }
@@ -151,6 +155,22 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
           else
             ...topics.map((topic) {
               final statusColor = _statusColor(topic.status);
+              // Deadline indicator
+              String? deadlineInfo;
+              Color? deadlineColor;
+              if (topic.hasDeadline && topic.status != 'completed') {
+                final days = topic.daysUntilDeadline;
+                if (days != null) {
+                  if (days < 0) {
+                    deadlineInfo = 'overdue ${days.abs()}d';
+                    deadlineColor = Colors.red;
+                  } else if (days <= 3) {
+                    deadlineInfo = '$days days left';
+                    deadlineColor = Colors.orange;
+                  }
+                }
+              }
+
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                 leading: GestureDetector(
@@ -165,34 +185,43 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
                   ),
                 ),
                 title: Text(topic.name),
-                subtitle: topic.difficulty != null
-                    ? Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '· ${topic.difficulty}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: topic.difficulty == 'hard'
-                                  ? Colors.red
-                                  : topic.difficulty == 'medium'
-                                      ? Colors.orange
-                                      : Colors.green,
-                            ),
-                          ),
-                          if (topic.estimatedMinutes != null)
-                            Text(
-                              '  · ${topic.estimatedMinutes} min',
-                              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                            ),
-                          if (topic.neetMarksWeightage != null)
-                            Text(
-                              '  · ${topic.neetMarksWeightage} marks',
-                              style: TextStyle(fontSize: 12, color: cs.primary),
-                            ),
-                        ],
-                      )
-                    : null,
+                subtitle: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (topic.difficulty != null)
+                      Text(
+                        '· ${topic.difficulty}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: topic.difficulty == 'hard'
+                              ? Colors.red
+                              : topic.difficulty == 'medium'
+                                  ? Colors.orange
+                                  : Colors.green,
+                        ),
+                      ),
+                    if (topic.estimatedMinutes != null)
+                      Text(
+                        '  · ${topic.estimatedMinutes} min',
+                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      ),
+                    if (topic.neetMarksWeightage != null)
+                      Text(
+                        '  · ${topic.neetMarksWeightage} marks',
+                        style: TextStyle(fontSize: 12, color: cs.primary),
+                      ),
+                    if (deadlineInfo != null)
+                      Text(
+                        '  · $deadlineInfo',
+                        style: TextStyle(fontSize: 12, color: deadlineColor, fontWeight: FontWeight.w600),
+                      ),
+                    if (topic.mcqAccuracy != null)
+                      Text(
+                        '  · ${topic.mcqAccuracy!.round()}% acc',
+                        style: TextStyle(fontSize: 12, color: Colors.teal, fontWeight: FontWeight.w600),
+                      ),
+                  ],
+                ),
                 trailing: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
@@ -224,6 +253,7 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
         subject: _subject,
         units: _units,
         topicsMap: _topicsMap,
+        paceAnalysis: _paceAnalysis,
       ),
     );
   }
@@ -252,11 +282,13 @@ class _WeightageAnalysisSheet extends StatelessWidget {
   final SyllabusSubject? subject;
   final List<SyllabusUnit> units;
   final Map<int, List<SyllabusTopic>> topicsMap;
+  final Map<String, dynamic>? paceAnalysis;
 
   const _WeightageAnalysisSheet({
     this.subject,
     required this.units,
     required this.topicsMap,
+    this.paceAnalysis,
   });
 
   @override
@@ -275,8 +307,20 @@ class _WeightageAnalysisSheet extends StatelessWidget {
     final completed = allTopics.where((t) => t.status == 'completed').length;
     final needsRevision = allTopics.where((t) => t.status == 'needsRevision').length;
 
+    // Deadline stats
+    final overdueTopics = allTopics.where((t) => t.isOverdue).length;
+    final upcomingDeadlines = allTopics.where((t) {
+      if (t.daysUntilDeadline == null || t.status == 'completed') return false;
+      return t.daysUntilDeadline! > 0 && t.daysUntilDeadline! <= 7;
+    }).length;
+
+    // MCQ stats
+    final totalAttempted = allTopics.fold<int>(0, (sum, t) => sum + (t.mcqsAttempted ?? 0));
+    final totalCorrect = allTopics.fold<int>(0, (sum, t) => sum + (t.mcqsCorrect ?? 0));
+    final overallAccuracy = totalAttempted > 0 ? (totalCorrect / totalAttempted * 100).round() : 0;
+
     return Container(
-      height: MediaQuery.of(context).size.height * 0.7,
+      height: MediaQuery.of(context).size.height * 0.75,
       decoration: BoxDecoration(
         color: cs.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -321,6 +365,70 @@ class _WeightageAnalysisSheet extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // Pace analysis banner
+                if (paceAnalysis != null && paceAnalysis!['status'] != null)
+                  Card(
+                    elevation: 0,
+                    color: paceAnalysis!['status'] == 'On Track'
+                        ? Colors.green.withOpacity(0.1)
+                        : paceAnalysis!['status'] == 'Slightly Behind'
+                            ? Colors.orange.withOpacity(0.1)
+                            : Colors.red.withOpacity(0.1),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: paceAnalysis!['status'] == 'On Track'
+                            ? Colors.green.withOpacity(0.3)
+                            : paceAnalysis!['status'] == 'Slightly Behind'
+                                ? Colors.orange.withOpacity(0.3)
+                                : Colors.red.withOpacity(0.3),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Icon(
+                            paceAnalysis!['status'] == 'On Track'
+                                ? Icons.trending_up
+                                : paceAnalysis!['status'] == 'Slightly Behind'
+                                    ? Icons.trending_flat
+                                    : Icons.trending_down,
+                            color: paceAnalysis!['status'] == 'On Track'
+                                ? Colors.green
+                                : paceAnalysis!['status'] == 'Slightly Behind'
+                                    ? Colors.orange
+                                    : Colors.red,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  paceAnalysis!['status'] as String,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: paceAnalysis!['status'] == 'On Track'
+                                        ? Colors.green
+                                        : paceAnalysis!['status'] == 'Slightly Behind'
+                                            ? Colors.orange
+                                            : Colors.red,
+                                  ),
+                                ),
+                                if (paceAnalysis!['remainingTopics'] != null)
+                                  Text(
+                                    '${paceAnalysis!['remainingTopics']} topics · ${paceAnalysis!['daysLeft']} days left',
+                                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
                 // Marks progress
                 Card(
                   elevation: 1,
@@ -370,6 +478,31 @@ class _WeightageAnalysisSheet extends StatelessWidget {
                       ],
                     ),
                   ),
+                ),
+                const SizedBox(height: 16),
+                // Deadline & MCQ summary
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildSummaryCard(
+                        'deadlines',
+                        '$overdueTopics overdue\\n$upcomingDeadlines this week',
+                        Icons.event_busy,
+                        overdueTopics > 0 ? Colors.red : Colors.green,
+                        cs,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildSummaryCard(
+                        'mcq accuracy',
+                        '$overallAccuracy%',
+                        Icons.quiz,
+                        overallAccuracy >= 70 ? Colors.green : overallAccuracy >= 40 ? Colors.orange : Colors.red,
+                        cs,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 // Status breakdown
@@ -452,6 +585,28 @@ class _WeightageAnalysisSheet extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(String label, String value, IconData icon, Color color, ColorScheme cs) {
+    return Card(
+      elevation: 0,
+      color: color.withOpacity(0.08),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: color.withOpacity(0.2)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 4),
+            Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color), textAlign: TextAlign.center),
+            Text(label, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+          ],
+        ),
       ),
     );
   }
