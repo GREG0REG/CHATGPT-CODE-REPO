@@ -45,7 +45,7 @@ class DatabaseHelper {
     final path = join(dbPath, 'event_countdown.db');
     return openDatabase(
       path,
-      version: 17,
+      version: 18,
       onCreate: (db, version) async {
         await _createTables(db);
       },
@@ -66,6 +66,7 @@ class DatabaseHelper {
         if (oldVersion < 15) await _migrateV14ToV15(db);
         if (oldVersion < 16) await _migrateV15ToV16(db);
         if (oldVersion < 17) await _migrateV16ToV17(db);
+        if (oldVersion < 18) await _migrateV17ToV18(db);
       },
     );
   }
