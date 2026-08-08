@@ -34,6 +34,10 @@ class _SyllabusAddEditScreenState extends State<SyllabusAddEditScreen> {
   String? _difficulty;
   int? _marksWeightage;
   DateTime? _targetDate;
+  DateTime? _topicDeadlineDate;
+  String? _examCategory;
+  int? _mcqsAttempted;
+  int? _mcqsCorrect;
 
   @override
   void initState() {
@@ -43,6 +47,7 @@ class _SyllabusAddEditScreenState extends State<SyllabusAddEditScreen> {
       if (widget.existing is SyllabusSubject) {
         _selectedColor = widget.existing.colorHex;
         _marksWeightage = widget.existing.totalMarksWeightage;
+        _examCategory = widget.existing.examCategory;
         if (widget.existing.targetCompletionDateMillis != null) {
           _targetDate = DateTime.fromMillisecondsSinceEpoch(
             widget.existing.targetCompletionDateMillis!,
@@ -56,6 +61,13 @@ class _SyllabusAddEditScreenState extends State<SyllabusAddEditScreen> {
         _estimatedMinutes = widget.existing.estimatedMinutes;
         _difficulty = widget.existing.difficulty;
         _marksWeightage = widget.existing.neetMarksWeightage;
+        _mcqsAttempted = widget.existing.mcqsAttempted;
+        _mcqsCorrect = widget.existing.mcqsCorrect;
+        if (widget.existing.targetCompletionDateMillis != null) {
+          _topicDeadlineDate = DateTime.fromMillisecondsSinceEpoch(
+            widget.existing.targetCompletionDateMillis!,
+          );
+        }
       }
     }
   }
@@ -75,6 +87,18 @@ class _SyllabusAddEditScreenState extends State<SyllabusAddEditScreen> {
     );
     if (picked != null) {
       setState(() => _targetDate = picked);
+    }
+  }
+
+  Future<void> _pickTopicDeadline() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _topicDeadlineDate ?? DateTime.now().add(const Duration(days: 14)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      setState(() => _topicDeadlineDate = picked);
     }
   }
 
@@ -120,6 +144,21 @@ class _SyllabusAddEditScreenState extends State<SyllabusAddEditScreen> {
                   ],
                   onChanged: (v) => setState(() => _selectedColor = v),
                   validator: (v) => v == null ? 'select a color' : null,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _examCategory,
+                  decoration: const InputDecoration(
+                    labelText: 'exam category',
+                    prefixIcon: Icon(Icons.category_outlined),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'physics', child: Text('physics')),
+                    DropdownMenuItem(value: 'chemistry', child: Text('chemistry')),
+                    DropdownMenuItem(value: 'biology', child: Text('biology')),
+                    DropdownMenuItem(value: 'general', child: Text('general')),
+                  ],
+                  onChanged: (v) => setState(() => _examCategory = v),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -202,6 +241,59 @@ class _SyllabusAddEditScreenState extends State<SyllabusAddEditScreen> {
                   ),
                   onChanged: (v) => _marksWeightage = int.tryParse(v),
                 ),
+                const SizedBox(height: 16),
+                // NEW: Topic deadline date
+                ListTile(
+                  leading: const Icon(Icons.event_busy),
+                  title: const Text('chapter deadline'),
+                  subtitle: Text(
+                    _topicDeadlineDate != null
+                        ? '${_topicDeadlineDate!.day}/${_topicDeadlineDate!.month}/${_topicDeadlineDate!.year}'
+                        : 'not set (optional)',
+                  ),
+                  trailing: _topicDeadlineDate != null
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () => setState(() => _topicDeadlineDate = null),
+                        )
+                      : null,
+                  onTap: _pickTopicDeadline,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: cs.outlineVariant),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // NEW: MCQ tracking
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        initialValue: _mcqsAttempted?.toString(),
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'mcqs attempted',
+                          prefixIcon: Icon(Icons.quiz_outlined),
+                          hintText: '0',
+                        ),
+                        onChanged: (v) => _mcqsAttempted = int.tryParse(v),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextFormField(
+                        initialValue: _mcqsCorrect?.toString(),
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'mcqs correct',
+                          prefixIcon: Icon(Icons.check_circle_outline),
+                          hintText: '0',
+                        ),
+                        onChanged: (v) => _mcqsCorrect = int.tryParse(v),
+                      ),
+                    ),
+                  ],
+                ),
               ],
               const SizedBox(height: 32),
               FilledButton.icon(
@@ -233,6 +325,7 @@ class _SyllabusAddEditScreenState extends State<SyllabusAddEditScreen> {
           colorHex: _selectedColor ?? '#2196F3',
           targetCompletionDateMillis: _targetDate?.millisecondsSinceEpoch,
           totalMarksWeightage: _marksWeightage,
+          examCategory: _examCategory,
           createdAtMillis: widget.existing?.createdAtMillis ?? now,
         );
         if (widget.existing == null) {
@@ -268,6 +361,9 @@ class _SyllabusAddEditScreenState extends State<SyllabusAddEditScreen> {
           difficulty: _difficulty,
           estimatedMinutes: _estimatedMinutes,
           neetMarksWeightage: _marksWeightage,
+          targetCompletionDateMillis: _topicDeadlineDate?.millisecondsSinceEpoch,
+          mcqsAttempted: _mcqsAttempted,
+          mcqsCorrect: _mcqsCorrect,
           createdAtMillis: widget.existing?.createdAtMillis ?? now,
         );
         if (widget.existing == null) {
