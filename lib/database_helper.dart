@@ -3647,79 +3647,115 @@ class DatabaseHelper {
   // ============================================================
   // STUDY PLAN GENERATION
   // ============================================================
-  Future<StudyPlan> generateStudyPlan({
+    Future<StudyPlan> generateStudyPlan({
     required String name,
     required int subjectId,
     required int dailyStudyMinutes,
     int? eventId,
+    String strategy = 'balanced',
+    int bufferDays = 7,
   }) async {
     final db = await database;
-    final rows = await db.rawQuery("""
-      SELECT t.*
-      FROM syllabus_topics t
-      JOIN syllabus_units u ON t.unitId = u.id
-      WHERE u.subjectId = ? AND t.status != 'completed'
-      ORDER BY 
-        CASE t.difficulty
-          WHEN 'hard' THEN 1
-          WHEN 'medium' THEN 2
-          WHEN 'easy' THEN 3
-          ELSE 4
-        END,
-        random()
-    """, [subjectId]);
-
-    final topics = rows.map((r) => SyllabusTopic.fromMap(r)).toList();
-    if (topics.isEmpty) {
-      throw Exception('No incomplete topics for this subject');
-    }
-
-    int totalMinutes = 0;
-    for (final t in topics) {
-      totalMinutes += (t.estimatedMinutes ?? 60);
-    }
-    totalMinutes = (totalMinutes * 1.2).toInt(); // 20% buffer
-
     final now = DateTime.now();
-    final startDate = DateTime(now.year, now.month, now.day);
-    final daysNeeded = (totalMinutes / dailyStudyMinutes).ceil();
-    final endDate = startDate.add(Duration(days: daysNeeded));
 
+    // Get end date from linked event or default to 30 days
+    int endDateMillis;
+    if (eventId != null) {
+      final eventMaps = await db.query('events', where: 'id = ?', whereArgs: [eventId]);
+      if (eventMaps.isNotEmpty) {
+        endDateMillis = eventMaps.first['dateMillis'] as int;
+      } else {
+        endDateMillis = now.add(const Duration(days: 30)).millisecondsSinceEpoch;
+      }
+    } else {
+      endDateMillis = now.add(const Duration(days: 30)).millisecondsSinceEpoch;
+    }
+
+    // Create the plan
     final plan = StudyPlan(
       name: name,
-      eventId: eventId,
       subjectId: subjectId,
-      startDateMillis: startDate.millisecondsSinceEpoch,
-      endDateMillis: endDate.millisecondsSinceEpoch,
+      eventId: eventId,
+      startDateMillis: now.millisecondsSinceEpoch,
+      endDateMillis: endDateMillis,
       dailyStudyMinutes: dailyStudyMinutes,
       isActive: 1,
+      strategy: strategy,
+      bufferDays: bufferDays,
       createdAtMillis: now.millisecondsSinceEpoch,
     );
-    final planId = await insertStudyPlan(plan);
+    final planId = await db.insert('study_plans', plan.toMap());
 
-    final days = daysNeeded;
-    final items = <StudyPlanItem>[];
-    for (int i = 0; i < topics.length; i++) {
-      final topic = topics[i];
-      final dayOffset = i % days;
-      final scheduledDate = startDate.add(Duration(days: dayOffset));
-      items.add(StudyPlanItem(
+    // Get all topics for this subject
+    final units = await getSyllabusUnitsForSubject(subjectId);
+    List<SyllabusTopic> allTopics = [];
+    for (final unit in units) {
+      final topics = await getSyllabusTopicsForUnit(unit.id!);
+      allTopics.addAll(topics);
+    }
+
+    // Filter out completed topics
+    allTopics = allTopics.where((t) => t.status != 'completed').toList();
+
+    // Sort based on strategy
+    switch (strategy) {
+      case 'hardFirst':
+        allTopics.sort((a, b) {
+          final diffOrder = {'hard': 0, 'medium': 1, 'easy': 2};
+          return (diffOrder[a.difficulty] ?? 3).compareTo(diffOrder[b.difficulty] ?? 3);
+        });
+        break;
+      case 'easyFirst':
+        allTopics.sort((a, b) {
+          final diffOrder = {'easy': 0, 'medium': 1, 'hard': 2};
+          return (diffOrder[a.difficulty] ?? 3).compareTo(diffOrder[b.difficulty] ?? 3);
+        });
+        break;
+      case 'marksWeighted':
+        allTopics.sort((a, b) =>
+          (b.neetMarksWeightage ?? 0).compareTo(a.neetMarksWeightage ?? 0));
+        break;
+      default: // balanced - sort by unit order
+        allTopics.sort((a, b) => a.unitId.compareTo(b.unitId));
+        break;
+    }
+
+    // Calculate available days (minus buffer)
+    final totalDays = (endDateMillis - now.millisecondsSinceEpoch) ~/ 86400000;
+    final availableDays = totalDays - bufferDays;
+    if (availableDays <= 0) {
+      return plan.copyWith(id: planId);
+    }
+
+    // Distribute topics across days
+    final topicsPerDay = (allTopics.length / availableDays).ceil();
+    int currentDay = 0;
+    int topicsInCurrentDay = 0;
+
+    for (int i = 0; i < allTopics.length; i++) {
+      final topic = allTopics[i];
+
+      if (topicsInCurrentDay >= topicsPerDay && currentDay < availableDays - 1) {
+        currentDay++;
+        topicsInCurrentDay = 0;
+      }
+
+      final scheduledDate = DateTime(now.year, now.month, now.day).add(Duration(days: currentDay));
+      final minutesPerTopic = dailyStudyMinutes ~/ topicsPerDay.clamp(1, dailyStudyMinutes);
+
+      final item = StudyPlanItem(
         planId: planId,
         topicId: topic.id,
         scheduledDateMillis: scheduledDate.millisecondsSinceEpoch,
-        allocatedMinutes: (topic.estimatedMinutes ?? 60).clamp(10, dailyStudyMinutes),
-        isCompleted: 0,
-        notes: null,
+        allocatedMinutes: minutesPerTopic.clamp(30, dailyStudyMinutes),
+        orderIndex: i,
         createdAtMillis: now.millisecondsSinceEpoch,
-      ));
+      );
+      await db.insert('study_plan_items', item.toMap());
+      topicsInCurrentDay++;
     }
 
-    for (final item in items) {
-      await insertStudyPlanItem(item);
-    }
-
-    final createdPlan = await getStudyPlan(planId);
-    return createdPlan!;
+    return plan.copyWith(id: planId);
   }
 
   // ============================================================
