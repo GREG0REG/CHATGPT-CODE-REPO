@@ -8,6 +8,8 @@ import '../models/syllabus_subtopic.dart';
 import 'syllabus_add_edit_screen.dart';
 import 'study_planner_screen.dart';
 import 'revision_dashboard_screen.dart';
+import 'mock_test_tracker_screen.dart';
+import 'deadline_dashboard_screen.dart';
 
 class SyllabusListScreen extends StatefulWidget {
   const SyllabusListScreen({super.key});
@@ -28,6 +30,8 @@ class _SyllabusListScreenState extends State<SyllabusListScreen>
   bool _loading = true;
   bool _selectionMode = false;
   late TabController _tabController;
+  int _overdueDeadlines = 0;
+  int _todayRevisions = 0;
 
   @override
   void initState() {
@@ -62,11 +66,17 @@ class _SyllabusListScreenState extends State<SyllabusListScreen>
       }
     }
 
+    // Get deadline and revision counts
+    final overdue = await db.getOverdueDeadlines();
+    final todayRevs = await db.getTopicsForToday();
+
     setState(() {
       _subjects = subjects;
       _unitsMap = unitsMap;
       _topicsMap = topicsMap;
       _subtopicsMap = subtopicsMap;
+      _overdueDeadlines = overdue.length;
+      _todayRevisions = todayRevs.length;
       _loading = false;
     });
   }
@@ -238,6 +248,8 @@ class _SyllabusListScreenState extends State<SyllabusListScreen>
     await DatabaseHelper.instance.updateSyllabusTopic(updated);
     if (nextStatus == 'completed') {
       await DatabaseHelper.instance.generateRevisionSchedules(topic.id!);
+      // Mark deadline as complete if exists
+      await DatabaseHelper.instance.markDeadlineComplete(topic.id!);
     }
     await _loadData();
   }
@@ -251,18 +263,21 @@ class _SyllabusListScreenState extends State<SyllabusListScreen>
 
   Future<void> _bulkMarkComplete() async {
     for (final topicId in _selectedTopics) {
-      // Find the topic and mark complete
+      SyllabusTopic? targetTopic;
       for (final entry in _topicsMap.entries) {
-        final topic = entry.value.firstWhere(
-          (t) => t.id == topicId,
-          orElse: () => null as SyllabusTopic,
-        );
-        if (topic.id != null) {
-          final updated = topic.copyWith(status: 'completed');
-          await DatabaseHelper.instance.updateSyllabusTopic(updated);
-          await DatabaseHelper.instance.generateRevisionSchedules(topic.id!);
-          break;
+        for (final t in entry.value) {
+          if (t.id == topicId) {
+            targetTopic = t;
+            break;
+          }
         }
+        if (targetTopic != null) break;
+      }
+      if (targetTopic != null) {
+        final updated = targetTopic.copyWith(status: 'completed');
+        await DatabaseHelper.instance.updateSyllabusTopic(updated);
+        await DatabaseHelper.instance.generateRevisionSchedules(targetTopic.id!);
+        await DatabaseHelper.instance.markDeadlineComplete(targetTopic.id!);
       }
     }
     setState(() {
@@ -358,6 +373,28 @@ class _SyllabusListScreenState extends State<SyllabusListScreen>
               }),
             ),
           ] else ...[
+            // Deadline badge
+            if (_overdueDeadlines > 0)
+              Badge(
+                label: Text('$_overdueDeadlines'),
+                child: IconButton(
+                  icon: const Icon(Icons.event_busy),
+                  tooltip: 'overdue deadlines',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const DeadlineDashboardScreen()),
+                  ),
+                ),
+              ),
+            // Mock test tracker
+            IconButton(
+              icon: const Icon(Icons.assessment_outlined),
+              tooltip: 'mock tests',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MockTestTrackerScreen()),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: FilledButton.icon(
@@ -410,6 +447,14 @@ class _SyllabusListScreenState extends State<SyllabusListScreen>
       return sum + (_topicsMap[u.id]?.where((t) => t.status == 'completed').length ?? 0);
     });
     final progress = totalTopics > 0 ? completedTopics / totalTopics : 0.0;
+
+    // Count overdue topics for this subject
+    int overdueCount = 0;
+    for (final unit in units) {
+      for (final topic in _topicsMap[unit.id] ?? []) {
+        if (topic.isOverdue) overdueCount++;
+      }
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -468,10 +513,19 @@ class _SyllabusListScreenState extends State<SyllabusListScreen>
                               fontWeight: FontWeight.w500,
                             ),
                           ),
+                        if (overdueCount > 0)
+                          Text(
+                            '$overdueCount overdue',
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                       ],
                     ),
                   ),
-                  IconButton(
+                                    IconButton(
                     icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
                     onPressed: () => setState(() => _expandedSubjects[subject.id!] = !isExpanded),
                   ),
@@ -625,6 +679,28 @@ class _SyllabusListScreenState extends State<SyllabusListScreen>
         ? 0.0
         : subtopics.where((s) => s.status == 'completed').length / subtopics.length;
 
+    // Deadline indicator
+    String? deadlineText;
+    Color? deadlineColor;
+    if (topic.hasDeadline && topic.status != 'completed') {
+      final days = topic.daysUntilDeadline;
+      if (days != null) {
+        if (days < 0) {
+          deadlineText = '${days.abs()}d overdue';
+          deadlineColor = Colors.red;
+        } else if (days == 0) {
+          deadlineText = 'due today';
+          deadlineColor = Colors.orange;
+        } else if (days <= 3) {
+          deadlineText = '$days days left';
+          deadlineColor = Colors.orange;
+        } else {
+          deadlineText = '$days days';
+          deadlineColor = cs.onSurfaceVariant;
+        }
+      }
+    }
+
     return InkWell(
       onTap: () {
         if (_selectionMode) {
@@ -649,14 +725,18 @@ class _SyllabusListScreenState extends State<SyllabusListScreen>
               ? cs.primaryContainer.withOpacity(0.5)
               : topic.status == 'completed'
                   ? Colors.green.withOpacity(0.06)
-                  : cs.surface,
+                  : topic.isOverdue
+                      ? Colors.red.withOpacity(0.04)
+                      : cs.surface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSelected
                 ? cs.primary
                 : topic.status == 'completed'
                     ? Colors.green.withOpacity(0.2)
-                    : cs.outlineVariant.withOpacity(0.3),
+                    : topic.isOverdue
+                        ? Colors.red.withOpacity(0.3)
+                        : cs.outlineVariant.withOpacity(0.3),
           ),
         ),
         child: Row(
@@ -741,6 +821,24 @@ class _SyllabusListScreenState extends State<SyllabusListScreen>
                               fontWeight: FontWeight.w600,
                             ),
                           ),
+                        ),
+                      ],
+                      if (deadlineText != null) ...[
+                        const SizedBox(width: 6),
+                        Icon(Icons.event_busy, size: 10, color: deadlineColor),
+                        const SizedBox(width: 2),
+                        Text(
+                          deadlineText,
+                          style: TextStyle(fontSize: 10, color: deadlineColor, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                      if (topic.mcqAccuracy != null) ...[
+                        const SizedBox(width: 6),
+                        Icon(Icons.quiz, size: 10, color: cs.primary),
+                        const SizedBox(width: 2),
+                        Text(
+                          '${topic.mcqAccuracy!.round()}% acc',
+                          style: TextStyle(fontSize: 10, color: cs.primary, fontWeight: FontWeight.w600),
                         ),
                       ],
                       if (subtopics.isNotEmpty) ...[
@@ -844,15 +942,19 @@ class _TopicDetailSheetState extends State<_TopicDetailSheet>
   late TabController _tabController;
   List<dynamic> _resources = [];
   List<dynamic> _revisions = [];
+  Map<String, dynamic>? _mcqStats;
+  Map<String, dynamic>? _deadlineInfo;
   bool _loadingResources = true;
   bool _loadingRevisions = true;
+  bool _loadingStats = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadResources();
     _loadRevisions();
+    _loadStats();
   }
 
   Future<void> _loadResources() async {
@@ -871,6 +973,108 @@ class _TopicDetailSheetState extends State<_TopicDetailSheet>
       _revisions = revisions;
       _loadingRevisions = false;
     });
+  }
+
+  Future<void> _loadStats() async {
+    final mcq = await DatabaseHelper.instance.getTopicMcqStats(widget.topic.id!);
+    final deadline = await DatabaseHelper.instance.getChapterDeadlineForTopic(widget.topic.id!);
+    setState(() {
+      _mcqStats = mcq;
+      _deadlineInfo = deadline;
+      _loadingStats = false;
+    });
+  }
+
+  Future<void> _showMcqTracker() async {
+    final attemptedController = TextEditingController(
+      text: (widget.topic.mcqsAttempted ?? 0).toString(),
+    );
+    final correctController = TextEditingController(
+      text: (widget.topic.mcqsCorrect ?? 0).toString(),
+    );
+    final result = await showDialog<Map<String, int>?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('update mcq stats'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: attemptedController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'mcqs attempted',
+                prefixIcon: Icon(Icons.quiz_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: correctController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'mcqs correct',
+                prefixIcon: Icon(Icons.check_circle_outline),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('cancel')),
+          FilledButton(
+            onPressed: () {
+              final att = int.tryParse(attemptedController.text) ?? 0;
+              final corr = int.tryParse(correctController.text) ?? 0;
+              Navigator.pop(ctx, {'attempted': att, 'correct': corr});
+            },
+            child: const Text('save'),
+          ),
+        ],
+      ),
+    );
+    attemptedController.dispose();
+    correctController.dispose();
+
+    if (result != null) {
+      await DatabaseHelper.instance.updateTopicMcqStats(
+        widget.topic.id!,
+        result['attempted']!,
+        result['correct']!,
+      );
+      await _loadStats();
+      await widget.onRefresh();
+    }
+  }
+
+  Future<void> _showSetDeadline() async {
+    DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _deadlineInfo != null
+          ? DateTime.fromMillisecondsSinceEpoch(_deadlineInfo!['targetDateMillis'] as int)
+          : DateTime.now().add(const Duration(days: 14)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      final existing = await DatabaseHelper.instance.getChapterDeadlineForTopic(widget.topic.id!);
+      if (existing != null) {
+        await DatabaseHelper.instance.updateChapterDeadline(existing['id'] as int, {
+          'topicId': widget.topic.id,
+          'targetDateMillis': picked.millisecondsSinceEpoch,
+        });
+      } else {
+        await DatabaseHelper.instance.insertChapterDeadline({
+          'topicId': widget.topic.id,
+          'targetDateMillis': picked.millisecondsSinceEpoch,
+        });
+      }
+      // Also update topic's own deadline field
+      final updatedTopic = widget.topic.copyWith(
+        targetCompletionDateMillis: picked.millisecondsSinceEpoch,
+      );
+      await DatabaseHelper.instance.updateSyllabusTopic(updatedTopic);
+      await _loadStats();
+      await widget.onRefresh();
+    }
   }
 
   Color _statusColor(String status) {
@@ -973,6 +1177,22 @@ class _TopicDetailSheetState extends State<_TopicDetailSheet>
                                 ),
                               ),
                             ),
+                          if (_deadlineInfo != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'due: ${_formatDate(_deadlineInfo!['targetDateMillis'] as int)}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ],
@@ -1005,6 +1225,7 @@ class _TopicDetailSheetState extends State<_TopicDetailSheet>
               Tab(text: 'subtopics'),
               Tab(text: 'resources'),
               Tab(text: 'revision'),
+              Tab(text: 'mcq track'),
               Tab(text: 'notes'),
             ],
           ),
@@ -1015,6 +1236,7 @@ class _TopicDetailSheetState extends State<_TopicDetailSheet>
                 _buildSubtopicsTab(cs),
                 _buildResourcesTab(cs),
                 _buildRevisionTab(cs),
+                _buildMcqTab(cs),
                 _buildNotesTab(cs),
               ],
             ),
@@ -1022,6 +1244,11 @@ class _TopicDetailSheetState extends State<_TopicDetailSheet>
         ],
       ),
     );
+  }
+
+  String _formatDate(int millis) {
+    final d = DateTime.fromMillisecondsSinceEpoch(millis);
+    return '${d.day}/${d.month}/${d.year}';
   }
 
   Widget _buildSubtopicsTab(ColorScheme cs) {
@@ -1133,7 +1360,6 @@ class _TopicDetailSheetState extends State<_TopicDetailSheet>
         const SizedBox(height: 16),
         OutlinedButton.icon(
           onPressed: () async {
-            // Use file picker - same as before
             await widget.onRefresh();
             await _loadResources();
           },
@@ -1226,6 +1452,116 @@ class _TopicDetailSheetState extends State<_TopicDetailSheet>
     );
   }
 
+  Widget _buildMcqTab(ColorScheme cs) {
+    if (_loadingStats) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final attempted = _mcqStats?['attempted'] ?? 0;
+    final correct = _mcqStats?['correct'] ?? 0;
+    final accuracy = _mcqStats?['accuracy'] ?? 0.0;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // MCQ Stats Card
+        Card(
+          elevation: 1,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                const Icon(Icons.quiz, size: 40, color: Colors.teal),
+                const SizedBox(height: 12),
+                Text(
+                  '$accuracy%',
+                  style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.teal),
+                ),
+                const Text('accuracy', style: TextStyle(color: Colors.grey)),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildStatColumn('attempted', attempted.toString(), cs),
+                    _buildStatColumn('correct', correct.toString(), Colors.green),
+                    _buildStatColumn('wrong', (attempted - correct).toString(), Colors.red),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        // Best mock score
+        if (widget.topic.bestMockScore != null)
+          Card(
+            elevation: 0,
+            color: cs.primaryContainer.withOpacity(0.3),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: ListTile(
+              leading: const Icon(Icons.emoji_events, color: Colors.amber),
+              title: const Text('best mock score'),
+              trailing: Text(
+                '${widget.topic.bestMockScore}',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        const SizedBox(height: 20),
+        // Deadline section
+        Card(
+          elevation: 0,
+          color: cs.surfaceContainerHighest.withOpacity(0.3),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: ListTile(
+            leading: Icon(
+              Icons.event_busy,
+              color: widget.topic.isOverdue ? Colors.red : cs.primary,
+            ),
+            title: Text(
+              _deadlineInfo != null
+                  ? 'deadline: ${_formatDate(_deadlineInfo!['targetDateMillis'] as int)}'
+                  : 'no deadline set',
+            ),
+            subtitle: widget.topic.daysUntilDeadline != null
+                ? Text(
+                    widget.topic.isOverdue
+                        ? '${widget.topic.daysUntilDeadline!.abs()} days overdue'
+                        : '${widget.topic.daysUntilDeadline} days remaining',
+                    style: TextStyle(
+                      color: widget.topic.isOverdue ? Colors.red : Colors.green,
+                    ),
+                  )
+                : null,
+            trailing: FilledButton.tonal(
+              onPressed: _showSetDeadline,
+              child: Text(_deadlineInfo != null ? 'change' : 'set'),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        FilledButton.icon(
+          onPressed: _showMcqTracker,
+          icon: const Icon(Icons.edit),
+          label: const Text('update mcq stats'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatColumn(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color),
+        ),
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+      ],
+    );
+  }
+
   Widget _buildNotesTab(ColorScheme cs) {
     final controller = TextEditingController();
     return Padding(
@@ -1244,7 +1580,6 @@ class _TopicDetailSheetState extends State<_TopicDetailSheet>
           const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: () {
-              // Save note logic
               controller.dispose();
             },
             icon: const Icon(Icons.save),
