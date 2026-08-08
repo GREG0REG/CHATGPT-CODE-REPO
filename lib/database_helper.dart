@@ -553,6 +553,7 @@ class DatabaseHelper {
         allocatedMinutes INTEGER DEFAULT 60,
         isCompleted INTEGER DEFAULT 0,
         notes TEXT,
+        orderIndex INTEGER DEFAULT 0,
         createdAtMillis INTEGER NOT NULL
       )
     """);
