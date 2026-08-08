@@ -535,6 +535,9 @@ class DatabaseHelper {
         revisionNumber INTEGER NOT NULL,
         scheduledDateMillis INTEGER NOT NULL,
         isCompleted INTEGER DEFAULT 0,
+        performanceScore INTEGER,
+        actualRevisionDateMillis INTEGER,
+        notes TEXT,
         createdAtMillis INTEGER NOT NULL
       )
     """);
