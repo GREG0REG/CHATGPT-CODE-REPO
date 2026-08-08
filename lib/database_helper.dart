@@ -1256,6 +1256,90 @@ class DatabaseHelper {
     );
   }
 
+    // ============================================================
+  // STUDY SESSION STATS FOR STUDY PLANNER (NEW)
+  // ============================================================
+  Future<Map<String, dynamic>> getStudySessionStats(int? planId) async {
+    final db = await database;
+    // If planId is provided, filter by plan's linked sessions via study_plan_items
+    // Since sessions link to topicId, we join through study_plan_items
+    String whereClause = '';
+    List<dynamic> whereArgs = [];
+    
+    if (planId != null) {
+      whereClause = 'WHERE s.topicId IN (SELECT topicId FROM study_plan_items WHERE planId = ? AND topicId IS NOT NULL)';
+      whereArgs = [planId];
+    }
+    
+    final result = await db.rawQuery("""
+      SELECT 
+        COUNT(*) as totalSessions,
+        COALESCE(SUM(durationMinutes), 0) as totalMinutes,
+        AVG(productivity) as avgProductivity
+      FROM study_sessions s
+      $whereClause
+    """, whereArgs);
+    
+    return {
+      'totalSessions': (result.first['totalSessions'] as int?) ?? 0,
+      'totalMinutes': (result.first['totalMinutes'] as int?) ?? 0,
+      'avgProductivity': (result.first['avgProductivity'] as num?)?.toDouble() ?? 0.0,
+    };
+  }
+
+  Future<Map<String, dynamic>> getWeeklyStudyStats(int? planId) async {
+    final db = await database;
+    final now = DateTime.now();
+    final weekStart = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch - 
+                      (now.weekday - 1) * const Duration(days: 1).inMilliseconds;
+    final weekEnd = weekStart + const Duration(days: 7).inMilliseconds;
+    
+    String whereClause = 'WHERE s.completedAtMillis >= ? AND s.completedAtMillis < ?';
+    List<dynamic> whereArgs = [weekStart, weekEnd];
+    
+    if (planId != null) {
+      whereClause += ' AND s.topicId IN (SELECT topicId FROM study_plan_items WHERE planId = ? AND topicId IS NOT NULL)';
+      whereArgs.add(planId);
+    }
+    
+    final result = await db.rawQuery("""
+      SELECT 
+        COUNT(*) as sessionsThisWeek,
+        COALESCE(SUM(durationMinutes), 0) as minutesThisWeek
+      FROM study_sessions s
+      $whereClause
+    """, whereArgs);
+    
+    return {
+      'sessionsThisWeek': (result.first['sessionsThisWeek'] as int?) ?? 0,
+      'minutesThisWeek': (result.first['minutesThisWeek'] as int?) ?? 0,
+    };
+  }
+
+  // Insert a study session from raw map (used by study timer)
+  Future<int> insertStudySessionFromMap(Map<String, dynamic> session) async {
+    final db = await database;
+    final data = {
+      'eventId': session['eventId'],
+      'subjectTag': session['subjectTag'],
+      'durationMinutes': session['durationMinutes'],
+      'completedAtMillis': session['completedAtMillis'] ?? DateTime.now().millisecondsSinceEpoch,
+      'sessionType': session['sessionType'] ?? 'focused',
+      'notes': session['notes'],
+      'distractionCount': session['distractionCount'] ?? 0,
+      'intensityRating': session['intensityRating'] ?? 0,
+      'topicTag': session['topicTag'],
+      'neetSubject': session['neetSubject'],
+      'mcqsAttempted': session['mcqsAttempted'] ?? 0,
+      'mcqsCorrect': session['mcqsCorrect'] ?? 0,
+      'difficultyLevel': session['difficultyLevel'] ?? 1,
+      'revisionRound': session['revisionRound'] ?? 0,
+      'mockTestScore': session['mockTestScore'],
+      'mockTestRank': session['mockTestRank'],
+    };
+    return db.insert('study_sessions', data);
+  }
+
   // ============================================================
   // SUBTASK CRUD
   // ============================================================
