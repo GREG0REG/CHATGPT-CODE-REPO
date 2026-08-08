@@ -18,6 +18,7 @@ class SyllabusTopic {
   final int? lastMockScore; // NEW: mock test tracking
   final int? bestMockScore; // NEW: mock test tracking
   final int? totalStudyMinutes; // NEW: study time tracking
+  final String? notes;
   final int createdAtMillis;
 
   SyllabusTopic({
