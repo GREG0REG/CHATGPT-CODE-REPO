@@ -463,5 +463,425 @@ class _StudyPlannerScreenState extends State<StudyPlannerScreen> {
     final end = DateTime.fromMillisecondsSinceEpoch(_activePlan!.endDateMillis);
 
     // Simplified timeline blocks
-    final totalDays = end.difference(start).inDays;
-    final passedDays = now.difference(start).inDays.clamp(0
+        final totalDays = end.difference(start).inDays;
+    final passedDays = now.difference(start).inDays.clamp(0, totalDays);
+
+    final blocks = [
+      ('Mechanics', start, start.add(Duration(days: (totalDays * 0.3).round()))),
+      ('Thermodynamics', start.add(Duration(days: (totalDays * 0.3).round())), start.add(Duration(days: (totalDays * 0.5).round()))),
+      ('Electrodynamics', start.add(Duration(days: (totalDays * 0.5).round())), start.add(Duration(days: (totalDays * 0.8).round()))),
+      ('Modern Physics', start.add(Duration(days: (totalDays * 0.8).round())), end),
+    ];
+
+    for (final (name, blockStart, blockEnd) in blocks) {
+      final isActive = now.isAfter(blockStart) && now.isBefore(blockEnd);
+      final isPast = now.isAfter(blockEnd);
+      items.add(
+        Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: isActive
+                ? cs.primaryContainer
+                : isPast
+                    ? cs.surfaceContainerHighest
+                    : cs.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isActive ? cs.primary : cs.outlineVariant.withOpacity(0.3),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                  color: isActive ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${blockStart.day}/${blockStart.month} — ${blockEnd.day}/${blockEnd.month}',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              if (isActive) ...[
+                const SizedBox(height: 4),
+                LinearProgressIndicator(
+                  value: passedDays / totalDays,
+                  minHeight: 3,
+                  backgroundColor: cs.surface,
+                  valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+    return items;
+  }
+
+  Widget _buildTaskTile(StudyPlanItem item, ColorScheme cs) {
+    return FutureBuilder<SyllabusTopic?>(
+      future: item.topicId != null
+          ? DatabaseHelper.instance.getSyllabusTopic(item.topicId!)
+          : Future.value(null),
+      builder: (ctx, snapshot) {
+        final topic = snapshot.data;
+        final topicName = topic?.name ?? 'Topic ${item.topicId}';
+        final difficulty = topic?.difficulty;
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          elevation: 0,
+          color: item.completed
+              ? Colors.green.withOpacity(0.08)
+              : cs.surfaceContainerHighest.withOpacity(0.5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: item.completed
+                  ? Colors.green.withOpacity(0.3)
+                  : cs.outlineVariant.withOpacity(0.3),
+            ),
+          ),
+          child: ListTile(
+            leading: Checkbox(
+              value: item.completed,
+              onChanged: (value) async {
+                final updated = item.copyWith(
+                  isCompleted: value == true ? 1 : 0,
+                );
+                await DatabaseHelper.instance.updateStudyPlanItem(updated);
+                await _loadData();
+              },
+            ),
+            title: Text(
+              topicName,
+              style: TextStyle(
+                decoration: item.completed ? TextDecoration.lineThrough : null,
+                color: item.completed ? cs.onSurfaceVariant : cs.onSurface,
+              ),
+            ),
+            subtitle: Row(
+              children: [
+                Text('${item.allocatedMinutes} min'),
+                if (difficulty != null) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: difficulty == 'hard'
+                          ? Colors.red.withOpacity(0.12)
+                          : difficulty == 'medium'
+                              ? Colors.orange.withOpacity(0.12)
+                              : Colors.green.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      difficulty[0].toUpperCase() + difficulty.substring(1),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: difficulty == 'hard'
+                            ? Colors.red
+                            : difficulty == 'medium'
+                                ? Colors.orange
+                                : Colors.green,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            trailing: item.completed
+                ? const Icon(Icons.check_circle, color: Colors.green)
+                : const Icon(Icons.circle_outlined, color: Colors.grey),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatCard(
+    String title,
+    String value,
+    String subtitle,
+    ColorScheme cs, {
+    Color? accentColor,
+  }) {
+    return Expanded(
+      child: Card(
+        elevation: 1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: accentColor ?? cs.primary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// BOTTOM SHEET: Plan Generator
+// ─────────────────────────────────────────────────────────────
+
+class _PlanGeneratorSheet extends StatefulWidget {
+  const _PlanGeneratorSheet();
+
+  @override
+  State<_PlanGeneratorSheet> createState() => _PlanGeneratorSheetState();
+}
+
+class _PlanGeneratorSheetState extends State<_PlanGeneratorSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  int? _subjectId;
+  int? _eventId;
+  int _dailyMinutes = 120;
+  bool _generating = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        left: 20,
+        right: 20,
+        top: 20,
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: cs.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Create Study Plan',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Generate a smart schedule based on your syllabus',
+              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Plan Name',
+                prefixIcon: Icon(Icons.edit_note),
+                hintText: 'e.g. NEET Physics Plan',
+              ),
+              validator: (v) => (v?.trim().isEmpty ?? true) ? 'Required' : null,
+            ),
+            const SizedBox(height: 16),
+            FutureBuilder<List<SyllabusSubject>>(
+              future: DatabaseHelper.instance.getAllSyllabusSubjects(),
+              builder: (ctx, snap) {
+                final subjects = snap.data ?? [];
+                return DropdownButtonFormField<int>(
+                  value: _subjectId,
+                  decoration: const InputDecoration(
+                    labelText: 'Subject *',
+                    prefixIcon: Icon(Icons.subject),
+                  ),
+                  items: subjects.map((s) {
+                    return DropdownMenuItem<int>(
+                      value: s.id,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: s.color,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(s.name),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (v) => setState(() => _subjectId = v),
+                  validator: (v) => v == null ? 'Select a subject' : null,
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            FutureBuilder<List<dynamic>>(
+              future: DatabaseHelper.instance.getAllEventsSorted(),
+              builder: (ctx, snap) {
+                final events = snap.data ?? [];
+                return DropdownButtonFormField<int?>(
+                  value: _eventId,
+                  decoration: const InputDecoration(
+                    labelText: 'Linked Event (optional)',
+                    prefixIcon: Icon(Icons.event),
+                  ),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('None'),
+                    ),
+                    ...events.map((e) {
+                      return DropdownMenuItem<int?>(
+                        value: e.id as int,
+                        child: Text(e.title as String),
+                      );
+                    }),
+                  ],
+                  onChanged: (v) => setState(() => _eventId = v),
+                );
+              },
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Icon(Icons.timer_outlined, size: 20),
+                const SizedBox(width: 8),
+                const Text('Daily Study Time:'),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Slider(
+                    min: 30,
+                    max: 480,
+                    divisions: 15,
+                    value: _dailyMinutes.toDouble(),
+                    onChanged: (v) => setState(() => _dailyMinutes = v.round()),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '$_dailyMinutes min',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: cs.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: _generating ? null : _generate,
+              icon: _generating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_awesome),
+              label: Text(_generating ? 'Generating...' : 'Generate Plan'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _generate() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_subjectId == null) return;
+
+    setState(() => _generating = true);
+
+    try {
+      final plan = await DatabaseHelper.instance.generateStudyPlan(
+        name: _nameController.text.trim().isNotEmpty
+            ? _nameController.text.trim()
+            : 'Study Plan ${DateTime.now().day}',
+        subjectId: _subjectId!,
+        dailyStudyMinutes: _dailyMinutes,
+        eventId: _eventId,
+      );
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Plan "${plan.name}" created successfully!'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _generating = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Generation failed: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+}
