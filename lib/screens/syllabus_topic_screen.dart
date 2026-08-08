@@ -21,13 +21,15 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen>
   List<SyllabusSubtopic> _subtopics = [];
   List<SyllabusResource> _resources = [];
   List<SyllabusRevisionSchedule> _revisions = [];
+  Map<String, dynamic>? _mcqStats;
+  Map<String, dynamic>? _deadlineInfo;
   bool _loading = true;
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadData();
   }
 
@@ -43,11 +45,15 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen>
     final subtopics = await db.getSyllabusSubtopicsForTopic(widget.topicId);
     final resources = await db.getSyllabusResourcesForTopic(widget.topicId);
     final revisions = await db.getSyllabusRevisionsForTopic(widget.topicId);
+    final mcq = await db.getTopicMcqStats(widget.topicId);
+    final deadline = await db.getChapterDeadlineForTopic(widget.topicId);
     setState(() {
       _topic = topic;
       _subtopics = subtopics;
       _resources = resources;
       _revisions = revisions;
+      _mcqStats = mcq;
+      _deadlineInfo = deadline;
       _loading = false;
     });
   }
@@ -58,6 +64,7 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen>
     await DatabaseHelper.instance.updateSyllabusTopic(updated);
     if (newStatus == 'completed') {
       await DatabaseHelper.instance.generateRevisionSchedules(_topic!.id!);
+      await DatabaseHelper.instance.markDeadlineComplete(_topic!.id!);
     }
     await _loadData();
   }
@@ -101,9 +108,99 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen>
   Future<void> _toggleRevisionComplete(SyllabusRevisionSchedule revision) async {
     final updated = revision.copyWith(
       isCompleted: revision.completed ? 0 : 1,
+      actualRevisionDateMillis: DateTime.now().millisecondsSinceEpoch,
     );
     await DatabaseHelper.instance.updateSyllabusRevisionSchedule(updated);
     await _loadData();
+  }
+
+  Future<void> _showMcqTracker() async {
+    final attemptedController = TextEditingController(
+      text: (_topic?.mcqsAttempted ?? 0).toString(),
+    );
+    final correctController = TextEditingController(
+      text: (_topic?.mcqsCorrect ?? 0).toString(),
+    );
+    final result = await showDialog<Map<String, int>?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('update mcq stats'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: attemptedController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'mcqs attempted',
+                prefixIcon: Icon(Icons.quiz_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: correctController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'mcqs correct',
+                prefixIcon: Icon(Icons.check_circle_outline),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('cancel')),
+          FilledButton(
+            onPressed: () {
+              final att = int.tryParse(attemptedController.text) ?? 0;
+              final corr = int.tryParse(correctController.text) ?? 0;
+              Navigator.pop(ctx, {'attempted': att, 'correct': corr});
+            },
+            child: const Text('save'),
+          ),
+        ],
+      ),
+    );
+    attemptedController.dispose();
+    correctController.dispose();
+
+    if (result != null) {
+      await DatabaseHelper.instance.updateTopicMcqStats(
+        widget.topicId,
+        result['attempted']!,
+        result['correct']!,
+      );
+      await _loadData();
+    }
+  }
+
+  Future<void> _showSetDeadline() async {
+    DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _deadlineInfo != null
+          ? DateTime.fromMillisecondsSinceEpoch(_deadlineInfo!['targetDateMillis'] as int)
+          : DateTime.now().add(const Duration(days: 14)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      final existing = await DatabaseHelper.instance.getChapterDeadlineForTopic(widget.topicId);
+      if (existing != null) {
+        await DatabaseHelper.instance.updateChapterDeadline(existing['id'] as int, {
+          'topicId': widget.topicId,
+          'targetDateMillis': picked.millisecondsSinceEpoch,
+        });
+      } else {
+        await DatabaseHelper.instance.insertChapterDeadline({
+          'topicId': widget.topicId,
+          'targetDateMillis': picked.millisecondsSinceEpoch,
+        });
+      }
+      final updatedTopic = _topic!.copyWith(
+        targetCompletionDateMillis: picked.millisecondsSinceEpoch,
+      );
+      await DatabaseHelper.instance.updateSyllabusTopic(updatedTopic);
+      await _loadData();
+    }
   }
 
   Color _statusColor(String status) {
@@ -129,8 +226,21 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen>
             Tab(text: 'subtopics'),
             Tab(text: 'resources'),
             Tab(text: 'revision'),
+            Tab(text: 'mcq track'),
           ],
         ),
+        actions: [
+          if (_topic != null && _topic!.isOverdue)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Chip(
+                label: const Text('overdue', style: TextStyle(fontSize: 11)),
+                backgroundColor: Colors.red.withOpacity(0.15),
+                side: BorderSide.none,
+                labelStyle: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+              ),
+            ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -140,6 +250,7 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen>
                 _buildSubtopicsTab(cs),
                 _buildResourcesTab(cs),
                 _buildRevisionTab(cs),
+                _buildMcqTab(cs),
               ],
             ),
       floatingActionButton: FloatingActionButton.extended(
@@ -302,6 +413,116 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen>
     );
   }
 
+  Widget _buildMcqTab(ColorScheme cs) {
+    final attempted = _mcqStats?['attempted'] ?? 0;
+    final correct = _mcqStats?['correct'] ?? 0;
+    final accuracy = _mcqStats?['accuracy'] ?? 0.0;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // MCQ Stats Card
+          Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  const Icon(Icons.quiz, size: 40, color: Colors.teal),
+                  const SizedBox(height: 12),
+                  Text(
+                    '$accuracy%',
+                    style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.teal),
+                  ),
+                  const Text('accuracy', style: TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildStatColumn('attempted', attempted.toString(), cs),
+                      _buildStatColumn('correct', correct.toString(), Colors.green),
+                      _buildStatColumn('wrong', (attempted - correct).toString(), Colors.red),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Best mock score
+          if (_topic?.bestMockScore != null)
+            Card(
+              elevation: 0,
+              color: cs.primaryContainer.withOpacity(0.3),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: ListTile(
+                leading: const Icon(Icons.emoji_events, color: Colors.amber),
+                title: const Text('best mock score'),
+                trailing: Text(
+                  '${_topic!.bestMockScore}',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          const SizedBox(height: 20),
+          // Deadline section
+          Card(
+            elevation: 0,
+            color: cs.surfaceContainerHighest.withOpacity(0.3),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: ListTile(
+              leading: Icon(
+                Icons.event_busy,
+                color: _topic?.isOverdue == true ? Colors.red : cs.primary,
+              ),
+              title: Text(
+                _deadlineInfo != null
+                    ? 'deadline: ${_formatDate(_deadlineInfo!['targetDateMillis'] as int)}'
+                    : 'no deadline set',
+              ),
+              subtitle: _topic?.daysUntilDeadline != null
+                  ? Text(
+                      _topic!.isOverdue
+                          ? '${_topic!.daysUntilDeadline!.abs()} days overdue'
+                          : '${_topic!.daysUntilDeadline} days remaining',
+                      style: TextStyle(
+                        color: _topic!.isOverdue ? Colors.red : Colors.green,
+                      ),
+                    )
+                  : null,
+              trailing: FilledButton.tonal(
+                onPressed: _showSetDeadline,
+                child: Text(_deadlineInfo != null ? 'change' : 'set'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: _showMcqTracker,
+            icon: const Icon(Icons.edit),
+            label: const Text('update mcq stats'),
+            style: FilledButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
+          ),
+        ],
+      ),
+    );
+  }
+
+    Widget _buildStatColumn(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color),
+        ),
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+      ],
+    );
+  }
+
   Widget _buildStatusChip(String label, String status, Color color, ColorScheme cs) {
     final isSelected = _topic?.status == status;
     return ChoiceChip(
@@ -316,5 +537,10 @@ class _SyllabusTopicScreenState extends State<SyllabusTopicScreen>
       ),
       side: BorderSide(color: isSelected ? color : Colors.transparent),
     );
+  }
+
+  String _formatDate(int millis) {
+    final d = DateTime.fromMillisecondsSinceEpoch(millis);
+    return '${d.day}/${d.month}/${d.year}';
   }
 }
