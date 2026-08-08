@@ -132,6 +132,7 @@ class SyllabusTopic {
     'lastMockScore': lastMockScore,
     'bestMockScore': bestMockScore,
     'totalStudyMinutes': totalStudyMinutes,
+    'notes': notes,
     'createdAtMillis': createdAtMillis,
   };
 
