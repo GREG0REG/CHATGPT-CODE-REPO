@@ -538,6 +538,9 @@ class DatabaseHelper {
         endDateMillis INTEGER NOT NULL,
         dailyStudyMinutes INTEGER DEFAULT 120,
         isActive INTEGER DEFAULT 1,
+        priority INTEGER DEFAULT 2,
+        strategy TEXT DEFAULT 'balanced',
+        bufferDays INTEGER DEFAULT 7,
         createdAtMillis INTEGER NOT NULL
       )
     """);
