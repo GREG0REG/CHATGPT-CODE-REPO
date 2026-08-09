@@ -1102,6 +1102,14 @@ class DatabaseHelper {
    Future<void> _migrateV20ToV21(Database db) async {
    await _addColumnIfNotExists(db, 'study_sessions', 'productivity', 'INTEGER DEFAULT 7');
   }
+
+    Future<void> _migrateV21ToV22(Database db) async {
+    await _addColumnIfNotExists(db, 'study_sessions', 'topicId', 'INTEGER');
+    await _addColumnIfNotExists(db, 'study_sessions', 'planItemId', 'INTEGER');
+    await _addColumnIfNotExists(db, 'study_sessions', 'startTimeMillis', 'INTEGER');
+    await _addColumnIfNotExists(db, 'study_sessions', 'endTimeMillis', 'INTEGER');
+  }
+
   // ============================================================
   // EVENT CRUD
   // ============================================================
