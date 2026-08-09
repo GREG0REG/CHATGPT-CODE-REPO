@@ -4,6 +4,7 @@
 
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'dart:async';
 
 import 'package:event_countdown/models/flashcard_review_history.dart';
 import 'package:event_countdown/models/daily_card_goal.dart';
@@ -33,7 +34,8 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
 
   static Database? _database;
-
+  static Completer<Database>? _dbInitCompleter;
+  
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDatabase();
