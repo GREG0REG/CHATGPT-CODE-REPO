@@ -165,14 +165,14 @@ class _StudyPlannerScreenState extends State<StudyPlannerScreen>
     if (_activeTimerItem != null && _timerSeconds > 60) {
       // Save study session
       final minutes = _timerSeconds ~/ 60;
-      await DatabaseHelper.instance.insertStudySession({
-        'topicId': _activeTimerItem!.topicId,
-        'planItemId': _activeTimerItem!.id,
-        'startTimeMillis': DateTime.now().subtract(Duration(seconds: _timerSeconds)).millisecondsSinceEpoch,
-        'endTimeMillis': DateTime.now().millisecondsSinceEpoch,
-        'durationMinutes': minutes,
-        'productivity': 7,
-      });
+            await DatabaseHelper.instance.insertStudySession(StudySession(
+        topicId: _activeTimerItem!.topicId,
+        planItemId: _activeTimerItem!.id,
+        startTimeMillis: DateTime.now().subtract(Duration(seconds: _timerSeconds)).millisecondsSinceEpoch,
+        endTimeMillis: DateTime.now().millisecondsSinceEpoch,
+        durationMinutes: minutes,
+        productivity: 7,
+      ));
     }
     setState(() {
       _timerRunning = false;
