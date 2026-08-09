@@ -2,7 +2,7 @@
 // Reading progress, streaks, speed, consistency
 
 import 'package:sqflite/sqflite.dart';
-import '../../../database_helper.dart';
+import '../database_helper.dart';
 
 mixin ReadingAnalytics on DatabaseHelper {
   Future<Map<String, dynamic>> getReadingProgress(int bookId) async {
