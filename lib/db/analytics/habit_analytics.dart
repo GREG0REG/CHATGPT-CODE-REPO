@@ -2,7 +2,7 @@
 // Habit streaks and weekly statistics
 
 import 'package:sqflite/sqflite.dart';
-import '../../../database_helper.dart';
+import '../database_helper.dart';
 
 mixin HabitAnalytics on DatabaseHelper {
   Future<int> getHabitCompletionCountForWeek(int habitId, int weekStartMillis) async {
