@@ -1,4 +1,4 @@
-// FILE: lib/db/database_helper.dart
+// FILE: lib/database_helper.dart
 // REFACTORED v21 — Core singleton, database init, all table creation,
 // all migrations, export/import, vacuum, and home screen helpers.
 // All CRUD delegated to mixins in tables/ and analytics/ folders.
