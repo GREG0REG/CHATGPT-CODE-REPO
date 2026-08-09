@@ -4128,17 +4128,6 @@ class DatabaseHelper {
     return db.delete('chapter_deadlines', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<Map<String, dynamic>?> getChapterDeadlineForTopic(int topicId) async {
-    final db = await database;
-    final rows = await db.query(
-      'chapter_deadlines',
-      where: 'topicId = ?',
-      whereArgs: [topicId],
-    );
-    if (rows.isEmpty) return null;
-    return rows.first;
-  }
-
   Future<List<Map<String, dynamic>>> getUpcomingDeadlines(int daysAhead) async {
     final db = await database;
     final now = DateTime.now();
