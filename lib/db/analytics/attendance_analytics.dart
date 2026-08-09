@@ -2,7 +2,8 @@
 // Attendance summary and statistics
 
 import 'package:sqflite/sqflite.dart';
-import '../database_helper.dart';
+import '../../database_helper.dart';   // ✅ CORRECT - goes up TWO levels to lib/
+
 
 mixin AttendanceAnalytics on DatabaseHelper {
   Future<Map<String, dynamic>> getAttendanceStatsForSubject(String subjectName) async {
