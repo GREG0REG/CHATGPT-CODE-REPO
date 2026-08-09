@@ -20,6 +20,9 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
   SyllabusSubject? _subject;
   bool _loading = true;
   Map<String, dynamic>? _paceAnalysis;
+    // INSERT AFTER LINE 21:
+  String? _error;
+  
 
   @override
   void initState() {
