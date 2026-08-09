@@ -3861,51 +3861,6 @@ class DatabaseHelper {
     };
   }
 
-    Future<Map<String, dynamic>> getSyllabusPaceAnalysis(int subjectId) async {
-    final db = await database;
-    final subject = await getSyllabusSubject(subjectId);
-    if (subject == null || subject.targetCompletionDateMillis == null) {
-      return {'status': 'No target date set'};
-    }
-    final result = await db.rawQuery("""
-      SELECT 
-        COUNT(t.id) as total,
-        SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) as completed
-      FROM syllabus_topics t
-      JOIN syllabus_units u ON t.unitId = u.id
-      WHERE u.subjectId = ?
-    """, [subjectId]);
-    
-    final total = (result.first['total'] as int?) ?? 0;
-    final completed = (result.first['completed'] as int?) ?? 0;
-    if (total == 0) return {'status': 'No topics'};
-
-    final targetDate = DateTime.fromMillisecondsSinceEpoch(subject.targetCompletionDateMillis!);
-    final now = DateTime.now();
-    final totalDays = targetDate.difference(DateTime.fromMillisecondsSinceEpoch(subject.createdAtMillis)).inDays;
-    final daysPassed = now.difference(DateTime.fromMillisecondsSinceEpoch(subject.createdAtMillis)).inDays;
-    final daysLeft = targetDate.difference(now).inDays;
-    
-    final expectedProgress = totalDays > 0 ? (daysPassed / totalDays).clamp(0.0, 1.0) : 0.0;
-    final actualProgress = completed / total;
-
-    String status;
-    if (actualProgress >= expectedProgress) {
-      status = 'On Track';
-    } else if (actualProgress >= expectedProgress * 0.8) {
-      status = 'Slightly Behind';
-    } else {
-      status = 'Behind';
-    }
-    return {
-      'status': status,
-      'percentage': actualProgress * 100,
-      'targetDate': targetDate.toIso8601String(),
-      'remainingTopics': total - completed,
-      'daysLeft': daysLeft,
-    };
-  }
-
   // ============================================================
   // STUDY PLAN GENERATION
   // ============================================================
