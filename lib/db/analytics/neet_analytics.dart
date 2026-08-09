@@ -3,7 +3,7 @@
 
 import 'package:sqflite/sqflite.dart';
 import 'package:event_countdown/models/study_session.dart';
-import '../../../database_helper.dart';
+import '../database_helper.dart';
 
 mixin NeetAnalytics on DatabaseHelper {
   String _neetSubjectName(int index) {
