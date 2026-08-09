@@ -3,7 +3,8 @@
 
 import 'package:sqflite/sqflite.dart';
 import 'package:event_countdown/models/study_session.dart';
-import '../database_helper.dart';
+import '../../database_helper.dart';   // ✅ CORRECT - goes up TWO levels to lib/
+
 
 mixin NeetAnalytics on DatabaseHelper {
   String _neetSubjectName(int index) {
