@@ -13,7 +13,8 @@ import 'package:event_countdown/models/syllabus_study_link.dart';
 import 'package:event_countdown/models/syllabus_revision_schedule.dart';
 import 'package:event_countdown/models/study_plan.dart';
 import 'package:event_countdown/models/study_plan_item.dart';
-import '../database_helper.dart';
+import '../../database_helper.dart';   // ✅ CORRECT - goes up TWO levels to lib/
+
 
 mixin SyllabusTable on DatabaseHelper {
   // ============================================================
