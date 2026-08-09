@@ -3,7 +3,7 @@
 
 import 'package:sqflite/sqflite.dart';
 import 'package:event_countdown/models/syllabus_subject.dart';
-import '../../../database_helper.dart';
+import '../database_helper.dart';
 
 mixin SyllabusAnalytics on DatabaseHelper {
   // ============================================================
