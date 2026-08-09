@@ -50,14 +50,12 @@ class StudySession {
   final int? mockTestScore;            // Score if this was a mock test session (out of 720)
   final int? mockTestRank;             // Rank in mock test (optional)
 
-
-    // ── Timer-linked fields ──
+  // ── NEW: Timer-linked fields ──
   final int? topicId;           // linked syllabus topic
   final int? planItemId;        // linked study plan item
   final int? startTimeMillis;   // session start timestamp
   final int? endTimeMillis;     // session end timestamp
   final int? productivity;      // 1-10 productivity score
-
 
   const StudySession({
     this.id,
@@ -78,6 +76,12 @@ class StudySession {
     this.revisionRound = RevisionRound.firstReading,
     this.mockTestScore,
     this.mockTestRank,
+    // Timer-linked fields
+    this.topicId,
+    this.planItemId,
+    this.startTimeMillis,
+    this.endTimeMillis,
+    this.productivity,
   });
 
   /// Calculate MCQ accuracy percentage (0-100)
@@ -123,6 +127,12 @@ class StudySession {
       'revisionRound': revisionRound.index,
       'mockTestScore': mockTestScore,
       'mockTestRank': mockTestRank,
+      // Timer-linked fields
+      'topicId': topicId,
+      'planItemId': planItemId,
+      'startTimeMillis': startTimeMillis,
+      'endTimeMillis': endTimeMillis,
+      'productivity': productivity,
     };
   }
 
@@ -152,6 +162,12 @@ class StudySession {
           : RevisionRound.firstReading,
       mockTestScore: map['mockTestScore'] as int?,
       mockTestRank: map['mockTestRank'] as int?,
+      // Timer-linked fields
+      topicId: map['topicId'] as int?,
+      planItemId: map['planItemId'] as int?,
+      startTimeMillis: map['startTimeMillis'] as int?,
+      endTimeMillis: map['endTimeMillis'] as int?,
+      productivity: map['productivity'] as int?,
     );
   }
 
@@ -178,6 +194,12 @@ class StudySession {
     bool clearMockTestScore = false,
     int? mockTestRank,
     bool clearMockTestRank = false,
+    // Timer-linked fields
+    int? topicId,
+    int? planItemId,
+    int? startTimeMillis,
+    int? endTimeMillis,
+    int? productivity,
   }) {
     return StudySession(
       id: id ?? this.id,
@@ -198,6 +220,12 @@ class StudySession {
       revisionRound: revisionRound ?? this.revisionRound,
       mockTestScore: clearMockTestScore ? null : (mockTestScore ?? this.mockTestScore),
       mockTestRank: clearMockTestRank ? null : (mockTestRank ?? this.mockTestRank),
+      // Timer-linked fields
+      topicId: topicId ?? this.topicId,
+      planItemId: planItemId ?? this.planItemId,
+      startTimeMillis: startTimeMillis ?? this.startTimeMillis,
+      endTimeMillis: endTimeMillis ?? this.endTimeMillis,
+      productivity: productivity ?? this.productivity,
     );
   }
 
