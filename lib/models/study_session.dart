@@ -50,6 +50,15 @@ class StudySession {
   final int? mockTestScore;            // Score if this was a mock test session (out of 720)
   final int? mockTestRank;             // Rank in mock test (optional)
 
+
+    // ── Timer-linked fields ──
+  final int? topicId;           // linked syllabus topic
+  final int? planItemId;        // linked study plan item
+  final int? startTimeMillis;   // session start timestamp
+  final int? endTimeMillis;     // session end timestamp
+  final int? productivity;      // 1-10 productivity score
+
+
   const StudySession({
     this.id,
     this.eventId,
