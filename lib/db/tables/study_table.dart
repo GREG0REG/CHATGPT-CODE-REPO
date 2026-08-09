@@ -7,7 +7,7 @@ import 'package:event_countdown/models/subtask.dart';
 import 'package:event_countdown/models/study_schedule.dart';
 import 'package:event_countdown/models/daily_goal.dart';
 import 'package:event_countdown/models/study_subject.dart';
-import '../../database_helper.dart';
+import '../database_helper.dart';
 
 mixin StudyTable on DatabaseHelper {
   // ============================================================
