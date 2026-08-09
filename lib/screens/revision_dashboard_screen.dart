@@ -47,7 +47,7 @@ class _RevisionDashboardScreenState extends State<RevisionDashboardScreen>
       _todayRevisions = today;
       _overdueRevisions = overdue;
       _upcomingRevisions = upcoming;
-      _stats = stats.isNotEmpty ? stats.first : {};
+      _stats = stats.isNotEmpty ? stats : {};
       _loading = false;
     });
   }
