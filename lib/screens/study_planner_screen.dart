@@ -9,7 +9,6 @@ import '../models/syllabus_subject.dart';
 import '../models/syllabus_unit.dart';
 import '../models/study_session.dart';
 
-
 class StudyPlannerScreen extends StatefulWidget {
   const StudyPlannerScreen({super.key});
 
@@ -167,13 +166,19 @@ class _StudyPlannerScreenState extends State<StudyPlannerScreen>
     if (_activeTimerItem != null && _timerSeconds > 60) {
       // Save study session
       final minutes = _timerSeconds ~/ 60;
-            await DatabaseHelper.instance.insertStudySession(StudySession(
+      final now = DateTime.now();
+      final startTime = now.subtract(Duration(seconds: _timerSeconds));
+      await DatabaseHelper.instance.insertStudySession(StudySession(
         topicId: _activeTimerItem!.topicId,
         planItemId: _activeTimerItem!.id,
-        startTimeMillis: DateTime.now().subtract(Duration(seconds: _timerSeconds)).millisecondsSinceEpoch,
-        endTimeMillis: DateTime.now().millisecondsSinceEpoch,
+        startTimeMillis: startTime.millisecondsSinceEpoch,
+        endTimeMillis: now.millisecondsSinceEpoch,
         durationMinutes: minutes,
+        completedAtMillis: now.millisecondsSinceEpoch,
         productivity: 7,
+        sessionType: 'neet_deep',
+        topicTag: 'topic ${_activeTimerItem!.topicId}',
+        intensityRating: 7,
       ));
     }
     setState(() {
