@@ -2,7 +2,8 @@
 // Session stats, hourly breakdown, efficiency, streaks
 
 import 'package:sqflite/sqflite.dart';
-import '../database_helper.dart';
+import '../../database_helper.dart';   // ✅ CORRECT - goes up TWO levels to lib/
+
 
 mixin StudyAnalytics on DatabaseHelper {
   // ============================================================
