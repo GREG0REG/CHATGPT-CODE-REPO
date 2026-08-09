@@ -4,7 +4,8 @@
 // academic_calendar, class_schedule, habits, habit_logs, reading_books, reading_sessions
 
 import 'package:sqflite/sqflite.dart';
-import '../database_helper.dart';
+import '../../database_helper.dart';   // ✅ CORRECT - goes up TWO levels to lib/
+
 
 mixin AcademicTable on DatabaseHelper {
   // ============================================================
