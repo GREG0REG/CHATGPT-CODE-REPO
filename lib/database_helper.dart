@@ -161,7 +161,11 @@ class DatabaseHelper {
         difficultyLevel INTEGER DEFAULT 1,
         revisionRound INTEGER DEFAULT 0,
         mockTestScore INTEGER,
-        mockTestRank INTEGER
+        mockTestRank INTEGER,
+        topicId INTEGER,
+        planItemId INTEGER,
+        startTimeMillis INTEGER,
+        endTimeMillis INTEGER
       )
     """);
 
