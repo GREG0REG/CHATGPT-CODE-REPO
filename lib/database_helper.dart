@@ -27,17 +27,17 @@ import 'package:event_countdown/models/syllabus_revision_schedule.dart';
 import 'package:event_countdown/models/study_plan.dart';
 import 'package:event_countdown/models/study_plan_item.dart';
 
-import 'tables/db/events_table.dart';
-import 'tables/db/study_table.dart';
-import 'tables/db/flashcard_table.dart';
-import 'tables/db/academic_table.dart';
-import 'tables/db/syllabus_table.dart';
-import 'analytics/db/neet_analytics.dart';
-import 'analytics/db/study_analytics.dart';
-import 'analytics/db/syllabus_analytics.dart';
-import 'analytics/db/reading_analytics.dart';
-import 'analytics/db/attendance_analytics.dart';
-import 'analytics/db/habit_analytics.dart';
+import 'db/tables/events_table.dart';
+import 'db/tables/study_table.dart';
+import 'db/tables/flashcard_table.dart';
+import 'db/tables/academic_table.dart';
+import 'db/tables/syllabus_table.dart';
+import 'db/analytics/neet_analytics.dart';
+import 'db/analytics/study_analytics.dart';
+import 'db/analytics/syllabus_analytics.dart';
+import 'db/analytics/reading_analytics.dart';
+import 'db/analytics/attendance_analytics.dart';
+import 'db/analytics/habit_analytics.dart';
 
 class DatabaseHelper
     with
