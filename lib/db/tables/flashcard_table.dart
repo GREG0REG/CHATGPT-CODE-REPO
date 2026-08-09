@@ -5,7 +5,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:event_countdown/models/flashcard.dart';
 import 'package:event_countdown/models/flashcard_review_history.dart';
 import 'package:event_countdown/models/daily_card_goal.dart';
-import '../database_helper.dart';
+import '../../database_helper.dart';   // ✅ CORRECT - goes up TWO levels to lib/
+
 
 mixin FlashcardTable on DatabaseHelper {
   // ============================================================
