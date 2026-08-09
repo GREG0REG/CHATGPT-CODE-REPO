@@ -5,7 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:event_countdown/models/event.dart';
 import 'package:event_countdown/models/custom_reminder.dart';
 import 'package:event_countdown/models/notification_history.dart';
-import '../../database_helper.dart';
+import '../database_helper.dart';
 
 mixin EventsTable on DatabaseHelper {
   // ============================================================
