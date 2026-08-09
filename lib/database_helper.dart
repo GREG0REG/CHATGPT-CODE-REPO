@@ -1355,6 +1355,10 @@ class DatabaseHelper {
       'revisionRound': session['revisionRound'] ?? 0,
       'mockTestScore': session['mockTestScore'],
       'mockTestRank': session['mockTestRank'],
+      'topicId': session['topicId'],
+      'planItemId': session['planItemId'],
+      'startTimeMillis': session['startTimeMillis'],
+      'endTimeMillis': session['endTimeMillis'],
     };
     return db.insert('study_sessions', data);
   }
