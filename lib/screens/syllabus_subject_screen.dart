@@ -126,6 +126,8 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? _buildErrorState(cs)
           : _units.isEmpty
               ? _buildEmptyState(cs)
               : ListView.builder(
