@@ -1,6 +1,8 @@
 // FILE: lib/screens/flashcard_screen.dart
 // COMPLETE REPLACEMENT — Professional dark-mode flashcard screen
 // Redesigned: larger images, 3D flip, interval hints, glassmorphism, session summary
+// NEET FEATURES: Formula reference, Mnemonics, Active Recall Timer, Concept Links,
+//                Difficulty Heatmap, Daily NEET Fact, Image Zoom, TTS, Annotation
 
 import 'dart:io';
 import 'dart:math';
@@ -8,6 +10,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import '../database_helper.dart';
 import '../models/flashcard.dart';
 import '../models/flashcard_review_history.dart';
@@ -60,6 +63,114 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   int _sessionCorrect = 0;
   DateTime? _sessionStartTime;
 
+  // NEET Features
+  late final FlutterTts _flutterTts;
+  bool _ttsEnabled = false;
+  bool _showMnemonic = false;
+  bool _showFormula = false;
+  bool _showConceptLinks = false;
+  bool _isAnnotationMode = false;
+  bool _showDailyFact = true;
+  final List<Offset> _annotationPoints = [];
+  int _activeRecallSeconds = 0;
+  bool _recallTimerRunning = false;
+  String? _generatedMnemonic;
+
+  // NEET Formula Database (client-side)
+  final Map<String, Map<String, String>> _neetFormulas = {
+    'Physics': {
+      'Kinematics': 'v = u + at\ns = ut + ½at²\nv² = u² + 2as',
+      'Newton\'s Laws': 'F = ma\nF₁₂ = -F₂₁ (Action-Reaction)',
+      'Work & Energy': 'W = F·d·cosθ\nKE = ½mv²\nPE = mgh',
+      'Gravitation': 'F = G(m₁m₂)/r²\ng = GM/R²',
+      'Electrostatics': 'F = k(q₁q₂)/r²\nE = kQ/r²\nV = kQ/r',
+      'Current Electricity': 'V = IR\nP = VI = I²R\nR = ρL/A',
+      'Magnetism': 'F = qvBsinθ\nF = ILBsinθ\nB = μ₀I/2πr',
+      'Optics': '1/f = 1/v + 1/u\nn = c/v\nδ = (μ-1)A',
+      'Modern Physics': 'E = hf = hc/λ\nλ = h/p (de Broglie)\nE = mc²',
+    },
+    'Chemistry': {
+      'Atomic Structure': 'E = -13.6Z²/n² eV\nλ = h/mv\nΔx·Δp ≥ h/4π',
+      'Chemical Bonding': 'Bond Order = (N_b - N_a)/2\nDipole moment = q × d',
+      'Thermodynamics': 'ΔG = ΔH - TΔS\nΔS = q_rev/T\nK_p = K_c(RT)^Δn',
+      'Equilibrium': 'K_w = [H⁺][OH⁻] = 10⁻¹⁴\npH = -log[H⁺]\npOH = -log[OH⁻]',
+      'Electrochemistry': 'E°cell = E°cathode - E°anode\nΔG° = -nFE°cell\nΛ_m = κ × 1000/M',
+      'Kinetics': 'Rate = k[A]ⁿ\nk = Ae^(-Ea/RT)\nt½ = 0.693/k (1st order)',
+      'Solutions': 'π = CRT\nΔT_b = iK_bm\nΔT_f = iK_fm',
+      'Organic': 'Markovnikov: H to C with more H\nAnti-Markovnikov: Peroxide effect',
+    },
+    'Biology': {
+      'Cell Biology': 'Cell cycle: G1 → S → G2 → M\nMitosis: Prophase → Metaphase → Anaphase → Telophase',
+      'Photosynthesis': '6CO₂ + 6H₂O → C₆H₁₂O₆ + 6O₂\nZ-scheme & Chemiosmosis',
+      'Respiration': 'C₆H₁₂O₆ + 6O₂ → 6CO₂ + 6H₂O + 38 ATP\nGlycolysis → Krebs → ETC',
+      'Genetics': 'Hardy-Weinberg: p² + 2pq + q² = 1\nChi-square: Σ(O-E)²/E',
+      'Ecology': 'NPP = GPP - R\n10% Law: Energy transfer ~10%',
+      'Human Physiology': 'Cardiac Output = HR × SV\nGFR ~125 mL/min\nTidal Volume ~500 mL',
+    },
+  };
+
+  // NEET Mnemonic Database
+  final Map<String, Map<String, String>> _neetMnemonics = {
+    'Biology': {
+      'cranial nerves': 'Some Say Marry Money But My Brother Says Big Brains Matter More\n(I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII)',
+      'taxonomy order': 'Dear King Philip Came Over For Good Soup\n(Domain, Kingdom, Phylum, Class, Order, Family, Genus, Species)',
+      'mitosis phases': 'PMAT - Please Make Another Taco\n(Prophase, Metaphase, Anaphase, Telophase)',
+      'essential amino acids': 'PVT TIM HALL\n(Phe, Val, Thr, Trp, Ile, Met, His, Arg, Leu, Lys)',
+      'krebs cycle': 'Citrate Is Krebs Starting Substrate For Making Oxaloacetate\n(Citrate → Isocitrate → α-KG → Succinyl-CoA → Succinate → Fumarate → Malate → Oxaloacetate)',
+      'ecological succession': 'Pioneer → Grasses → Shrubs → Climax\n(Remember: Grass grows before trees)',
+      'blood flow heart': 'Superior Vena Cava → Right Atrium → Tricuspid → Right Ventricle → Pulmonary Valve → Lungs → Left Atrium → Mitral → Left Ventricle → Aortic Valve → Body',
+      'menstrual cycle': 'Follicular (Days 1-14) → Ovulation (Day 14) → Luteal (Days 15-28)\nFSH rises first, LH surge triggers ovulation',
+      'plant hormones': 'Gibberellins Grow, Cytokinins Cell divide, Ethylene ripens, Abscisic acid arrests',
+      'nitrogen cycle': 'Nitrogen Fixation → Ammonification → Nitrification → Denitrification\n(Rhizobium fixes, Nitrosomonas oxidizes, Nitrobacter converts)',
+    },
+    'Chemistry': {
+      'electrochemical series': 'K Na Ca Mg Al Zn Fe Ni Sn Pb H Cu Hg Ag Pt Au\n(Kings Never Can Make Any Zebra Feel Happy Like Silly People Having Curly Hair And Pretty Teeth)',
+      'periodic trends': 'Across period: size ↓, IE ↑, EN ↑, EA ↑\nDown group: size ↑, IE ↓, EN ↓, EA ↓',
+      'organic reagents': 'Lucas Test: ZnCl₂/HCl (3° > 2° > 1°)\nTollen\'s: [Ag(NH₃)₂]⁺ (Aldehydes only)',
+      'buffer solutions': 'Weak acid + its salt (acidic buffer)\nWeak base + its salt (basic buffer)\npH = pKa + log([salt]/[acid])',
+    },
+    'Physics': {
+      'right hand rules': 'Fleming\'s Right Hand: Thumb-Motion, Fore-Field, Middle-Current (Generator)\nFleming\'s Left Hand: Thumb-Force, Fore-Field, Middle-Current (Motor)',
+      'lens sign convention': 'Real is positive, Virtual is negative\nConverging: f positive, Diverging: f negative',
+      'electromagnetic spectrum': 'Radio → Micro → IR → Visible → UV → X-ray → Gamma\n(Remember: Rabbits Mate In Very Unusual eXpensive Gardens)',
+    },
+  };
+
+  // Daily NEET Facts (high-yield)
+  final List<Map<String, String>> _dailyNeetFacts = [
+    {'subject': 'Biology', 'fact': 'The human body has 206 bones at adulthood, but babies are born with ~270.'},
+    {'subject': 'Biology', 'fact': 'Mitochondria contain their own DNA (circular, like bacteria) - evidence for endosymbiotic theory.'},
+    {'subject': 'Biology', 'fact': 'RBCs have no nucleus in mammals, allowing more space for hemoglobin (~270 million per RBC).'},
+    {'subject': 'Biology', 'fact': 'The liver is the largest gland and performs over 500 functions including detoxification and bile production.'},
+    {'subject': 'Biology', 'fact': 'Action potential: Na⁺ rushes IN (depolarization), K⁺ rushes OUT (repolarization), Na⁺/K⁺ pump restores.'},
+    {'subject': 'Biology', 'fact': 'DNA replication is semiconservative - each new DNA has one old and one new strand.'},
+    {'subject': 'Biology', 'fact': 'Restriction enzymes cut DNA at specific palindromic sequences (e.g., EcoRI at GAATTC).'},
+    {'subject': 'Chemistry', 'fact': 'Benzene has 3 delocalized π electrons forming a ring of electron density above and below the plane.'},
+    {'subject': 'Chemistry', 'fact': 'SN1 reactions favor 3° alkyl halides; SN2 favors 1° and methyl halides.'},
+    {'subject': 'Chemistry', 'fact': 'd-block elements show variable oxidation states due to participation of both (n-1)d and ns electrons.'},
+    {'subject': 'Chemistry', 'fact': 'H₂O₂ acts as both oxidizing and reducing agent. As oxidizer: H₂O₂ + 2H⁺ + 2e⁻ → 2H₂O'},
+    {'subject': 'Physics', 'fact': 'In projectile motion, time of flight depends only on vertical component: T = 2u·sinθ/g'},
+    {'subject': 'Physics', 'fact': 'For a satellite, orbital velocity v = √(GM/r). Escape velocity = √2 × orbital velocity.'},
+    {'subject': 'Physics', 'fact': 'In AC circuits, power factor = cosφ = R/Z. For pure L or C, power factor = 0 (no power dissipation).'},
+    {'subject': 'Physics', 'fact': 'Photoelectric effect: KEmax = h(f - f₀) = hf - φ. Threshold frequency f₀ = φ/h.'},
+  ];
+
+  // Concept linking map
+  final Map<String, List<String>> _conceptLinks = {
+    'photosynthesis': ['respiration', 'calvin cycle', 'light reaction', 'chlorophyll', 'photophosphorylation'],
+    'respiration': ['photosynthesis', 'krebs cycle', 'glycolysis', 'etc', 'fermentation'],
+    'genetics': ['dna replication', 'transcription', 'translation', 'mutation', 'mendel'],
+    'cell': ['cell cycle', 'mitosis', 'meiosis', 'organelles', 'membrane transport'],
+    'human physiology': ['digestion', 'respiration', 'circulation', 'excretion', 'nervous system'],
+    'ecology': ['ecosystem', 'biodiversity', 'population', 'succession', 'pyramid'],
+    'organic chemistry': ['reaction mechanism', 'isomerism', 'hydrocarbons', 'biomolecules', 'polymers'],
+    'physical chemistry': ['thermodynamics', 'equilibrium', 'electrochemistry', 'kinetics', 'solutions'],
+    'inorganic chemistry': ['periodic table', 'chemical bonding', 'coordination compounds', 'p-block', 'd-block'],
+    'mechanics': ['kinematics', 'newton laws', 'work energy', 'rotation', 'gravitation'],
+    'electromagnetism': ['electrostatics', 'current electricity', 'magnetism', 'emi', 'ac circuits'],
+    'modern physics': ['atoms', 'nuclei', 'semiconductors', 'communication', 'dual nature'],
+  };
+
   @override
   void initState() {
     super.initState();
@@ -99,7 +210,16 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       curve: Curves.easeInOut,
     ));
 
+    _flutterTts = FlutterTts();
+    _initTts();
     _loadData();
+  }
+
+  Future<void> _initTts() async {
+    await _flutterTts.setLanguage('en-US');
+    await _flutterTts.setSpeechRate(0.45);
+    await _flutterTts.setVolume(1.0);
+    await _flutterTts.setPitch(1.0);
   }
 
   @override
@@ -108,7 +228,57 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     _slideController.dispose();
     _confettiController.dispose();
     _scaleController.dispose();
+    _flutterTts.stop();
     super.dispose();
+  }
+
+  Future<void> _speak(String text) async {
+    if (_ttsEnabled) {
+      await _flutterTts.stop();
+      await _flutterTts.speak(text);
+    }
+  }
+
+  String _generateMnemonic(String text) {
+    final lower = text.toLowerCase();
+    for (final subjectMap in _neetMnemonics.values) {
+      for (final entry in subjectMap.entries) {
+        if (lower.contains(entry.key.toLowerCase())) {
+          return entry.value;
+        }
+      }
+    }
+    // Fallback: create acronym from first letters
+    final words = text.split(' ').where((w) => w.length > 2).toList();
+    if (words.length >= 3) {
+      final acronym = words.map((w) => w[0].toUpperCase()).join('');
+      return 'Acronym: $acronym\n(${words.map((w) => w[0].toUpperCase() + w.substring(1)).join(', ')})';
+    }
+    return 'No mnemonic found. Try creating one using the first letters of key terms!';
+  }
+
+  List<String> _getRelatedConcepts(String text) {
+    final lower = text.toLowerCase();
+    final results = <String>[];
+    for (final entry in _conceptLinks.entries) {
+      if (lower.contains(entry.key)) {
+        results.addAll(entry.value);
+      }
+    }
+    // Also check reverse
+    for (final entry in _conceptLinks.entries) {
+      for (final concept in entry.value) {
+        if (lower.contains(concept)) {
+          results.add(entry.key);
+        }
+      }
+    }
+    return results.toSet().toList()..take(5);
+  }
+
+  Map<String, String> _getDailyFact() {
+    final dayOfYear = DateTime.now().difference(DateTime(DateTime.now().year, 1, 1)).inDays;
+    return _dailyNeetFacts[dayOfYear % _dailyNeetFacts.length];
   }
 
   Future<void> _loadData() async {
@@ -150,6 +320,14 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       _sessionCardsReviewed = 0;
       _sessionCorrect = 0;
       _sessionStartTime = DateTime.now();
+      _showMnemonic = false;
+      _showFormula = false;
+      _showConceptLinks = false;
+      _isAnnotationMode = false;
+      _annotationPoints.clear();
+      _generatedMnemonic = null;
+      _activeRecallSeconds = 0;
+      _recallTimerRunning = false;
     });
   }
 
@@ -195,6 +373,12 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       _sessionCardsReviewed = 0;
       _sessionCorrect = 0;
       _sessionStartTime = DateTime.now();
+      _showMnemonic = false;
+      _showFormula = false;
+      _showConceptLinks = false;
+      _generatedMnemonic = null;
+      _activeRecallSeconds = 0;
+      _recallTimerRunning = false;
     });
   }
 
@@ -206,7 +390,25 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     } else {
       _flipController.forward();
       setState(() => _showingBack = true);
+      // Start recall timer when answer is revealed
+      if (!_recallTimerRunning && _filteredCards.isNotEmpty) {
+        _startRecallTimer();
+      }
     }
+  }
+
+  void _startRecallTimer() {
+    setState(() => _recallTimerRunning = true);
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted || !_recallTimerRunning) return false;
+      setState(() => _activeRecallSeconds++);
+      return true;
+    });
+  }
+
+  void _stopRecallTimer() {
+    setState(() => _recallTimerRunning = false);
   }
 
   String _getIntervalHint(String difficulty, int currentBox) {
@@ -247,6 +449,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     }
 
     final card = _filteredCards[_currentCardIndex];
+    _stopRecallTimer();
 
     await _slideController.forward();
 
@@ -312,7 +515,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         cardId: card.id!,
         reviewedAtMillis: now,
         difficulty: difficulty,
-        timeSpentSeconds: 0,
+        timeSpentSeconds: _activeRecallSeconds,
         boxLevelBefore: card.boxLevel,
         boxLevelAfter: newBox,
         sessionId: sessionId,
@@ -325,6 +528,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     HapticFeedback.mediumImpact();
 
     _slideController.value = 0;
+    _activeRecallSeconds = 0;
 
     final wasLastCard = _currentCardIndex >= _filteredCards.length - 1;
 
@@ -836,6 +1040,143 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     }
   }
 
+  void _showImageZoom(String imagePath) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
+        child: GestureDetector(
+          onTap: () => Navigator.pop(ctx),
+          child: Container(
+            color: Colors.black.withOpacity(0.95),
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Center(
+                child: Image.file(
+                  File(imagePath),
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showFormulaSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1a1a1f),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'NEET Formula Quick Reference',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'High-yield formulas for quick revision',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: ListView(
+                    controller: scrollController,
+                    children: _neetFormulas.entries.map((subjectEntry) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF14B8A6).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              subjectEntry.key,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF14B8A6),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          ...subjectEntry.value.entries.map((formulaEntry) {
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10, left: 8),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.03),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.white.withOpacity(0.06)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    formulaEntry.key,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    formulaEntry.value,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey.shade400,
+                                      fontFamily: 'monospace',
+                                      height: 1.6,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                          const SizedBox(height: 20),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -852,6 +1193,31 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         ),
         title: const Text('Flashcards', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.functions, color: Colors.white70),
+            tooltip: 'NEET Formula Sheet',
+            onPressed: _showFormulaSheet,
+          ),
+          IconButton(
+            icon: Icon(
+              _ttsEnabled ? Icons.volume_up : Icons.volume_off,
+              color: _ttsEnabled ? const Color(0xFF14B8A6) : Colors.white70,
+            ),
+            tooltip: 'Text-to-Speech',
+            onPressed: () {
+              setState(() => _ttsEnabled = !_ttsEnabled);
+              if (!_ttsEnabled) _flutterTts.stop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(_ttsEnabled ? 'TTS Enabled' : 'TTS Disabled'),
+                  backgroundColor: const Color(0xFF14B8A6),
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 1),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.add, color: Colors.white70),
             tooltip: 'Add card',
@@ -937,6 +1303,8 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         _buildDashboard(cs),
         _buildSearchBar(cs),
         _buildModeChips(cs),
+        if (_showDailyFact && _filteredCards.isEmpty && _searchQuery.isEmpty && _studyMode == 'normal')
+          _buildDailyNeetFact(cs),
         Expanded(
           child: _filteredCards.isEmpty && _searchQuery.isEmpty && _studyMode != 'favorites'
               ? _buildSubjectDecks(cs)
@@ -1027,6 +1395,84 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         ],
       ),
     );
+  }
+
+  Widget _buildDailyNeetFact(ColorScheme cs) {
+    final fact = _getDailyFact();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF14B8A6).withOpacity(0.15),
+            const Color(0xFF3B82F6).withOpacity(0.1),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF14B8A6).withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF14B8A6).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'Daily NEET Fact',
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF14B8A6)),
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => setState(() => _showDailyFact = false),
+                child: Icon(Icons.close, size: 16, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _getSubjectColor(fact['subject']!).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  fact['subject']!,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: _getSubjectColor(fact['subject']!),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  fact['fact']!,
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade300, height: 1.5),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getSubjectColor(String subject) {
+    final lower = subject.toLowerCase();
+    if (lower.contains('physics')) return const Color(0xFF3B82F6);
+    if (lower.contains('chemistry')) return const Color(0xFFF59E0B);
+    if (lower.contains('biology')) return const Color(0xFF22C55E);
+    return const Color(0xFF14B8A6);
   }
 
   Widget _buildSearchBar(ColorScheme cs) {
@@ -1149,6 +1595,9 @@ class _FlashcardScreenState extends State<FlashcardScreen>
               final progress = avgBox / 5.0;
               final favCount = subjectCards.where((c) => c.isFavorite).length;
 
+              // Calculate box distribution for heatmap
+              final boxDistribution = List.generate(5, (i) => subjectCards.where((c) => c.boxLevel == i + 1).length);
+
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
@@ -1237,22 +1686,47 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                               ),
                               const SizedBox(height: 8),
+                              // Box Distribution Heatmap
                               Row(
                                 children: List.generate(5, (i) {
-                                  final boxCount = subjectCards.where((c) => c.boxLevel == i + 1).length;
+                                  final boxCount = boxDistribution[i];
+                                  final maxCount = boxDistribution.reduce((a, b) => a > b ? a : b);
+                                  final intensity = maxCount > 0 ? boxCount / maxCount : 0.0;
                                   return Expanded(
                                     child: Container(
-                                      height: 4,
+                                      height: 6,
                                       margin: const EdgeInsets.only(right: 3),
                                       decoration: BoxDecoration(
                                         color: boxCount > 0
-                                          ? Color.lerp(const Color(0xFFEF4444), const Color(0xFF22C55E), i / 4.0)?.withOpacity(0.7)
+                                          ? Color.lerp(
+                                              const Color(0xFFEF4444),
+                                              const Color(0xFF22C55E),
+                                              i / 4.0,
+                                            )?.withOpacity(0.3 + (intensity * 0.7))
                                           : Colors.white.withOpacity(0.05),
-                                        borderRadius: BorderRadius.circular(2),
+                                        borderRadius: BorderRadius.circular(3),
                                       ),
+                                      child: boxCount > 0 ? Center(
+                                        child: Text(
+                                          '$boxCount',
+                                          style: TextStyle(
+                                            fontSize: 7,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white.withOpacity(0.8),
+                                          ),
+                                        ),
+                                      ) : null,
                                     ),
                                   );
                                 }),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Text('Box 1', style: TextStyle(fontSize: 7, color: Colors.grey.shade700)),
+                                  const Spacer(),
+                                  Text('Box 5', style: TextStyle(fontSize: 7, color: Colors.grey.shade700)),
+                                ],
                               ),
                             ],
                           ),
@@ -1270,7 +1744,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     );
   }
 
-  Widget _buildReviewState(ColorScheme cs) {
+    Widget _buildReviewState(ColorScheme cs) {
     if (_filteredCards.isEmpty) {
       return _buildAllCaughtUp(cs);
     }
@@ -1283,12 +1757,14 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     }
 
     final card = _filteredCards[_currentCardIndex];
+    final relatedConcepts = _getRelatedConcepts(card.frontText + ' ' + card.backText);
+    final subjectFormulas = _neetFormulas[card.subjectTag] ?? {};
 
     return Stack(
       children: [
         Column(
           children: [
-            // Card Counter Header
+            // Card Counter Header with NEET Tools
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
               child: Row(
@@ -1298,6 +1774,27 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                     style: TextStyle(fontSize: 13, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
                   ),
                   const Spacer(),
+                  // Active Recall Timer
+                  if (_recallTimerRunning)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF59E0B).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.timer, size: 12, color: Color(0xFFF59E0B)),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_activeRecallSeconds}s',
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                     decoration: BoxDecoration(
@@ -1366,11 +1863,86 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 ),
               ),
 
-            // 3D Flip Card
+            // NEET Feature Bar (Mnemonic, Formula, Concept Links, TTS)
+            if (_showingBack)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildNeetToolChip(
+                        icon: Icons.psychology,
+                        label: 'Mnemonic',
+                        isActive: _showMnemonic,
+                        onTap: () {
+                          setState(() {
+                            _showMnemonic = !_showMnemonic;
+                            if (_showMnemonic && _generatedMnemonic == null) {
+                              _generatedMnemonic = _generateMnemonic(card.frontText + ' ' + card.backText);
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      if (subjectFormulas.isNotEmpty)
+                        _buildNeetToolChip(
+                          icon: Icons.functions,
+                          label: 'Formula',
+                          isActive: _showFormula,
+                          onTap: () => setState(() => _showFormula = !_showFormula),
+                        ),
+                      const SizedBox(width: 8),
+                      if (relatedConcepts.isNotEmpty)
+                        _buildNeetToolChip(
+                          icon: Icons.account_tree,
+                          label: 'Links',
+                          isActive: _showConceptLinks,
+                          onTap: () => setState(() => _showConceptLinks = !_showConceptLinks),
+                        ),
+                      const SizedBox(width: 8),
+                      _buildNeetToolChip(
+                        icon: Icons.volume_up,
+                        label: 'Speak',
+                        isActive: false,
+                        onTap: () => _speak('${card.frontText}. Answer: ${card.backText}'),
+                      ),
+                      if (card.imagePath != null) ...[
+                        const SizedBox(width: 8),
+                        _buildNeetToolChip(
+                          icon: _isAnnotationMode ? Icons.edit_off : Icons.edit,
+                          label: _isAnnotationMode ? 'Done' : 'Annotate',
+                          isActive: _isAnnotationMode,
+                          onTap: () => setState(() {
+                            _isAnnotationMode = !_isAnnotationMode;
+                            if (!_isAnnotationMode) _annotationPoints.clear();
+                          }),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+
+            // Mnemonic Panel
+            if (_showMnemonic && _showingBack)
+              _buildMnemonicPanel(card),
+
+            // Formula Panel
+            if (_showFormula && _showingBack && subjectFormulas.isNotEmpty)
+              _buildFormulaPanel(subjectFormulas),
+
+            // Concept Links Panel
+            if (_showConceptLinks && _showingBack && relatedConcepts.isNotEmpty)
+              _buildConceptLinksPanel(relatedConcepts),
+
+            const SizedBox(height: 4),
+
+            // 3D Flip Card with Larger Image
             Expanded(
               child: GestureDetector(
-                onTap: _toggleFlip,
-                onHorizontalDragEnd: (details) {
+                onTap: _isAnnotationMode ? null : _toggleFlip,
+                onHorizontalDragEnd: _isAnnotationMode ? null : (details) {
                   if (details.primaryVelocity == null) return;
                   if (details.primaryVelocity! < -250) {
                     _answer(difficulty: 'again');
@@ -1378,6 +1950,13 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                     _answer(difficulty: 'good');
                   }
                 },
+                onPanUpdate: _isAnnotationMode && card.imagePath != null
+                    ? (details) {
+                        setState(() {
+                          _annotationPoints.add(details.localPosition);
+                        });
+                      }
+                    : null,
                 child: AnimatedBuilder(
                   animation: _slideController,
                   builder: (context, child) {
@@ -1507,6 +2086,217 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     );
   }
 
+  Widget _buildNeetToolChip({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive
+              ? const Color(0xFF14B8A6).withOpacity(0.2)
+              : Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive
+                ? const Color(0xFF14B8A6).withOpacity(0.4)
+                : Colors.white.withOpacity(0.08),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: isActive ? const Color(0xFF14B8A6) : Colors.grey.shade500),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isActive ? const Color(0xFF14B8A6) : Colors.grey.shade500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMnemonicPanel(Flashcard card) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF8B5CF6).withOpacity(0.15),
+            const Color(0xFFA78BFA).withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.psychology, size: 16, color: Color(0xFF8B5CF6)),
+              const SizedBox(width: 6),
+              const Text(
+                'Memory Aid',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6)),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => setState(() {
+                  _generatedMnemonic = _generateMnemonic(card.frontText + ' ' + card.backText + ' ' + DateTime.now().toString());
+                }),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.refresh, size: 12, color: Colors.grey.shade500),
+                    const SizedBox(width: 2),
+                    Text('Regenerate', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _generatedMnemonic ?? _generateMnemonic(card.frontText + ' ' + card.backText),
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade300,
+              height: 1.5,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormulaPanel(Map<String, String> formulas) {
+    // Find best matching formula
+    String? matchedTitle;
+    String? matchedFormula;
+    if (_filteredCards.isNotEmpty && _currentCardIndex < _filteredCards.length) {
+      final cardText = (_filteredCards[_currentCardIndex].frontText + ' ' + _filteredCards[_currentCardIndex].backText).toLowerCase();
+      for (final entry in formulas.entries) {
+        if (cardText.contains(entry.key.toLowerCase())) {
+          matchedTitle = entry.key;
+          matchedFormula = entry.value;
+          break;
+        }
+      }
+    }
+    // Show first formula if no match
+    matchedTitle ??= formulas.keys.first;
+    matchedFormula ??= formulas.values.first;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF3B82F6).withOpacity(0.15),
+            const Color(0xFF60A5FA).withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.functions, size: 16, color: Color(0xFF3B82F6)),
+              const SizedBox(width: 6),
+              const Text(
+                'Related Formula',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF3B82F6)),
+              ),
+              const Spacer(),
+              Text(
+                matchedTitle!,
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            matchedFormula!,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade300,
+              fontFamily: 'monospace',
+              height: 1.6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConceptLinksPanel(List<String> concepts) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF14B8A6).withOpacity(0.1),
+            const Color(0xFF34D399).withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF14B8A6).withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.account_tree, size: 16, color: Color(0xFF14B8A6)),
+              const SizedBox(width: 6),
+              const Text(
+                'Related Concepts',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF14B8A6)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: concepts.take(6).map((concept) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withOpacity(0.08)),
+                ),
+                child: Text(
+                  concept,
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade400, fontWeight: FontWeight.w500),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
   Color _difficultyColor(double rating) {
     if (rating <= 2) return const Color(0xFF22C55E);
     if (rating <= 3) return const Color(0xFFF59E0B);
@@ -1568,6 +2358,9 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         ? (_sessionCorrect / _sessionCardsReviewed * 100).round()
         : 0;
 
+    // Calculate predicted readiness
+    final predictedReadiness = _allCards.isEmpty ? 0 : (_allCards.where((c) => c.boxLevel >= 3).length / _allCards.length * 100).round();
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -1613,14 +2406,63 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: Colors.white.withOpacity(0.06)),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                child: Column(
                   children: [
-                    _buildSessionStat('Reviewed', _sessionCardsReviewed.toString(), const Color(0xFF14B8A6)),
-                    Container(width: 1, height: 40, color: Colors.white.withOpacity(0.1)),
-                    _buildSessionStat('Accuracy', '$accuracy%', const Color(0xFFF59E0B)),
-                    Container(width: 1, height: 40, color: Colors.white.withOpacity(0.1)),
-                    _buildSessionStat('Streak', _currentStreak.toString(), const Color(0xFF22C55E)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildSessionStat('Reviewed', _sessionCardsReviewed.toString(), const Color(0xFF14B8A6)),
+                        Container(width: 1, height: 40, color: Colors.white.withOpacity(0.1)),
+                        _buildSessionStat('Accuracy', '$accuracy%', const Color(0xFFF59E0B)),
+                        Container(width: 1, height: 40, color: Colors.white.withOpacity(0.1)),
+                        _buildSessionStat('Streak', _currentStreak.toString(), const Color(0xFF22C55E)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF14B8A6).withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.trending_up, size: 20, color: Color(0xFF14B8A6)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'NEET Readiness Score',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF14B8A6)),
+                                ),
+                                const SizedBox(height: 4),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: predictedReadiness / 100,
+                                    backgroundColor: Colors.white.withOpacity(0.05),
+                                    valueColor: const AlwaysStoppedAnimation(Color(0xFF14B8A6)),
+                                    minHeight: 6,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '$predictedReadiness% of your cards are in Box 3+ (exam-ready)',
+                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '$predictedReadiness%',
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF14B8A6)),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1683,6 +2525,14 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       ),
       child: Stack(
         children: [
+          // Annotation overlay
+          if (_isAnnotationMode && !isFront && card.imagePath != null)
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _AnnotationPainter(_annotationPoints),
+              ),
+            ),
+
           Positioned(
             top: 0,
             right: 0,
@@ -1747,30 +2597,61 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                     ),
                   ),
                   const SizedBox(height: 28),
+                  // MUCH LARGER IMAGE with tap-to-zoom
                   if (isFront && card.imagePath != null) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        constraints: const BoxConstraints(maxHeight: 240, maxWidth: 280),
-                        child: Image.file(
-                          File(card.imagePath!),
-                          fit: BoxFit.cover,
-                          width: double.infinity,
+                    GestureDetector(
+                      onTap: () => _showImageZoom(card.imagePath!),
+                      child: Hero(
+                        tag: 'card_image_${card.id}',
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            constraints: const BoxConstraints(
+                              maxHeight: 320,
+                              minHeight: 200,
+                              maxWidth: double.infinity,
+                            ),
+                            child: Image.file(
+                              File(card.imagePath!),
+                              fit: BoxFit.contain,
+                              width: double.infinity,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
+                    // Zoom hint
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.zoom_in, size: 12, color: Colors.grey.shade600),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Tap image to zoom',
+                          style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                   ],
                   if (!isFront && card.imagePath != null) ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        constraints: const BoxConstraints(maxHeight: 180, maxWidth: 280),
-                        child: Image.file(
-                          File(card.imagePath!),
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          opacity: const AlwaysStoppedAnimation(0.3),
+                    GestureDetector(
+                      onTap: () => _showImageZoom(card.imagePath!),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          constraints: const BoxConstraints(
+                            maxHeight: 220,
+                            minHeight: 120,
+                            maxWidth: double.infinity,
+                          ),
+                          child: Image.file(
+                            File(card.imagePath!),
+                            fit: BoxFit.contain,
+                            width: double.infinity,
+                            opacity: const AlwaysStoppedAnimation(0.25),
+                          ),
                         ),
                       ),
                     ),
@@ -1818,13 +2699,17 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          Icons.touch_app_outlined,
+                          _isAnnotationMode ? Icons.edit : Icons.touch_app_outlined,
                           size: 14,
                           color: Colors.grey.shade600,
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          isFront ? 'Tap to reveal answer' : 'Tap to see question',
+                          _isAnnotationMode
+                              ? 'Draw on image to annotate'
+                              : isFront
+                                  ? 'Tap to reveal answer'
+                                  : 'Tap to see question',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey.shade600,
@@ -1899,4 +2784,31 @@ class _ConfettiParticle {
     required this.angle,
     required this.rotationSpeed,
   });
+}
+
+// Annotation painter for drawing on flashcard images
+class _AnnotationPainter extends CustomPainter {
+  final List<Offset> points;
+
+  _AnnotationPainter(this.points);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 2) return;
+
+    final paint = Paint()
+      ..color = const Color(0xFF14B8A6).withOpacity(0.8)
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    for (int i = 0; i < points.length - 1; i++) {
+      if (points[i] != Offset.zero && points[i + 1] != Offset.zero) {
+        canvas.drawLine(points[i], points[i + 1], paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
