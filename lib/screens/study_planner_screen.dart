@@ -7,6 +7,8 @@ import '../models/study_plan_item.dart';
 import '../models/syllabus_topic.dart';
 import '../models/syllabus_subject.dart';
 import '../models/syllabus_unit.dart';
+import '../models/study_session.dart';
+
 
 class StudyPlannerScreen extends StatefulWidget {
   const StudyPlannerScreen({super.key});
