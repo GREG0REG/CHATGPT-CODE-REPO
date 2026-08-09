@@ -27,23 +27,37 @@ class _SyllabusSubjectScreenState extends State<SyllabusSubjectScreen> {
     _loadData();
   }
 
+    // REPLACE LINES 28-44 WITH:
   Future<void> _loadData() async {
-    final db = DatabaseHelper.instance;
-    final subject = await db.getSyllabusSubject(widget.subjectId);
-    final units = await db.getSyllabusUnitsForSubject(widget.subjectId);
-    final topicsMap = <int, List<SyllabusTopic>>{};
-    for (final unit in units) {
-      final topics = await db.getSyllabusTopicsForUnit(unit.id!);
-      topicsMap[unit.id!] = topics;
+    try {
+      final db = DatabaseHelper.instance;
+      final subject = await db.getSyllabusSubject(widget.subjectId);
+      final units = await db.getSyllabusUnitsForSubject(widget.subjectId);
+      final topicsMap = <int, List<SyllabusTopic>>{};
+      for (final unit in units) {
+        final topics = await db.getSyllabusTopicsForUnit(unit.id!);
+        topicsMap[unit.id!] = topics;
+      }
+      final pace = await db.getSyllabusPaceAnalysis(widget.subjectId);
+      if (mounted) {
+        setState(() {
+          _subject = subject;
+          _units = units;
+          _topicsMap = topicsMap;
+          _paceAnalysis = pace;
+          _loading = false;
+          _error = null; // clear any previous error
+        });
+      }
+    } catch (e) {
+      debugPrint('ERROR loading syllabus data: $e');
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Failed to load data: $e';
+        });
+      }
     }
-    final pace = await db.getSyllabusPaceAnalysis(widget.subjectId);
-    setState(() {
-      _subject = subject;
-      _units = units;
-      _topicsMap = topicsMap;
-      _paceAnalysis = pace;
-      _loading = false;
-    });
   }
 
   Future<void> _addUnit() async {
