@@ -232,10 +232,11 @@ class EventCountdownApp extends StatefulWidget {
 class EventCountdownAppState extends State<EventCountdownApp>
     with WidgetsBindingObserver {
 
-  @override
-  void initState() {
+    @override
+    void initState() {
     super.initState();
     _requestNotificationPermissions();
+    _setupNotificationTapHandler();        // ← ADD THIS LINE
     WidgetsBinding.instance.addObserver(this);
     _checkFirstLaunch();
   }
