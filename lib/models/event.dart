@@ -348,6 +348,7 @@ class Event {
     this.difficulty,
     this.studyDuration,
     this.studyModeTagsJson,
+    this.customSectionId,
   });
 
   // --- Computed properties ---
