@@ -317,7 +317,8 @@ class Event {
   final String? difficulty;        // 'easy', 'medium', 'hard'
   final String? studyDuration;     // 'short', 'medium', 'long'
   final String? studyModeTagsJson; // JSON array of selected study mode tags
-
+  final int? customSectionId; // Links to custom_notification_sections table
+  
   const Event({
     this.id,
     required this.title,
@@ -575,6 +576,8 @@ class Event {
     bool clearStudyDuration = false,
     String? studyModeTagsJson,
     bool clearStudyModeTags = false,
+    int? customSectionId,
+    bool clearCustomSectionId = false,
   }) {
     return Event(
       id: id ?? this.id,
