@@ -39,7 +39,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.event_countdown"
-        minSdkVersion 21
+        minSdkVersion 23 
         targetSdkVersion 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
