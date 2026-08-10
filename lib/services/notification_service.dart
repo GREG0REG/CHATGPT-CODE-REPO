@@ -30,12 +30,12 @@ class NotificationChannels {
   static const String customSections     = 'custom_sections';
   static const String testNotifications  = 'test_notifications';
 
-  static const List<NotificationChannel> all = [
+  static List<NotificationChannel> get all => [
     NotificationChannel(
       channelKey: eventReminders,
       channelName: 'Event Reminders',
       channelDescription: 'Reminders for upcoming events and deadlines',
-      defaultColor: Color(0xFF2196F3),
+      defaultColor: const Color(0xFF2196F3),
       ledColor: Colors.white,
       importance: NotificationImportance.High,
       playSound: true,
@@ -45,7 +45,7 @@ class NotificationChannels {
       channelKey: studyAlarms,
       channelName: 'Study Alarms',
       channelDescription: 'Full-screen wake-up alarms for study sessions',
-      defaultColor: Color(0xFFFF5722),
+      defaultColor: const Color(0xFFFF5722),
       ledColor: Colors.red,
       importance: NotificationImportance.Max,
       playSound: true,
@@ -56,7 +56,7 @@ class NotificationChannels {
       channelKey: classAlerts,
       channelName: 'Class Alerts',
       channelDescription: 'Alerts before scheduled classes',
-      defaultColor: Color(0xFF4CAF50),
+      defaultColor: const Color(0xFF4CAF50),
       ledColor: Colors.green,
       importance: NotificationImportance.High,
       playSound: true,
@@ -66,7 +66,7 @@ class NotificationChannels {
       channelKey: assignmentDeadlines,
       channelName: 'Assignment Deadlines',
       channelDescription: 'Reminders for assignments and tasks',
-      defaultColor: Color(0xFFFF9800),
+      defaultColor: const Color(0xFFFF9800),
       ledColor: Colors.orange,
       importance: NotificationImportance.High,
       playSound: true,
@@ -76,7 +76,7 @@ class NotificationChannels {
       channelKey: examCountdowns,
       channelName: 'Exam Countdowns',
       channelDescription: 'Countdown reminders for upcoming exams',
-      defaultColor: Color(0xFF9C27B0),
+      defaultColor: const Color(0xFF9C27B0),
       ledColor: Colors.purple,
       importance: NotificationImportance.High,
       playSound: true,
@@ -86,7 +86,7 @@ class NotificationChannels {
       channelKey: attendanceDanger,
       channelName: 'Attendance Danger',
       channelDescription: 'Warnings when attendance drops low',
-      defaultColor: Color(0xFFF44336),
+      defaultColor: const Color(0xFFF44336),
       ledColor: Colors.red,
       importance: NotificationImportance.High,
       playSound: true,
@@ -96,7 +96,7 @@ class NotificationChannels {
       channelKey: neetMotivation,
       channelName: 'NEET Motivation',
       channelDescription: 'Daily motivational quotes at 6 AM',
-      defaultColor: Color(0xFF00BCD4),
+      defaultColor: const Color(0xFF00BCD4),
       ledColor: Colors.cyan,
       importance: NotificationImportance.Default,
       playSound: true,
@@ -106,7 +106,7 @@ class NotificationChannels {
       channelKey: weeklySummary,
       channelName: 'Weekly Summary',
       channelDescription: 'Weekly attendance summary every Sunday',
-      defaultColor: Color(0xFF607D8B),
+      defaultColor: const Color(0xFF607D8B),
       ledColor: Colors.blueGrey,
       importance: NotificationImportance.Default,
       playSound: true,
@@ -116,7 +116,7 @@ class NotificationChannels {
       channelKey: customSections,
       channelName: 'Custom Sections',
       channelDescription: 'User-defined notification groups',
-      defaultColor: Color(0xFF795548),
+      defaultColor: const Color(0xFF795548),
       ledColor: Colors.brown,
       importance: NotificationImportance.High,
       playSound: true,
@@ -126,7 +126,7 @@ class NotificationChannels {
       channelKey: testNotifications,
       channelName: 'Test Notifications',
       channelDescription: 'For testing notification functionality',
-      defaultColor: Color(0xFF9E9E9E),
+      defaultColor: const Color(0xFF9E9E9E),
       ledColor: Colors.grey,
       importance: NotificationImportance.High,
       playSound: true,
@@ -284,17 +284,20 @@ class NotificationService {
 
     final snoozeTime = DateTime.now().add(const Duration(minutes: 10));
 
+    final snoozePayload = <String, String>{};
+    payload.forEach((key, value) {
+      if (value != null) snoozePayload[key] = value;
+    });
+    snoozePayload['reminderType'] = 'snooze';
+    snoozePayload['wasSnoozed'] = 'true';
+
     await createNotification(
       id: _randomId(),
       channelKey: channelKey,
       title: '⏳ (Snoozed) $title',
       body: body,
       scheduledDate: snoozeTime,
-      payload: {
-        ...payload,
-        'reminderType': 'snooze',
-        'wasSnoozed': 'true',
-      },
+      payload: snoozePayload,
     );
 
     // Log snooze action separately
@@ -383,7 +386,7 @@ class NotificationService {
     String? bigPicture,
     NotificationLayout layout = NotificationLayout.Default,
   }) async {
-    final effectivePayload = payload ?? {};
+    final effectivePayload = payload ?? <String, String>{};
     effectivePayload['channelKey'] = channelKey;
     effectivePayload['title'] = title;
     effectivePayload['body'] = body;
@@ -400,11 +403,8 @@ class NotificationService {
       criticalAlert: criticalAlert,
       category: NotificationCategory.Reminder,
       locked: fullScreenIntent, // Keep alarm notification on screen
+      bigPicture: bigPicture,
     );
-
-    if (bigPicture != null) {
-      notificationContent.bigPicture = bigPicture;
-    }
 
     if (scheduledDate != null) {
       // Scheduled notification
@@ -1075,6 +1075,14 @@ class NotificationService {
     String? subjectName,
     int? eventId,
   }) async {
+    final payload = <String, String>{
+      'reminderType': 'study_alarm',
+      'eventTitle': title,
+      'isAlarm': 'true',
+    };
+    if (eventId != null) payload['eventId'] = eventId.toString();
+    if (subjectName != null) payload['subjectName'] = subjectName;
+
     return await createNotification(
       id: id,
       channelKey: NotificationChannels.studyAlarms,
@@ -1085,19 +1093,12 @@ class NotificationService {
       wakeUpScreen: true,
       criticalAlert: true,
       importance: NotificationImportance.Max,
-      payload: {
-        'eventId': eventId?.toString(),
-        'eventTitle': title,
-        'reminderType': 'study_alarm',
-        'subjectName': subjectName,
-        'isAlarm': 'true',
-      },
+      payload: payload,
       actionButtons: [
         NotificationActionButton(
           key: NotificationActions.stopAlarm,
           label: 'Stop Alarm',
           autoDismissible: true,
-          buttonType: ActionButtonType.Default,
         ),
         NotificationActionButton(
           key: NotificationActions.snooze,
@@ -1125,18 +1126,30 @@ class NotificationService {
     final section = await db.getCustomSection(sectionId);
     if (section == null) {
       // Fallback to default channel
+      final fallbackPayload = <String, String>{
+        'eventTitle': title,
+      };
+      if (eventId != null) fallbackPayload['eventId'] = eventId.toString();
+
       return createNotification(
         id: id,
         channelKey: NotificationChannels.customSections,
         title: title,
         body: body,
         scheduledDate: scheduledDate,
-        payload: {'eventId': eventId?.toString(), 'eventTitle': title},
+        payload: fallbackPayload,
       );
     }
 
     final isFullScreen = (section['isFullScreen'] as int?) == 1;
     final isAlarm = (section['isAlarmEnabled'] as int?) == 1;
+
+    final sectionPayload = <String, String>{
+      'eventTitle': title,
+      'sectionId': sectionId.toString(),
+      'reminderType': 'custom_section',
+    };
+    if (eventId != null) sectionPayload['eventId'] = eventId.toString();
 
     return await createNotification(
       id: id,
@@ -1148,12 +1161,7 @@ class NotificationService {
       wakeUpScreen: isAlarm,
       criticalAlert: isAlarm,
       importance: isAlarm ? NotificationImportance.Max : NotificationImportance.High,
-      payload: {
-        'eventId': eventId?.toString(),
-        'eventTitle': title,
-        'sectionId': sectionId.toString(),
-        'reminderType': 'custom_section',
-      },
+      payload: sectionPayload,
     );
   }
 
