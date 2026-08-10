@@ -797,6 +797,7 @@ class Event {
       difficulty: map['difficulty'] as String?,
       studyDuration: map['studyDuration'] as String?,
       studyModeTagsJson: map['studyModeTagsJson'] as String?,
+      customSectionId: map['customSectionId'] as int?,
     );
   }
 
