@@ -104,15 +104,10 @@ void callbackDispatcher() {
         debugPrint('NEET widget refresh error: $e');
         return false;
       }
-    } else if (task == kNeetMotivationTaskName) {
-      try {
-        await NotificationService.instance.showNeetMotivationNotification();
-        return true;
-      } catch (e) {
-        debugPrint('NEET motivation notification error: $e');
-        return false;
-      }
-    }
+    } 
+    // NEET motivation now handled by Awesome Notifications native scheduling
+    // Removed: Workmanager-based NEET motivation (replaced by exact alarm)
+
     // NEW: Syllabus widget refresh
     else if (task == kSyllabusWidgetRefreshTaskName) {
       try {
