@@ -1143,6 +1143,24 @@ class DatabaseHelper {
     await _addColumnIfNotExists(db, 'study_sessions', 'startTimeMillis', 'INTEGER');
     await _addColumnIfNotExists(db, 'study_sessions', 'endTimeMillis', 'INTEGER');
   }
+  
+  Future<void> _migrateV22ToV23(Database db) async {
+    await _addColumnIfNotExists(db, 'events', 'customSectionId', 'INTEGER');
+    await db.execute("""
+      CREATE TABLE IF NOT EXISTS custom_notification_sections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        colorHex TEXT DEFAULT '#2196F3',
+        iconName TEXT DEFAULT 'event',
+        soundUri TEXT,
+        isAlarmEnabled INTEGER DEFAULT 0,
+        isFullScreen INTEGER DEFAULT 0,
+        vibrationPattern TEXT DEFAULT 'default',
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+  }
+
 
   // ============================================================
   // EVENT CRUD
