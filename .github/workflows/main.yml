@@ -8,7 +8,7 @@ on:
 env:
   JAVA_VERSION: '17'
   FLUTTER_VERSION: '3.24.0'
-  GRADLE_VERSION: '8.4'
+  GRADLE_VERSION: '8.7'
 
 jobs:
   build:
@@ -61,7 +61,7 @@ jobs:
             chmod +x android/gradlew
             rm -rf temp_proj
           fi
-          sed -i 's/gradle-[0-9.]*-/gradle-8.4-/g' android/gradle/wrapper/gradle-wrapper.properties
+          sed -i 's/gradle-[0-9.]*-/gradle-8.7-/g' android/gradle/wrapper/gradle-wrapper.properties
           cat android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Cache Gradle
@@ -70,10 +70,10 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-8.4-${{ hashFiles('android/**/*.gradle', 'android/**/*.gradle.kts') }}
+          key: gradle-${{ runner.os }}-8.7-${{ hashFiles('android/**/*.gradle', 'android/**/*.gradle.kts') }}
           restore-keys: |
-            gradle-${{ runner.os }}-8.4-
-
+            gradle-${{ runner.os }}-8.7-
+            
       - name: Cache Android Keystore
         id: cache-keystore
         uses: actions/cache@v4
