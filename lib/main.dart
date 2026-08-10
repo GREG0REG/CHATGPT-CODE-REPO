@@ -235,6 +235,7 @@ class EventCountdownAppState extends State<EventCountdownApp>
   @override
   void initState() {
     super.initState();
+    _requestNotificationPermissions();
     WidgetsBinding.instance.addObserver(this);
     _checkFirstLaunch();
   }
