@@ -758,6 +758,7 @@ class Event {
       'difficulty': difficulty,
       'studyDuration': studyDuration,
       'studyModeTagsJson': studyModeTagsJson,
+      'customSectionId': customSectionId,
     };
   }
 
