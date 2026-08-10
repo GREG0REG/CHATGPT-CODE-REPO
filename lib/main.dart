@@ -376,10 +376,14 @@ class EventCountdownAppState extends State<EventCountdownApp>
                 Brightness.dark,
                 dynamicScheme: darkDynamic,
               ),
-              home: const MainScreen(),
-              routes: {
+                 routes: {
                 '/widget_settings': (context) => const WidgetSettingsScreen(),
                 '/stats': (context) => const StatsScreen(),
+                '/alarm_ring': (context) {
+                  final args = ModalRoute.of(context)!.settings.arguments;
+                  final payload = args is Map<String, String> ? args : null;
+                  return AlarmRingScreen(payload: payload);
+                },
               },
             );
           },
