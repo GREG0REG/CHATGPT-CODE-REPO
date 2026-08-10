@@ -4392,6 +4392,70 @@ class DatabaseHelper {
     });
   }
 
+  
+  // ============================================================
+  // CUSTOM NOTIFICATION SECTIONS CRUD (v23)
+  // ============================================================
+  Future<int> insertCustomSection(Map<String, dynamic> section) async {
+    final db = await database;
+    final data = {
+      'name': section['name'],
+      'colorHex': section['colorHex'] ?? '#2196F3',
+      'iconName': section['iconName'] ?? 'event',
+      'soundUri': section['soundUri'],
+      'isAlarmEnabled': section['isAlarmEnabled'] ?? 0,
+      'isFullScreen': section['isFullScreen'] ?? 0,
+      'vibrationPattern': section['vibrationPattern'] ?? 'default',
+      'createdAtMillis': DateTime.now().millisecondsSinceEpoch,
+    };
+    return db.insert('custom_notification_sections', data);
+  }
+
+  Future<int> updateCustomSection(int id, Map<String, dynamic> section) async {
+    final db = await database;
+    final data = {
+      'name': section['name'],
+      'colorHex': section['colorHex'] ?? '#2196F3',
+      'iconName': section['iconName'] ?? 'event',
+      'soundUri': section['soundUri'],
+      'isAlarmEnabled': section['isAlarmEnabled'] ?? 0,
+      'isFullScreen': section['isFullScreen'] ?? 0,
+      'vibrationPattern': section['vibrationPattern'] ?? 'default',
+    };
+    return db.update('custom_notification_sections', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> deleteCustomSection(int id) async {
+    final db = await database;
+    // Unlink events from this section
+    await db.update('events', {'customSectionId': null}, where: 'customSectionId = ?', whereArgs: [id]);
+    return db.delete('custom_notification_sections', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllCustomSections() async {
+    final db = await database;
+    return db.query('custom_notification_sections', orderBy: 'name ASC');
+  }
+
+  Future<Map<String, dynamic>?> getCustomSection(int id) async {
+    final db = await database;
+    final rows = await db.query('custom_notification_sections', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  Future<List<Event>> getEventsForCustomSection(int sectionId) async {
+    final db = await database;
+    final rows = await db.query(
+      'events',
+      where: 'customSectionId = ? AND isCompleted = 0',
+      whereArgs: [sectionId],
+      orderBy: 'dateMillis ASC',
+    );
+    return rows.map((r) => Event.fromMap(r)).toList();
+  }
+
+
   // ============================================================
   // UTILITY
   // ============================================================
