@@ -182,19 +182,9 @@ Future<void> main() async {
     existingWorkPolicy: ExistingWorkPolicy.keep,
   );
 
-  final now = DateTime.now();
-  var next6AM = DateTime(now.year, now.month, now.day, 6, 0, 0);
-  if (next6AM.isBefore(now)) {
-    next6AM = next6AM.add(const Duration(days: 1));
-  }
-  await Workmanager().registerPeriodicTask(
-    kNeetMotivationTaskName,
-    kNeetMotivationTaskName,
-    frequency: const Duration(hours: 24),
-    initialDelay: next6AM.difference(now),
-    constraints: Constraints(networkType: NetworkType.not_required),
-    existingWorkPolicy: ExistingWorkPolicy.replace,
-  );
+  // NEET motivation now scheduled via Awesome Notifications (exact alarm)
+  // Removed: Workmanager periodic task for NEET motivation
+
 
   // Register weekly backup
   await Workmanager().registerPeriodicTask(
