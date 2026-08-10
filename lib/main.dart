@@ -5,7 +5,7 @@
 //   2. Added case for "updateSyllabusWidget" in callbackDispatcher
 //   3. Registered periodic task for syllabus widget refresh
 //   4. Added refreshSyllabusWidget() call in lifecycle resume
-
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
