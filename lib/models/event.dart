@@ -618,6 +618,7 @@ class Event {
       difficulty: clearDifficulty ? null : (difficulty ?? this.difficulty),
       studyDuration: clearStudyDuration ? null : (studyDuration ?? this.studyDuration),
       studyModeTagsJson: clearStudyModeTags ? null : (studyModeTagsJson ?? this.studyModeTagsJson),
+      customSectionId: clearCustomSectionId ? null : (customSectionId ?? this.customSectionId),
     );
   }
 
