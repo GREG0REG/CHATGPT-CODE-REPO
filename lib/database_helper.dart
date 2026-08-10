@@ -136,6 +136,21 @@ class DatabaseHelper {
         customSectionId INTEGER
       )
     """);
+    
+    await db.execute("""
+      CREATE TABLE custom_notification_sections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        colorHex TEXT DEFAULT '#2196F3',
+        iconName TEXT DEFAULT 'event',
+        soundUri TEXT,
+        isAlarmEnabled INTEGER DEFAULT 0,
+        isFullScreen INTEGER DEFAULT 0,
+        vibrationPattern TEXT DEFAULT 'default',
+        createdAtMillis INTEGER NOT NULL
+      )
+    """);
+
 
     await db.execute("""
       CREATE TABLE custom_reminders (
