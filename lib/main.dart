@@ -240,6 +240,33 @@ class EventCountdownAppState extends State<EventCountdownApp>
     _checkFirstLaunch();
   }
 
+    void _setupNotificationTapHandler() {
+    NotificationService.onNotificationTap = (payload) {
+      if (payload == null) return;
+      try {
+        final data = jsonDecode(payload) as Map<String, dynamic>;
+        final reminderType = data['reminderType'] as String? ?? '';
+        final isAlarm = data['isAlarm'] == 'true';
+
+        if (isAlarm || reminderType == 'study_alarm') {
+          // Route to full-screen alarm
+          navigatorKey.currentState?.pushNamed(
+            '/alarm_ring',
+            arguments: data.cast<String, String>(),
+          );
+        } else {
+          // Route to main screen (events tab)
+          navigatorKey.currentState?.pushNamedAndRemoveUntil(
+            '/',
+            (route) => false,
+          );
+        }
+      } catch (e) {
+        debugPrint('Notification tap handler error: $e');
+      }
+    };
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
