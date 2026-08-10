@@ -1,19 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Storage permissions for file export/import -->
+    <!-- Storage permissions -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
+    <!-- Notification & Alarm permissions (NEW for Awesome Notifications) -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/>
 
     <application
         android:label="StudyMania"
@@ -21,11 +25,15 @@
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true">
 
+        <!-- MainActivity with full-screen support for alarms -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/LaunchTheme"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:showWhenLocked="true"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
@@ -40,7 +48,7 @@
             </intent-filter>
         </activity>
 
-        <!-- FileProvider for secure file sharing (REQUIRED for Android 7.0+) -->
+        <!-- FileProvider -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -50,30 +58,33 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"/>
         </provider>
-        
-        <!-- Syllabus Widget -->
-         <receiver
-             android:name=".SyllabusWidgetProvider"
-             android:exported="true"
-             android:enabled="true">
-         <intent-filter>
-             
-            <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
-            <action android:name="com.example.event_countdown.SYLLABUS_WIDGET_REFRESH"/>
-            <action android:name="android.intent.action.BOOT_COMPLETED"/>
-             <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
-        </intent-filter>
-             
-        <meta-data
-            android:name="android.appwidget.provider"
-            android:resource="@xml/syllabus_widget_info"/>
-         </receiver>
 
-        <!-- Event Countdown Widget -->
-        <receiver
-            android:name=".EventCountdownWidgetProvider"
-            android:exported="true"
-            android:enabled="true">
+        <!-- Awesome Notifications Receivers (NEW) -->
+        <receiver 
+            android:name="me.carda.awesome_notifications.core.broadcasters.receivers.ScheduledNotificationReceiver" 
+            android:exported="true" />
+        <receiver 
+            android:name="me.carda.awesome_notifications.core.broadcasters.receivers.RefreshSchedulesReceiver" 
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- All your existing widgets (UNCHANGED) -->
+        <receiver android:name=".SyllabusWidgetProvider" android:exported="true" android:enabled="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+                <action android:name="com.example.event_countdown.SYLLABUS_WIDGET_REFRESH"/>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/syllabus_widget_info"/>
+        </receiver>
+
+        <receiver android:name=".EventCountdownWidgetProvider" android:exported="true" android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
                 <action android:name="com.example.event_countdown.EVENT_WIDGET_TICK"/>
@@ -82,16 +93,10 @@
                 <action android:name="android.intent.action.TIME_SET"/>
                 <action android:name="android.intent.action.TIMEZONE_CHANGED"/>
             </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/event_widget_info"/>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/event_widget_info"/>
         </receiver>
 
-        <!-- Pomodoro Widget -->
-        <receiver
-            android:name=".PomodoroWidgetProvider"
-            android:exported="true"
-            android:enabled="true">
+        <receiver android:name=".PomodoroWidgetProvider" android:exported="true" android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
                 <action android:name="com.example.event_countdown.POMODORO_WIDGET_TICK"/>
@@ -100,78 +105,49 @@
                 <action android:name="android.intent.action.TIME_SET"/>
                 <action android:name="android.intent.action.TIMEZONE_CHANGED"/>
             </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/pomodoro_widget_info"/>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/pomodoro_widget_info"/>
         </receiver>
 
-        <!-- Attendance Widget -->
-        <receiver
-            android:name=".AttendanceWidgetProvider"
-            android:exported="true"
-            android:enabled="true">
+        <receiver android:name=".AttendanceWidgetProvider" android:exported="true" android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
                 <action android:name="com.example.event_countdown.ATTENDANCE_WIDGET_REFRESH"/>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
             </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/attendance_widget_info"/>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/attendance_widget_info"/>
         </receiver>
 
-        <!-- Timetable Widget -->
-        <receiver
-            android:name=".TimetableWidgetProvider"
-            android:exported="true"
-            android:enabled="true">
+        <receiver android:name=".TimetableWidgetProvider" android:exported="true" android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
                 <action android:name="com.example.event_countdown.TIMETABLE_WIDGET_REFRESH"/>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
             </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/timetable_widget_info"/>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/timetable_widget_info"/>
         </receiver>
 
-        <!-- Habit Widget -->
-        <receiver
-            android:name=".HabitWidgetProvider"
-            android:exported="true"
-            android:enabled="true">
+        <receiver android:name=".HabitWidgetProvider" android:exported="true" android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
                 <action android:name="com.example.event_countdown.HABIT_WIDGET_REFRESH"/>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
             </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/habit_widget_info"/>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/habit_widget_info"/>
         </receiver>
 
-        <!-- Reading Widget -->
-        <receiver
-            android:name=".ReadingWidgetProvider"
-            android:exported="true"
-            android:enabled="true">
+        <receiver android:name=".ReadingWidgetProvider" android:exported="true" android:enabled="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
                 <action android:name="com.example.event_countdown.READING_WIDGET_REFRESH"/>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
             </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/reading_widget_info"/>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/reading_widget_info"/>
         </receiver>
 
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2"/>
-
+        <meta-data android:name="flutterEmbedding" android:value="2"/>
     </application>
 </manifest>
