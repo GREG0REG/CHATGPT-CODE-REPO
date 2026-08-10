@@ -132,7 +132,8 @@ class DatabaseHelper {
         isPyqSession INTEGER DEFAULT 0,
         difficulty TEXT,
         studyDuration TEXT,
-        studyModeTagsJson TEXT
+        studyModeTagsJson TEXT,
+        customSectionId INTEGER
       )
     """);
 
