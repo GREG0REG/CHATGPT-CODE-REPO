@@ -23,6 +23,7 @@ import 'package:event_countdown/services/settings_service.dart';
 import 'package:event_countdown/services/widget_service.dart';
 import 'package:event_countdown/services/theme_service.dart';
 import 'package:event_countdown/theme/app_themes.dart';
+import 'package:event_countdown/screens/alarm_ring_screen.dart';
 
 const String kWidgetRefreshTaskName = 'event_countdown_widget_refresh';
 const String kWidgetRefreshFrequentTaskName = 'event_countdown_widget_frequent';
