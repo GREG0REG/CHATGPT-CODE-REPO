@@ -407,6 +407,7 @@ class EventCountdownAppState extends State<EventCountdownApp>
                 '/widget_settings': (context) => const WidgetSettingsScreen(),
                 '/stats': (context) => const StatsScreen(),
                 '/alarm_ring': (context) {
+                '/custom_sections': (context) => const CustomSectionsScreen(),
                   final args = ModalRoute.of(context)!.settings.arguments;
                   final payload = args is Map<String, String> ? args : null;
                   return AlarmRingScreen(payload: payload);
