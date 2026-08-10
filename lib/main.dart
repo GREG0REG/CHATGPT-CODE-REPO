@@ -234,15 +234,15 @@ class EventCountdownApp extends StatefulWidget {
 class EventCountdownAppState extends State<EventCountdownApp>
     with WidgetsBindingObserver {
 
-     @override
-     void initState() {
+  @override
+  void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _setupNotificationTapHandler();
     _checkFirstLaunch();
   }
 
-    void _setupNotificationTapHandler() {
+  void _setupNotificationTapHandler() {
     NotificationService.onNotificationTap = (payload) {
       if (payload == null) return;
       try {
@@ -274,32 +274,6 @@ class EventCountdownAppState extends State<EventCountdownApp>
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
-
-    void _setupNotificationTapHandler() {
-    NotificationService.onNotificationTap = (payload) {
-      if (payload == null) return;
-      try {
-        final data = jsonDecode(payload) as Map<String, dynamic>;
-        final reminderType = data['reminderType'] as String? ?? '';
-        final isAlarm = data['isAlarm'] == 'true';
-
-        if (isAlarm || reminderType == 'study_alarm') {
-          navigatorKey.currentState?.pushNamed(
-            '/alarm_ring',
-            arguments: data.cast<String, String>(),
-          );
-        } else {
-          navigatorKey.currentState?.pushNamedAndRemoveUntil(
-            '/',
-            (route) => false,
-          );
-        }
-      } catch (e) {
-        debugPrint('Notification tap handler error: $e');
-      }
-    };
-  }
-
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -404,15 +378,15 @@ class EventCountdownAppState extends State<EventCountdownApp>
                 Brightness.dark,
                 dynamicScheme: darkDynamic,
               ),
-                 routes: {
+              routes: {
                 '/widget_settings': (context) => const WidgetSettingsScreen(),
                 '/stats': (context) => const StatsScreen(),
                 '/alarm_ring': (context) {
-                '/custom_sections': (context) => const CustomSectionsScreen(),
                   final args = ModalRoute.of(context)!.settings.arguments;
                   final payload = args is Map<String, String> ? args : null;
                   return AlarmRingScreen(payload: payload);
                 },
+                '/custom_sections': (context) => const CustomSectionsScreen(),
               },
             );
           },
