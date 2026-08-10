@@ -4359,7 +4359,9 @@ class DatabaseHelper {
       'study_plan_items',
       'mock_test_history',
       'chapter_deadlines',
+      'custom_notification_sections',
     ];
+
 
     for (final table in tables) {
       try {
